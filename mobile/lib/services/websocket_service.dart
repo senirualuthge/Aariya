@@ -257,6 +257,15 @@ class WebSocketService {
 
   // ── Sending ─────────────────────────────────────────────────────────────────
 
+  /// Test seam: inject a frame into the shared messages stream exactly as if
+  /// it had arrived from the server. Routes through the same stream that
+  /// [ChatController] listens on, so widget tests can drive the full frame
+  /// handling path (e.g. a `command_denied` frame) without a live socket.
+  @visibleForTesting
+  void emitTestFrame(Map<String, dynamic> frame) {
+    _messagesController.add(frame);
+  }
+
   /// Sends a message to the backend (reliably — tracked by the outbox).
   ///
   /// - Plain text (optionally with a base64 image) is wrapped in the mobile
