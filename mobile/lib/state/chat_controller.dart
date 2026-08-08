@@ -47,6 +47,10 @@ class ChatController extends ChangeNotifier {
   /// Fired when TTS finishes speaking a response. Used by voice overlay.
   VoidCallback? onTtsCompletion;
 
+  /// Last command the server refused (`command_denied` frame). Null when no
+  /// denial has been seen. Consumers (chat screen) listen and surface it.
+  final ValueNotifier<String?> commandDenied = ValueNotifier<String?>(null);
+
   // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _initTts() async {
@@ -108,6 +112,12 @@ class ChatController extends ChangeNotifier {
         // ── Server acknowledged interrupt ─────────────────────────────────
         case 'interrupted':
           _handleInterrupted();
+          break;
+
+        // ── Zero-Interference: server refused an authority-only command ────
+        case 'command_denied':
+          commandDenied.value =
+              (data['action'] as String? ?? 'command').replaceAll('_', ' ');
           break;
 
         // ── Streaming audio chunk ─────────────────────────────────────────
@@ -276,6 +286,7 @@ class ChatController extends ChangeNotifier {
     _flutterTts.stop();
     audioEngine.dispose();
     brain.dispose();
+    commandDenied.dispose();
     super.dispose();
   }
 }

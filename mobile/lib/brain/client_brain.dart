@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../services/websocket_service.dart';
 import '../services/webrtc_service.dart';
@@ -150,16 +149,6 @@ class ClientBrain extends ChangeNotifier {
 
     // Stop WebSocket backend processing explicitly without losing connection
     WebSocketService.instance.sendInterrupt();
-  }
-
-  /// Dispatches remote control override commands
-  void sendRemoteCommand(String action, [Map<String, dynamic>? data]) {
-    final payload = {
-      'type': 'command',
-      'action': action,
-      if (data != null) ...data,
-    };
-    WebSocketService.instance.sendMessage(jsonEncode(payload));
   }
 
   // ──────────────────────────────────────────────────────────────────────────
