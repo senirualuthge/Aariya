@@ -28,6 +28,22 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _chatController = ChatController.instance;
     _initSpeech();
+
+    // Surface server `command_denied` frames (authority-only commands such as
+    // memory wipe / personality changes are refused for the mobile channel).
+    _chatController.commandDenied.addListener(_showCommandDenied);
+  }
+
+  void _showCommandDenied() {
+    final denied = _chatController.commandDenied.value;
+    if (denied == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"$denied" is laptop-dashboard only — denied by Aariya'),
+        backgroundColor: Colors.redAccent.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _initSpeech() async {
@@ -56,6 +72,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _chatController.commandDenied.removeListener(_showCommandDenied);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();

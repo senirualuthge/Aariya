@@ -18,12 +18,24 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from server.infrastructure.observability import logger
 from server.infrastructure.session_manager import manager
 from server.systems.agent.mobile_gateway_agent import get_mobile_gateway
+from server.systems.security.mobile_authority import is_mobile_allowed, denied_frame
 
 router = APIRouter()
 
 
-async def _handle_command(action: str, msg: dict) -> None:
-    """Execute direct override commands from mobile without round-tripping brain."""
+async def _handle_command(action: str, msg: dict) -> dict | None:
+    """Execute direct override commands from mobile without round-tripping brain.
+
+    Zero-Interference gate: destructive / identity-mutating actions are
+    rejected — mobile is the CONTROL layer, the laptop dashboard is the
+    AUTHORITY layer. See server/systems/security/mobile_authority.py.
+
+    Returns a `command_denied` frame when the action is blocked, else None.
+    """
+    if not is_mobile_allowed(action):
+        logger.warning(f"[Mobile Authority] denied {action!r} from mobile control channel")
+        return denied_frame(action)
+
     if action == "wipe_memory":
         try:
             from server.systems.memory_hierarchy import get_memory_hierarchy  # type: ignore
@@ -41,16 +53,6 @@ async def _handle_command(action: str, msg: dict) -> None:
             await broadcast_brain_metrics({"type": "override_mode", "mode": mode})
         except Exception as exc:
             logger.error(f"override_mode broadcast failed: {exc}")
-
-    elif action == "set_personality":
-        persona = msg.get("persona", "")
-        logger.info(f"Mobile commanded: set_personality \u2192 {persona!r}")
-        # Sync via brain_metrics so GUI updates its mode card too
-        try:
-            from server.routers.metrics_ws import broadcast_brain_metrics
-            await broadcast_brain_metrics({"type": "override_mode", "mode": persona})
-        except Exception as exc:
-            logger.error(f"set_personality broadcast failed: {exc}")
 
     elif action == "ping":
         # Keepalive sent as a command envelope — silently ignore (no pong needed here,
@@ -119,7 +121,9 @@ async def mobile_control(websocket: WebSocket) -> None:
             if msg_type == "command":
                 action = msg.get("action", "")
                 if action:
-                    await _handle_command(action, msg)
+                    denied = await _handle_command(action, msg)
+                    if denied:
+                        await websocket.send_text(json.dumps(denied))
                 continue
 
     except WebSocketDisconnect:

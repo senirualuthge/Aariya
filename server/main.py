@@ -33,6 +33,7 @@ from server.routers.obsidian_router import router as obsidian_router
 from server.routers.emotion_predictor_router import router as emotion_predictor_router
 from server.routers.analytics_ws import router as analytics_ws_router
 from server.infrastructure.agent_watcher import get_watcher
+from server.systems.security.mobile_authority import is_mobile_allowed, denied_frame
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(level=LOG_LEVEL)
@@ -444,14 +445,21 @@ async def websocket_mobile_control(websocket: WebSocket):
                 continue
 
             if msg_type == "command":
-                action = message.get("action")
-                logger.info(f"Command received: {action}")
+                action = message.get("action") or ""
 
-                if action == "set_personality":
-                    await session_manager.broadcast({
-                        "type": "override_mode",
-                        "mode": message.get("mode")
-                    })
+                # ── Zero-Interference gate (see mobile_authority.py) ─────────
+                # Mobile is the CONTROL layer, not the authority layer: it may
+                # send interrupts / chat / pings, but never wipe memory or
+                # rewrite the persona. Rejected commands get a command_denied
+                # frame so the phone UI can explain the refusal.
+                if not is_mobile_allowed(action):
+                    logger.warning(
+                        f"[Mobile Authority] denied {action!r} from mobile control channel"
+                    )
+                    await websocket.send_text(json.dumps(denied_frame(action)))
+                    continue
+
+                logger.info(f"Command received (allowed): {action}")
 
     except WebSocketDisconnect:
         logger.info(f"Mobile Control disconnected: {session_id}")
