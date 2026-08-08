@@ -79,14 +79,16 @@ def test_layer_separation_guard_keeps_reasoning_and_presentation_apart(isolated_
     # Both layers exist and Layer 1 (reasoning) precedes Layer 2 (presentation).
     # Anchored on the unique section headers (the governing rule also names
     # both layers, so a plain index() would hit that first).
-    l1 = prompt.index("LAYER 1 — REASONING GROUND TRUTH")
+    l1 = prompt.index("LAYER 1 — REASONING & GROUND TRUTH")
     l2 = prompt.index("LAYER 2 — PRESENTATION & EXPRESSION (tone only")
     assert l1 < l2
 
-    # Reasoning inputs sit in Layer 1; expression inputs sit in Layer 2.
+    # The full partition is pinned: every reasoning input sits inside Layer 1,
+    # every expression input inside Layer 2 — no cross-contamination.
     assert prompt.index("STRATEGY") < l2
-    assert prompt.index("RELATIONSHIP STATE") > l1
-    assert prompt.index("PERSONALITY DIRECTIVE") > l1
+    assert prompt.index("RELATIONSHIP STATE") > l2
+    assert prompt.index("PERSONALITY DIRECTIVE") > l2
+    assert prompt.index("INNER THOUGHT") > l2
 
     # The governing rule forbids emotional state from changing what she knows.
     assert "must never change a fact" in prompt
