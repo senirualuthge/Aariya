@@ -63,6 +63,35 @@ def test_generation_uses_llm_with_cognition_context(isolated_db, stub_llm):
     assert "STRATEGY" in system_prompt
 
 
+def test_layer_separation_guard_keeps_reasoning_and_presentation_apart(isolated_db, stub_llm):
+    """
+    FIXV5 guard: emotion may shape presentation (Layer 2) but NEVER the
+    reasoning truth-state (Layer 1). The system prompt must separate the two
+    and forbid emotional state from altering facts.
+    """
+    async def run():
+        brain = BrainV2("test_user")
+        return await brain.process(MultimodalInput(text="Hi there"))
+
+    asyncio.run(run())
+    prompt = stub_llm.messages[0]["content"]
+
+    # Both layers exist and Layer 1 (reasoning) precedes Layer 2 (presentation).
+    # Anchored on the unique section headers (the governing rule also names
+    # both layers, so a plain index() would hit that first).
+    l1 = prompt.index("LAYER 1 — REASONING GROUND TRUTH")
+    l2 = prompt.index("LAYER 2 — PRESENTATION & EXPRESSION (tone only")
+    assert l1 < l2
+
+    # Reasoning inputs sit in Layer 1; expression inputs sit in Layer 2.
+    assert prompt.index("STRATEGY") < l2
+    assert prompt.index("RELATIONSHIP STATE") > l1
+    assert prompt.index("PERSONALITY DIRECTIVE") > l1
+
+    # The governing rule forbids emotional state from changing what she knows.
+    assert "must never change a fact" in prompt
+
+
 def test_streaming_callback_invoked(isolated_db, stub_llm):
     """Tokens should be pushed through on_token during generation."""
     async def run():

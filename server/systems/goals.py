@@ -25,6 +25,13 @@ class GoalArbitrator:
         Arbitration Engine: decides which goal to pursue based on current cognitive state.
         High shock/conflict elevates immediate survival or emotional goals.
         Stable states allow strategic/tactical goals to surface.
+
+        FIXV5 boundary: this is a LAYER 2 (presentation/response-posture) decision.
+        Valence may choose HOW Aariya responds to a situation (comfort vs
+        stabilize) — it never touches the reasoning truth-state: memory recall,
+        factual claims, and reasoning all stay grounded in Layer 1 inputs
+        (see brain_v2._generate_response). The goals surfaced here shape the
+        reply's stance, not what she knows.
         """
         # Cleanup completed
         self.goals = [g for g in self.goals if g.status == "active"]

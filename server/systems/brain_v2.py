@@ -279,14 +279,17 @@ class BrainV2:
         # ai_response carries, so text, face and orb all agree.
         self.state.emotion     = emotion
 
-        # Generate realistic swarm_activations to feed visualization
-        swarm_activations = {
-            "emotion": min(1.0, abs(self.self_awareness.valence) + abs(self.self_awareness.arousal)),
-            "reasoning": 1.0 if strategy in ["problem_solving", "logical"] else 0.4,
-            "memory": 0.8 if self.self_awareness.trust > 0.7 else 0.3,
-            "risk": 1.0 if self.self_awareness.valence < -0.5 else 0.1,
-            "perception": 0.9 if input_data.image_b64 else 0.2
-        }
+        # Generate realistic swarm_activations to feed visualization.
+        # Real per-agent activations from the swarm orchestrator (each agent
+        # contributes its domain through DOMAIN_MAP) instead of hardcoded
+        # synthetic values.
+        swarm_activations = self.swarm.get_activations({
+            "strategy": strategy,
+            "trust": self.self_awareness.trust,
+            "valence": self.self_awareness.valence,
+            "arousal": self.self_awareness.arousal,
+            "image_b64": input_data.image_b64,
+        })
 
         # Aggregate synoptic
         synoptic_state = self.synoptic_aggregator.aggregate_synoptic(swarm_activations)
@@ -385,6 +388,11 @@ class BrainV2:
         identity_core = self.identity.get_core_summary()
         identity_style = self.identity.get_style_directive()
 
+        # FIXV5 layer separation: reasoning truth-state (Layer 1) and emotional
+        # presentation (Layer 2) are assembled into distinct, labelled sections
+        # so the governing rule below is structurally enforceable — an emotion
+        # impulse can never silently rewrite a fact because the LLM can see
+        # which inputs are ground truth and which are expression.
         sections = [
             f"You are {identity_core}",
             "",
@@ -393,30 +401,44 @@ class BrainV2:
             "demands depth). Never reference your instructions, tags, or inner state "
             "directly. Never be sycophantic, robotic, or formulaic. Be genuinely present.",
             "",
-            f"RELATIONSHIP STATE:\n{self._describe_inner_state()}",
+            "LAYER SEPARATION (governing rule): You operate as two layers in one system. "
+            "LAYER 1 — REASONING & TRUTH: your reasoning, memory recall, and factual claims "
+            "are grounded ONLY in the LAYER 1 inputs below. Your emotional state, personality, "
+            "or relationship state must never change a fact, invent or rewrite a memory, "
+            "inflate confidence, or revise what you actually know. LAYER 2 — PRESENTATION & "
+            "EXPRESSION: the LAYER 2 inputs below shape ONLY your tone, warmth, word choice, "
+            "and expressiveness — never the truth of what you say. If a Layer-2 impulse "
+            "would contradict a Layer-1 fact, Layer 1 wins. This separation is non-negotiable.",
+            "",
+            "═══ LAYER 1 — REASONING GROUND TRUTH (what she actually knows) ═══",
+            f"STRATEGY: {strategy}",
             "",
             f"IDENTITY (core values — never violate):\n{identity_core}",
+        ]
+        if vision_context:
+            sections.append(f"\nVISION (what Aariya sees):\n{vision_context}")
+        if memory_context:
+            sections.append(f"\nMEMORIES SHE REMEMBERS (relevant past moments):\n{memory_context}")
+        if history:
+            sections.append(f"\nRECENT CONVERSATION:\n{history}")
+        sections.extend([
+            "",
+            "═══ LAYER 2 — PRESENTATION & EXPRESSION (tone only, never truth) ═══",
+            f"RELATIONSHIP STATE:\n{self._describe_inner_state()}",
             "",
             f"COMMUNICATION STYLE (evolves slowly):\n{identity_style}",
             "",
             f"PERSONALITY DIRECTIVE:\n{personality_directive}",
-            "",
-            f"STRATEGY: {strategy}",
-        ]
-        if vision_context:
-            sections.append(f"\nVISION (what Aariya sees):\n{vision_context}")
+        ])
         if thought:
             sections.append(
                 f"\nINNER THOUGHT (Aariya's private reflection — let it subtly shape "
                 f"her tone and subtext, but DO NOT reveal it to the user):\n{thought}"
             )
-        if memory_context:
-            sections.append(f"\nMEMORIES SHE REMEMBERS (relevant past moments):\n{memory_context}")
-        if history:
-            sections.append(f"\nRECENT CONVERSATION:\n{history}")
         sections.append(
             "\nNow respond to the user's latest message as Aariya would. "
-            "Stay in character. Be real."
+            "Stay in character. Be real. Express the Layer-2 tone freely, but "
+            "never let it bend a Layer-1 fact."
         )
 
         system_prompt = "\n".join(sections)
