@@ -69,6 +69,17 @@ class ClientBrain extends ChangeNotifier {
         onConnectionLost();
       }
     });
+
+    // Protocol v2 degrade state: messages dropped after exhausting retries
+    // (e.g. server silent on a command) → surface a recovering state so the
+    // UI shows the client is struggling, and lift it once ACKs flow again.
+    WebSocketService.instance.isDegraded.addListener(() {
+      if (WebSocketService.instance.isDegraded.value) {
+        _transition(ConversationState.recovering);
+      } else if (_state == ConversationState.recovering) {
+        _transition(ConversationState.idle);
+      }
+    });
   }
 
   /// Called when the user starts/finishes speaking (VAD triggers).

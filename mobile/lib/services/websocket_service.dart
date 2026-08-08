@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'ack_outbox.dart';
 import 'server_config.dart';
 
 /// Multi-channel WebSocket client for the Aariya mobile app.
@@ -19,6 +20,11 @@ import 'server_config.dart';
 /// The backend address is resolved through [ServerConfig] (persisted overrides
 /// take precedence over `--dart-define`). If the chat channel drops the client
 /// automatically reconnects with exponential backoff.
+///
+/// Reliable messages (user input, interrupts, commands) are routed through an
+/// [AckOutbox]: they carry a unique `id` + `requires_ack`, are retried with
+/// exponential backoff until the server ACKs them, and the client enters a
+/// degraded state after repeated failures (see [isDegraded]).
 class WebSocketService {
   static final WebSocketService instance = WebSocketService._();
   WebSocketService._();
@@ -27,6 +33,15 @@ class WebSocketService {
   WebSocketChannel? _chatChannel;
   WebSocketChannel? _controlChannel;
   WebSocketChannel? _analyticsChannel;
+
+  // ── Reliable-message outbox (Protocol v2 ACK/retry) ───────────────────────
+  final AckOutbox _outbox = AckOutbox();
+
+  /// True when a reliable message was dropped after exhausting retries.
+  ValueNotifier<bool> get isDegraded => _outbox.isDegraded;
+
+  /// Number of messages currently awaiting a server ACK.
+  int get pendingMessageCount => _outbox.pendingCount;
 
   // ── Public streams ──────────────────────────────────────────────────────────
   final StreamController<Map<String, dynamic>> _messagesController =
@@ -109,6 +124,8 @@ class WebSocketService {
     _connectFuture = null;
     isConnected.value = false;
     await connect();
+    // Anything queued while we were offline should be re-delivered now.
+    _outbox.flush();
   }
 
   Uri _resolveBase(String? url) {
@@ -129,6 +146,7 @@ class WebSocketService {
     }, onFrame: () {
       if (_reconnectAttempt > 0) {
         debugPrint('[WS] reconnected after $_reconnectAttempt attempt(s)');
+        _outbox.flush();
       }
       _reconnectAttempt = 0;
     });
@@ -161,10 +179,24 @@ class WebSocketService {
       (raw) {
         if (_disposed) return;
         final decoded = _decodeFrame(raw);
-        if (decoded != null) {
+        if (decoded == null) return;
+
+        final type = decoded['type'] as String? ?? '';
+
+        // ── Protocol v2 ACK handling ───────────────────────────────────────
+        if (type == 'ack') {
+          final id = decoded['id'] as String?;
+          if (id != null) _outbox.ack(id);
           onFrame?.call();
-          controller.add(decoded);
+          return; // transport-level frame — not surfaced to the UI stream
         }
+        if (type == 'interrupt_ack') {
+          // Server acks interrupts without echoing an id — clear them all.
+          _outbox.clearByType('interrupt');
+        }
+
+        onFrame?.call();
+        controller.add(decoded);
       },
       onError: (Object e) {
         debugPrint('[WS] channel error: $e');
@@ -225,7 +257,7 @@ class WebSocketService {
 
   // ── Sending ─────────────────────────────────────────────────────────────────
 
-  /// Sends a message to the backend.
+  /// Sends a message to the backend (reliably — tracked by the outbox).
   ///
   /// - Plain text (optionally with a base64 image) is wrapped in the mobile
   ///   chat protocol (`input.multimodal`) and routed to the chat channel.
@@ -236,7 +268,7 @@ class WebSocketService {
     if (_disposed) return;
 
     if (base64Image != null) {
-      _sendChat({
+      _sendChatReliable({
         'type': 'input.multimodal',
         'content': message,
         'mode': 'voice',
@@ -249,27 +281,30 @@ class WebSocketService {
     if (envelope != null) {
       final type = envelope['type'] as String? ?? '';
       if (_isControlType(type)) {
-        _sendControl(envelope);
+        _sendControlReliable(envelope);
       } else {
-        _sendChat(envelope);
+        _sendChatReliable(envelope);
       }
       return;
     }
 
-    _sendChat({
+    _sendChatReliable({
       'type': 'input.multimodal',
       'content': message,
       'mode': 'voice',
     });
   }
 
-  /// Sends a barge-in interrupt to the active conversation.
+  /// Sends a barge-in interrupt to the active conversation (reliably).
   void sendInterrupt() {
     if (_disposed) return;
-    _sendChat({'type': 'interrupt'});
+    _sendChatReliable({'type': 'interrupt'});
   }
 
   /// Sends a keepalive ping on the control channel; the server replies `pong`.
+  ///
+  /// Pings are intentionally NOT tracked by the outbox — they are heartbeats
+  /// consumed by [ConnectionMonitor], and a lost ping is detected via timeout.
   void sendPing() {
     if (_disposed) return;
     _sendControl({'type': 'ping'});
@@ -277,10 +312,16 @@ class WebSocketService {
 
   // ── Internals ───────────────────────────────────────────────────────────────
 
-  void _sendChat(Map<String, dynamic> payload) {
-    final channel = _chatChannel;
-    if (channel == null) return;
-    channel.sink.add(jsonEncode(payload));
+  void _sendChatReliable(Map<String, dynamic> payload) {
+    _outbox.enqueue(payload, (envelope) {
+      _chatChannel?.sink.add(jsonEncode(envelope));
+    });
+  }
+
+  void _sendControlReliable(Map<String, dynamic> payload) {
+    _outbox.enqueue(payload, (envelope) {
+      _controlChannel?.sink.add(jsonEncode(envelope));
+    });
   }
 
   void _sendControl(Map<String, dynamic> payload) {
@@ -325,6 +366,7 @@ class WebSocketService {
     _chatChannel = null;
     _controlChannel = null;
     _analyticsChannel = null;
+    _outbox.dispose();
     _messagesController.close();
     _analyticsController.close();
     isConnected.dispose();
