@@ -1,7 +1,7 @@
 import asyncio
 import logging
 # BUG #3 FIX: Optional was missing — caused NameError on startup
-from typing import Optional, Callable, Awaitable
+from typing import Optional, Callable, Awaitable, List
 
 from server.protocol import MultimodalInput, MultimodalOutput, BrainState
 from server.systems.self_awareness import SelfAwareness
@@ -10,16 +10,21 @@ from server.systems.policy_router import PolicyRouter
 from server.systems.emotion_behavior import EmotionBehavior
 from server.systems.personality import PersonalitySystem
 from server.systems.swarm.orchestrator import get_swarm_system
-from server.systems.synoptic_aggregator import SynopticAggregator
-from server.systems.narrative_engine import NarrativeEngine, NarrativeEvent
-from server.systems.narrative_arcs import NarrativeArcSystem
-from server.systems.meta_cognition import MetaCognitionEngine
+from server.systems.synoptic_aggregator import SynopticAggregator, SynopticState
+from server.systems.synoptic_engine import SynopticEngine
+from server.systems.narrative_engine import NarrativeEngine, create_event
+from server.systems.narrative_arcs import NarrativeArcSystem, NarrativeArcEngine
+from server.systems.meta_cognition import MetaCognitionEngine, compute_reflection
 from server.systems.goals import GoalArbitrator
 from server.systems.self_knowledge import get_self_knowledge
 from server.systems.identity_kernel import get_identity_kernel
 from server.systems.thoughts import ThoughtEngine
 from server.systems.memory.conversation_log import ConversationLog
 from server.systems.llm import get_llm
+from server.systems.agent.grounding_validator import (
+    grounding_validator,
+    GroundingIssue,
+)
 
 logger = logging.getLogger("aariya.brain_v2")
 
@@ -49,9 +54,17 @@ class BrainV2:
         self.synoptic_aggregator = SynopticAggregator()
         self.narrative_engine = NarrativeEngine()
         self.narrative_arcs = NarrativeArcSystem()
+        self.narrative_arc_engine = NarrativeArcEngine()
         self.meta_cognition = MetaCognitionEngine()
         self.goal_arbitrator = GoalArbitrator()
         self.self_knowledge = get_self_knowledge()
+
+        # Doc (Agents Swarm Visualize §208): full synoptic pipeline orchestrator
+        # (aggregate → smooth → velocity → narrative shock → influence → metrics).
+        self.synoptic_engine = SynopticEngine(
+            aggregator=self.synoptic_aggregator,
+            narrative_engine=self.narrative_engine,
+        )
 
         # ── Sentience modules ───────────────────────────────────────────────
         self.identity = get_identity_kernel()          # immutable core + mutable style
@@ -74,6 +87,10 @@ class BrainV2:
             personality=self.personality.get_current_personality()
         )
         self.self_awareness._last_trust = self.self_awareness.trust
+
+        # FIXV5 grounding guard: residual contradictions between her reply and
+        # the Layer 1 memories, surfaced to clients via output.meta["grounding"].
+        self._last_grounding_issues: List[dict] = []
 
     async def process(
         self,
@@ -128,17 +145,20 @@ class BrainV2:
 
         # 2.5. Narrative Memory tracking
         latest_text = input_data.text or (input_data.metadata.get("transcription") or "general interaction")
-        event = NarrativeEvent(
-            topic=latest_text,
-            user_sentiment=self.self_awareness.valence,
-            trust_delta=self.self_awareness.trust - getattr(self.self_awareness, "_last_trust", self.self_awareness.trust),
-            intensity=self.self_awareness.arousal
+        event = create_event(
+            latest_text,
+            emotion_valence=self.self_awareness.valence,
+            contradiction_level=getattr(self.contradiction_detector, "level", 0.0)
+            if hasattr(self, "contradiction_detector") else 0.0,
         )
+        event.trust_delta = self.self_awareness.trust - getattr(self.self_awareness, "_last_trust", self.self_awareness.trust)
         self.self_awareness._last_trust = self.self_awareness.trust
         self.narrative_engine.add_event(event)
+        self.narrative_arc_engine.update(event)
+        self.narrative_arc_engine.decay_arcs()
 
-        shock = self.narrative_engine.compute_shock()
-        self.narrative_arcs.evaluate_arcs(shock, event.topic)
+        shock_scalar = self.narrative_engine.compute_shock_scalar()
+        self.narrative_arcs.evaluate_arcs(shock_scalar, event.topic)
         dominant_arc = self.narrative_arcs.get_dominant_arc()
 
         # 3. Personality — tick overlays + apply context-aware overlay hints
@@ -291,19 +311,87 @@ class BrainV2:
             "image_b64": input_data.image_b64,
         })
 
-        # Aggregate synoptic
-        synoptic_state = self.synoptic_aggregator.aggregate_synoptic(swarm_activations)
+        # Aggregate synoptic via the full pipeline (doc §208-215): aggregate →
+        # smooth → velocity → narrative shock → normalize → influence → metrics.
+        synoptic_v2 = self.synoptic_engine.compute_synoptic(
+            swarm_activations,
+            narrative_engine=self.narrative_engine,
+            arcs=self.narrative_arc_engine.arcs,
+        )
+        synoptic_state = SynopticState(
+            domains=synoptic_v2["domains"],
+            dominant_domain=synoptic_v2["dominant"],
+            coherence=synoptic_v2["coherence"],
+            conflict=synoptic_v2["conflict"],
+        )
         self._last_synoptic_state = synoptic_state  # Save for meta-cognition next turn
 
         self.state.synoptic = {
             "dominant_domain": synoptic_state.dominant_domain,
             "coherence": synoptic_state.coherence,
             "conflict": synoptic_state.conflict,
-            "domains": synoptic_state.domains
+            "domains": synoptic_state.domains,
+            "trend": synoptic_v2["trend"],
+            "shock": synoptic_v2["shock"],
+            "predicted": synoptic_v2["predicted"],
         }
-        self.state.planetary = self.synoptic_aggregator.synoptic_to_planets(synoptic_state)
+        # Planets now carry velocity + mass for predictive easing / gravity.
+        self.state.planetary = self.synoptic_engine.to_planets(synoptic_v2)
+
+        # Goal system: reflection → goals → plan → small bounded adjustments.
+        try:
+            from server.systems.goal_system import GoalSystem
+            if not hasattr(self, "_goal_system"):
+                self._goal_system = GoalSystem()
+            reflection = compute_reflection(
+                synoptic_v2,
+                self.narrative_arc_engine.arcs,
+                self.personality.get_current_personality(),
+            )
+            active_goal, plan, _domains, _personality = self._goal_system.step(
+                reflection,
+                self.narrative_arc_engine.arcs,
+                synoptic_v2["domains"],
+                self.personality.get_current_personality(),
+            )
+            self.state.synoptic["goal"] = (
+                {"type": active_goal.goal_type, "priority": round(active_goal.priority, 3),
+                 "progress": round(active_goal.progress, 3)}
+                if active_goal else None
+            )
+            self.state.synoptic["plan"] = plan.actions if plan else []
+        except Exception as e:  # never let goal wiring break the turn
+            logger.debug(f"[BrainV2] goal system skipped: {e}")
+
+        # Meta-cognition: observe self + apply small corrective adjustments.
+        try:
+            reflection = compute_reflection(
+                synoptic_v2,
+                self.narrative_arc_engine.arcs,
+                self.personality.get_current_personality(),
+            )
+            meta_actions = self.meta_cognition.decide(reflection)
+            if meta_actions:
+                domains, _pers = self.meta_cognition.apply(
+                    meta_actions,
+                    synoptic_v2["domains"],
+                    self.personality.get_current_personality(),
+                    self.narrative_arc_engine.arcs,
+                )
+                self.state.synoptic["domains"] = domains
+                logger.debug(f"[BrainV2] meta-cognition applied: {meta_actions}")
+        except Exception as e:
+            logger.debug(f"[BrainV2] meta-cognition skipped: {e}")
 
         logger.debug(f"[BrainV2] Personality: {self.personality.describe()}")
+
+        # FIXV5 guard observability: residual grounding issues ride in meta so
+        # dashboards/clients can see when the guard had to act.
+        meta: dict = {}
+        if rag_trace:
+            meta["rag"] = rag_trace
+        if self._last_grounding_issues:
+            meta["grounding"] = self._last_grounding_issues
 
         return MultimodalOutput(
             text=response_text,
@@ -311,7 +399,7 @@ class BrainV2:
             gestures=gestures,
             thought=thought,
             state_update=self.state,
-            meta={"rag": rag_trace} if rag_trace else {}
+            meta=meta,
         )
 
     def get_state(self) -> BrainState:
@@ -444,6 +532,13 @@ class BrainV2:
         system_prompt = "\n".join(sections)
         user_content = text or "(Aariya initiates — say something natural.)"
 
+        # FIXV5 post-generation grounding guard: scan the draft against the
+        # Layer 1 memories BEFORE it is persisted/sent. A direct negation of a
+        # remembered fact triggers one bounded corrective regeneration; any
+        # residual issues are surfaced via output.meta["grounding"].
+        self._last_grounding_issues = []
+        facts = grounding_validator.facts_from_memory_context(memory_context)
+
         try:
             llm = get_llm()
             response = await llm.stream_to_callback(
@@ -456,11 +551,71 @@ class BrainV2:
                 max_tokens=240,
             )
             if response and response.strip():
-                return response.strip()
+                reply = response.strip()
+                issues = grounding_validator.validate(reply, facts)
+                if issues:
+                    logger.warning(
+                        "[BrainV2] Grounding guard flagged %d contradiction(s) "
+                        "against memories for %s", len(issues), self.user_id
+                    )
+                    corrected = await self._grounded_regeneration(
+                        llm, system_prompt, user_content, reply, issues
+                    )
+                    if corrected:
+                        reply = corrected
+                        issues = grounding_validator.validate(reply, facts)
+                self._last_grounding_issues = [i.to_dict() for i in issues]
+                return reply
         except Exception as exc:
             logger.warning("[BrainV2] LLM generation failed, using fallback: %s", exc)
 
         return self._fallback_reply()
+
+    async def _grounded_regeneration(
+        self,
+        llm,
+        system_prompt: str,
+        user_content: str,
+        draft: str,
+        issues: List[GroundingIssue],
+    ) -> Optional[str]:
+        """
+        One bounded corrective pass: re-prompt the LLM to fix the flagged
+        contradictions. Runs silent (no token streaming) — the corrected text
+        is what gets persisted and sent.        Returns None on failure, in which
+        case the draft is kept and the issues remain visible in meta.
+        (The first pass's tokens were already streamed to clients; the
+        corrected text replaces them in the final ai_response frame —
+        ChatController._finalizeWithText swaps it in, so the authoritative
+        text is always the corrected one.)
+        """
+        contradictions = "\n".join(
+            f"- Draft says: \"{i.reply}\" — contradicts the memory: \"{i.fact}\""
+            for i in issues
+        )
+        corrected_prompt = system_prompt + (
+            "\n\nGROUNDING CORRECTION (mandatory): Aariya's previous draft "
+            "contradicted her own memories. The conflicting draft statements "
+            f"were:\n{contradictions}\n\n"
+            "Write a new reply that never contradicts these memories. Keep the "
+            "same tone and length, and ground every factual claim in the "
+            "LAYER 1 memories above."
+        )
+        try:
+            response = await llm.stream_to_callback(
+                messages=[
+                    {"role": "system", "content": corrected_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                on_token=None,
+                temperature=0.6,
+                max_tokens=240,
+            )
+            if response and response.strip():
+                return response.strip()
+        except Exception as exc:
+            logger.warning("[BrainV2] Grounding regeneration failed: %s", exc)
+        return None
 
     def _fallback_reply(self) -> str:
         """Warm, grounded fallback so she still 'speaks' if the LLM is down."""
