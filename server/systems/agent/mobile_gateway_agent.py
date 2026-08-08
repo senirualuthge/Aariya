@@ -110,7 +110,8 @@ class MobileGatewayAgent(BaseSwarmAgent):
             self._tick_task.cancel()
         logger.info("[MobileGatewayAgent] Stopped")
 
-    # ── Event hooks (called by mobile_ws router) ──────────────────────────────
+    # ── Event hooks (public telemetry feed for the mobile control channel; the
+    # live /ws/mobile/control handler lives in server/main.py) ─────────────────
 
     def on_client_connected(self) -> None:
         self._telemetry.connected_clients += 1
