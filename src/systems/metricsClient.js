@@ -76,3 +76,21 @@ export function subscribeMetrics(predicate, handler) {
     }
   };
 }
+
+/**
+ * Send a JSON command frame over the shared /ws/brain_metrics socket.
+ *
+ * This is the laptop dashboard's AUTHORITY channel: the server executes
+ * wipe_memory / set_personality / override_mode / force_mode here (they are
+ * denied on the mobile channel) and replies with an `authority.ack` frame
+ * that arrives through the same socket's onmessage → dispatch path.
+ *
+ * @param {string} action  e.g. 'wipe_memory' | 'set_personality' | 'override_mode' | 'force_mode'
+ * @param {object} data    extra fields ({ preset, mode })
+ * @returns {boolean} true if the frame was queued on an open socket
+ */
+export function sendMetricsCommand(action, data = {}) {
+  if (!sharedWs || sharedWs.readyState !== WebSocket.OPEN) return false;
+  sharedWs.send(JSON.stringify({ type: 'command', action, ...data }));
+  return true;
+}

@@ -34,6 +34,7 @@ from server.routers.emotion_predictor_router import router as emotion_predictor_
 from server.routers.analytics_ws import router as analytics_ws_router
 from server.infrastructure.agent_watcher import get_watcher
 from server.systems.security.mobile_authority import is_mobile_allowed, denied_frame
+from server.systems.security.dashboard_authority import execute_authority_command
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(level=LOG_LEVEL)
@@ -482,8 +483,19 @@ async def websocket_brain_metrics(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
+            # ── AUTHORITY LAYER (laptop dashboard only) ────────────────────
+            # The zero-interference contract (resolved in mobile_authority.py)
+            # says mobile = control layer, laptop = authority layer. This is
+            # the laptop's channel: destructive / identity-mutating commands
+            # are EXECUTED here (and denied on /ws/mobile/control), then
+            # broadcast so every surface syncs to the new mode.
             if message.get("type") == "command":
-                pass
+                action = str(message.get("action") or "")
+                ack, broadcast_frame = await execute_authority_command(action, message)
+                await websocket.send_text(json.dumps(ack))
+                if broadcast_frame:
+                    await session_manager.broadcast(broadcast_frame)
+                continue
 
     except WebSocketDisconnect:
         session_manager.remove_surface("dashboard", user_id, websocket)
