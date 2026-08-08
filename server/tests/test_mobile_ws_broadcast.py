@@ -148,6 +148,28 @@ def test_mobile_state_and_thought_frames_arrive_on_second_socket():
             assert frames_b["inner_thought"]["thought"] == "a quiet thought"
 
 
+def test_mobile_chat_acks_id_bearing_messages():
+    """Protocol v2: a /ws/mobile message carrying an `id` gets an ACK back.
+
+    The mobile AckOutbox retries reliable messages until the server echoes
+    `{ "type": "ack", "id": same-id }`. This pins the server half of that
+    contract — without it the client would retry forever and degrade.
+    """
+    with TestClient(server_main.app) as client:
+        with client.websocket_connect("/ws/mobile") as ws:
+            ws.send_json({
+                "type": "input.multimodal",
+                "content": "hi",
+                "mode": "voice",
+                "id": "m_abc123_0",
+                "requires_ack": True,
+            })
+
+            # The ACK must arrive before (or alongside) the state frames.
+            frames = _read_until(ws, "mobile-ack", {"ack"})
+            assert frames["ack"]["id"] == "m_abc123_0"
+
+
 def test_dashboard_turn_state_frame_arrives_on_phone():
     """A /ws/brain (dashboard) turn must reach a connected phone.
 

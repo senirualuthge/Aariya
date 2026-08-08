@@ -349,6 +349,13 @@ async def websocket_mobile_chat(websocket: WebSocket):
             data = await websocket.receive_text()
             message = json.loads(data)
 
+            # Protocol v2 ACK: the mobile client retries reliable messages
+            # (id + requires_ack) until we echo the id back. ACK before
+            # processing so a slow turn never looks like a lost message.
+            msg_id = message.get("id")
+            if msg_id:
+                await websocket.send_text(json.dumps({"type": "ack", "id": msg_id}))
+
             if message.get("type") == "interrupt":
                 # Client-side barge-in: acknowledge and reset
                 await websocket.send_text(json.dumps({"type": "interrupt_ack"}))
@@ -420,6 +427,17 @@ async def websocket_mobile_control(websocket: WebSocket):
             message = json.loads(data)
             msg_type = message.get("type")
 
+            # ── Protocol v2 ACK: any message carrying an id is acknowledged ──
+            # so the mobile AckOutbox stops retrying it. Pings (no id) get
+            # the dedicated pong below instead.
+            msg_id = message.get("id")
+            if msg_id:
+                await websocket.send_text(json.dumps({
+                    "type": "ack",
+                    "id": msg_id,
+                    "status": "ok",
+                }))
+
             # ── Ping → Pong (ConnectionMonitor heartbeat) ────────────────────
             if msg_type == "ping":
                 await websocket.send_text(json.dumps({"type": "pong"}))
@@ -434,12 +452,6 @@ async def websocket_mobile_control(websocket: WebSocket):
                         "type": "override_mode",
                         "mode": message.get("mode")
                     })
-
-                await websocket.send_text(json.dumps({
-                    "type": "ack",
-                    "id": message.get("id"),
-                    "status": "ok"
-                }))
 
     except WebSocketDisconnect:
         logger.info(f"Mobile Control disconnected: {session_id}")
