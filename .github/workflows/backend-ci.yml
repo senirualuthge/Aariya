@@ -97,3 +97,37 @@ jobs:
       - name: npm audit gate (production deps must be clean)
         run: npm audit --omit=dev
 
+  # Mobile app gate — Flutter static analysis + test suite, isolated so pub
+  # resolution/CI flakiness can't block (or fail attribution of) the other
+  # jobs. Both gates are pure-Dart (no platform plugin builds needed):
+  #   - flutter analyze: zero issues is the bar (strict, mirrors local dev)
+  #   - flutter test:    unit/widget tests run headless via the test widget
+  #                      binder on Linux. NOTE: the repo contains committed
+  #                      golden artifacts (mobile/test/goldens|failures) but no
+  #                      test code references them, so nothing is font/rendering
+  #                      sensitive in CI. Version pinned to the locally-proven
+  #                      SDK so CI reproduces the dev environment.
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v3
+        with:
+          flutter-version: "3.41.9"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies (pub get)
+        run: flutter pub get
+
+      - name: Static analysis (flutter analyze)
+        run: flutter analyze
+
+      - name: Test suite (flutter test)
+        run: flutter test
+

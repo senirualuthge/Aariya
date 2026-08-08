@@ -96,6 +96,9 @@ lerna-debug.log*
 # ── Embedded repo backups (system-prompts-and-models-of-ai-tools/.git.backup) ──
 .git.backup/
 
+# Golden-test failure output (transient — regenerated on each failed run)
+mobile/test/failures/
+
 # ── Editor / OS ──────────────────────────────────────────────────────────────
 .vscode/*
 !.vscode/extensions.json
