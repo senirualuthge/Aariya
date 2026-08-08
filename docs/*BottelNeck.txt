@@ -1,0 +1,4104 @@
+  PREAMBLE (from *BottelNeck.txt)
+
+🔴 Critical Bottlenecks (Will break real-time)
+1. Single 60 FPS “Unified Loop” doing too much
+
+You’re running:
+
+Face detection
+
+Audio feature extraction
+
+Emotion fusion
+
+State updates (Zustand)
+
+Animation orchestration
+
+inside one heartbeat.
+
+Why this is a problem
+
+Face-api + Web Audio + React state writes cannot all run at 16.6 ms budget.
+
+Face-api alone (even tiny model) = 12–25 ms per frame on mid hardware.
+
+➡️ Result: frame drops, animation jitter, input lag.
+
+
+  Fix (from *BottelNeck.txt)
+
+Split into three clocks:
+
+Loop	Rate	Tasks
+Render	60 FPS	Three.js, blendshapes, interpolation
+Sensor	10–15 FPS	Face detection, landmarks
+Cognition	4–8 Hz	Emotion fusion, trust, policy
+
+Interpolate sensor → render.
+
+2. Face-api running on main thread
+
+This will block:
+
+React reconciliation
+
+Three.js render
+
+Audio processing
+
+Move Face-api to a Web Worker + OffscreenCanvas
+Send only:
+
+{ emotionVector, confidence }
+
+
+Never send raw landmarks per frame (too heavy).
+
+3. Zustand global store write frequency
+
+If you write to Zustand every frame from sensors:
+
+➡️ React subscribers re-render too often
+➡️ Causes animation stutter
+
+Use:
+
+Transient refs for per-frame animation data
+
+Zustand only for semantic state (trust, mood, intent)
+
+Target: ≤10 store writes/sec
+
+4. WebSocket message granularity
+
+If you stream:
+
+emotion
+
+audio metrics
+
+face metrics
+per frame → you will saturate WS and add latency.
+
+At 60 FPS even a 200 byte payload = 12 KB/s per client (OK)
+But Python FastAPI JSON parsing per frame = CPU spike.
+
+Batch + downsample:
+
+Send at 5–10 Hz:
+
+{
+  "t": 123456,
+  "emotion": [..],
+  "energy": 0.42,
+  "trust_delta": 0.01
+}
+
+
+Use msgpack instead of JSON → ~40% less CPU.
+
+5. LLM in the real-time loop
+
+If any part of the animation waits for LLM:
+
+➡️ hard freeze (500 ms–2 s latency)
+
+LLM must be event-driven, never frame-driven.
+
+Pipeline:
+
+User speech end → ASR → server → LLM → TTS
+Avatar runs idle cognition meanwhile.
+
+🟠 High Bottlenecks (Will hurt scalability)
+6. Python FastAPI WebSocket hub (single process)
+
+Python async WS with:
+
+trust updates
+
+Redis calls
+
+Postgres logging
+
+per message will choke at ~100–300 msgs/sec.
+
+Split roles:
+
+WS gateway (stateless, no DB)
+
+Cognitive worker (queue)
+
+Redis pub/sub between them
+
+Or switch WS layer to uvloop + msgpack + no ORM in hot path
+
+7. Postgres writes in the interaction path
+
+Logging “decision traces” synchronously will spike latency.
+
+Write to Redis stream / Kafka-like buffer
+Flush to Postgres asynchronously.
+
+8. Emotion contradiction EMA per frame on server
+
+EMA is cheap, but network + Python + Redis per frame is not.
+
+Do EMA on client, send only:
+
+contradiction_score
+
+
+Server keeps long-term EMA only.
+
+9. Electron + Three.js + Face-api memory pressure
+
+You’re loading:
+
+3D avatar
+
+face models
+
+audio graph
+
+React
+
+Electron will hit 1.2–1.8 GB RAM quickly.
+
+Lazy-load:
+
+face model only when camera active
+
+audio analyzer only when mic active
+
+use GLTF mesh compression (Draco)
+
+🟡 Medium Bottlenecks (Quality + stability)
+10. JSON everywhere
+
+You’re using JSON for:
+
+WS
+
+internal traces
+
+Redis payloads
+
+Switch hot paths to msgpack.
+
+11. Blendshape updates per frame without smoothing
+
+Direct emotion → blendshape causes micro-jitter.
+
+Use:
+
+blend = lerp(prev, target, dt * 8)
+
+
+This also reduces perceived frame drops.
+
+12. Lip-sync driven by phoneme events instead of audio time
+
+If visemes come from text timing, they will drift.
+
+Drive mouth from audio amplitude envelope with viseme hints.
+
+🟢 Low Bottlenecks (Future scale)
+13. SQLite for identity on server node
+
+Fine for single user, but not multi-instance.
+
+Move to Redis or Postgres when scaling.
+
+14. Trust gating matrix recomputed too often
+
+Recompute only on state change, not every tick.
+
+🔧 Target Performance Budget
+Client frame (16.6 ms)
+Task	Budget
+Three.js render	4–6 ms
+Animation solve	1 ms
+State read	<0.5 ms
+Sensor interpolation	<0.5 ms
+Idle	8 ms buffer
+Sensor loop (10 Hz)
+Task	Budget
+Face-api (worker)	20–40 ms (off main thread)
+Audio FFT	2–4 ms
+Network
+Channel	Rate
+Client → Server	5–10 Hz
+Server → Client	event-driven
+
+
+🧠 0. Boot Sequence (New)
+
+Do NOT load:
+
+Face-api models
+
+Three.js avatar
+
+Audio graph
+
+until profiling finishes.
+
+New startup flow
+App Launch
+   ↓
+Boot Profiler (hardware + browser capability test)
+   ↓
+Performance Tier Classification
+   ↓
+Dynamic Config Generation
+   ↓
+Load only allowed subsystems
+   ↓
+Start loops with tier budgets
+
+
+Target time: < 300 ms
+
+🧪 1. Boot Profiler – What to Measure
+
+Run these micro-benchmarks:
+
+CPU test (main thread budget)
+const t0 = performance.now()
+let n = 0
+while (performance.now() - t0 < 50) {
+  Math.sqrt(Math.random())
+  n++
+}
+const cpuScore = n
+
+GPU test (Three.js micro scene)
+
+Render 100 frames of a tiny scene → measure avg frame time.
+
+WASM / SIMD availability
+
+Needed for fast Face-api variants.
+
+Memory estimate
+navigator.deviceMemory // rough but useful
+
+Core count
+navigator.hardwareConcurrency
+⚙️ 3. Dynamic System Config
+
+Generate a runtime config object
+
+const runtimeConfig = {
+  renderFps: 60,
+  sensorFps: 15,
+  cognitionHz: 6,
+  faceTracking: true,
+  audioFFTSize: 1024,
+  wsRateHz: 10,
+  useDracoMesh: true
+}
+
+
+Then downgrade per tier.
+
+🎭 4. Face-api in Web Worker (Final Model)
+Worker responsibilities
+
+Load model
+
+Run detection loop at sensor FPS
+
+Output only compressed emotion vector
+
+Worker loop
+setInterval(async () => {
+  const result = await detectEmotion(videoFrame)
+  postMessage({
+    emotion: quantize(result.emotion, 8),
+    confidence: result.confidence
+  })
+}, 1000 / sensorFps)
+
+Main thread
+
+Receives vector
+
+Interpolates for render loop
+
+No heavy math
+
+🔄 5. Triple Loop Scheduler
+Render Loop (RAF)
+
+Only:
+
+blendshape lerp
+
+gaze
+
+idle animation
+
+viseme from audio envelope
+
+No AI. No store writes.
+
+Sensor Loop (Worker driven)
+
+Rates from config:
+
+Tier	Face Hz	Audio Hz
+LOW	off	10
+
+
+  HIGH	15	20 (from *BottelNeck.txt)
+
+Cognition Loop
+
+Runs with setInterval (not RAF):
+
+Tasks:
+
+trust EMA
+
+contradiction
+
+policy gating
+
+WS batching
+
+Rate: 4–8 Hz
+
+🧠 6. Zustand Write Throttle
+
+Create a semantic write buffer
+
+let pendingState = {}
+
+function scheduleCommit() {
+  if (commitScheduled) return
+  commitScheduled = true
+  setTimeout(() => {
+    useStore.setState(pendingState)
+    pendingState = {}
+    commitScheduled = false
+  }, 100) // 10 Hz
+}
+
+
+All systems write to pendingState, not directly to Zustand.
+
+🌐 7. WebSocket Batching (msgpack)
+Client send buffer
+let wsBuffer = []
+
+function queueWS(msg) {
+  wsBuffer.push(msg)
+}
+
+setInterval(() => {
+  if (!wsBuffer.length) return
+  ws.send(msgpack.encode(wsBuffer))
+  wsBuffer = []
+}, 100) // 10 Hz
+
+
+Messages inside:
+
+[
+  { "e": [..], "c": 0.8 },
+  { "energy": 0.42 },
+  { "trust_delta": 0.01 }
+]
+
+🗄️ 8. Remove Postgres from Hot Path
+
+New flow:
+
+Client → WS Gateway → Redis Stream (append only)
+                               ↓
+                       Async Logger Worker
+                               ↓
+                           Postgres
+
+
+WS never touches Postgres.
+
+🎚️ 9. Adaptive Feature Flags per Tier
+Feature	LOW	MID	HIGH
+Face tracking	❌	✔	✔
+Mesh LOD	LOD2	LOD1	LOD0
+Blendshape count	12	24	52
+FFT size	512	1024	2048
+Render FPS	30	45–60	60
+🧠 10. Runtime Degradation (Thermal / Load)
+
+Monitor:
+
+if (avgFrameTime > 20ms for 2s) downgradeTier()
+
+
+Downgrade order:
+
+Reduce sensor FPS
+
+Reduce blendshapes
+
+Disable face tracking
+
+Drop render FPS to 45 → 30
+
+This prevents meltdown on laptops.
+
+🧩 11. What You Gain
+
+After this:
+
+Stable 60 FPS on mid hardware
+
+No main-thread blocking
+
+Predictable WS bandwidth
+
+Server scales horizontally
+
+Graceful degradation instead of crashing
+
+This is production-grade adaptive real-time AI avatar architecture
+
+Good constraint. We’ll keep face tracking in LOW tier, but make it ultra-light (low Hz, tiny model, worker only, no landmarks streaming).
+
+Below is a drop-in production module set.
+
+🧠 1. Boot Profiler (TypeScript)
+bootProfiler.ts
+export type PerfTier = "LOW" | "MID" | "HIGH"
+
+export interface BootProfile {
+  cpuScore: number
+  gpuFrameTime: number
+  memoryGB: number
+  cores: number
+  tier: PerfTier
+}
+
+async function cpuBenchmark(): Promise<number> {
+  const t0 = performance.now()
+  let n = 0
+  while (performance.now() - t0 < 50) {
+    Math.sqrt(Math.random())
+    n++
+  }
+  return n
+}
+
+async function gpuBenchmark(): Promise<number> {
+  const canvas = document.createElement("canvas")
+  const gl = canvas.getContext("webgl")
+  if (!gl) return 999
+
+  const frames = 60
+  const t0 = performance.now()
+
+  for (let i = 0; i < frames; i++) {
+    gl.clear(gl.COLOR_BUFFER_BIT)
+  }
+
+  const t1 = performance.now()
+  return (t1 - t0) / frames
+}
+
+function classifyTier(cpu: number, gpuMs: number, memory: number): PerfTier {
+  if (cpu < 20000 || memory <= 4) return "LOW"
+  if (gpuMs > 16) return "MID"
+  return "HIGH"
+}
+
+export async function runBootProfiler(): Promise<BootProfile> {
+  const [cpuScore, gpuFrameTime] = await Promise.all([
+    cpuBenchmark(),
+    gpuBenchmark(),
+  ])
+
+  const memoryGB = (navigator as any).deviceMemory || 4
+  const cores = navigator.hardwareConcurrency || 4
+
+  const tier = classifyTier(cpuScore, gpuFrameTime, memoryGB)
+
+  return { cpuScore, gpuFrameTime, memoryGB, cores, tier }
+}
+
+⚙️ 2. Dynamic Tier Config Generator
+runtimeConfig.ts
+import type { PerfTier } from "./bootProfiler"
+
+export interface RuntimeConfig {
+  renderFps: number
+  sensorFps: number
+  cognitionHz: number
+  faceTrackingHz: number
+  wsRateHz: number
+  fftSize: number
+  blendshapeCount: number
+  meshLod: number
+}
+
+export function createRuntimeConfig(tier: PerfTier): RuntimeConfig {
+  switch (tier) {
+    case "LOW":
+      return {
+        renderFps: 30,
+        sensorFps: 8,
+        cognitionHz: 4,
+        faceTrackingHz: 6, // still enabled
+        wsRateHz: 6,
+        fftSize: 512,
+        blendshapeCount: 12,
+        meshLod: 2,
+      }
+
+    case "MID":
+      return {
+        renderFps: 60,
+        sensorFps: 12,
+        cognitionHz: 6,
+        faceTrackingHz: 10,
+        wsRateHz: 8,
+        fftSize: 1024,
+        blendshapeCount: 24,
+        meshLod: 1,
+      }
+
+    case "HIGH":
+      return {
+        renderFps: 60,
+        sensorFps: 15,
+        cognitionHz: 8,
+        faceTrackingHz: 15,
+        wsRateHz: 10,
+        fftSize: 2048,
+        blendshapeCount: 52,
+        meshLod: 0,
+      }
+  }
+}
+
+🧵 3. Face-api Web Worker
+faceWorker.ts
+import * as faceapi from "@vladmandic/face-api"
+
+let running = false
+let fps = 10
+
+self.onmessage = async (e: MessageEvent) => {
+  const { type, config } = e.data
+
+  if (type === "INIT") {
+    fps = config.faceTrackingHz
+
+    await faceapi.nets.tinyFaceDetector.loadFromUri("/models")
+    await faceapi.nets.faceExpressionNet.loadFromUri("/models")
+
+    self.postMessage({ type: "READY" })
+  }
+
+  if (type === "FRAME" && running) {
+    const bitmap = e.data.bitmap
+
+    const result = await faceapi
+      .detectSingleFace(bitmap, new faceapi.TinyFaceDetectorOptions())
+      .withFaceExpressions()
+
+    if (result?.expressions) {
+      const expr = result.expressions
+
+      // compress to vector
+      const emotion = [
+        expr.neutral,
+        expr.happy,
+        expr.sad,
+        expr.angry,
+        expr.fearful,
+        expr.disgusted,
+        expr.surprised,
+      ]
+
+      self.postMessage({
+        type: "EMOTION",
+        emotion,
+        confidence: result.detection.score,
+      })
+    }
+
+    bitmap.close()
+  }
+
+  if (type === "START") running = true
+  if (type === "STOP") running = false
+}
+
+Main thread bridge
+const worker = new Worker(new URL("./faceWorker.ts", import.meta.url), {
+  type: "module",
+})
+
+worker.postMessage({ type: "INIT", config })
+
+async function sendFrame(video: HTMLVideoElement) {
+  const bitmap = await createImageBitmap(video)
+  worker.postMessage({ type: "FRAME", bitmap }, [bitmap])
+}
+
+
+Run sendFrame at faceTrackingHz.
+
+🗂️ 4. Zustand 10 Hz Commit Buffer
+let pending: any = {}
+let scheduled = false
+
+export function setSemanticState(partial: any) {
+  Object.assign(pending, partial)
+
+  if (!scheduled) {
+    scheduled = true
+    setTimeout(() => {
+      useStore.setState(pending)
+      pending = {}
+      scheduled = false
+    }, 100) // 10 Hz
+  }
+}
+
+🌐 5. WS Msgpack Schema (Client)
+
+Install:
+
+npm i @msgpack/msgpack
+
+wsClient.ts
+import { encode } from "@msgpack/msgpack"
+
+let buffer: any[] = []
+
+export function queueWS(msg: any) {
+  buffer.push(msg)
+}
+
+export function startWSBatch(ws: WebSocket, rateHz: number) {
+  setInterval(() => {
+    if (!buffer.length) return
+    ws.send(encode(buffer))
+    buffer = []
+  }, 1000 / rateHz)
+}
+
+Message shape (compact)
+queueWS({ t: Date.now(), e: emotion, c: confidence })
+queueWS({ en: audioEnergy })
+queueWS({ td: trustDelta })
+
+🐍 6. FastAPI Msgpack Decoder
+
+Install:
+
+pip install msgpack
+
+ws_endpoint.py
+import msgpack
+from fastapi import WebSocket
+
+async def ws_handler(ws: WebSocket):
+    await ws.accept()
+
+    while True:
+        data = await ws.receive_bytes()
+        messages = msgpack.unpackb(data, raw=False)
+
+        for msg in messages:
+            if "e" in msg:
+                emotion = msg["e"]
+                confidence = msg.get("c", 0)
+
+
+  # process emotion (from *BottelNeck.txt)
+
+if "td" in msg:
+                trust_delta = msg["td"]
+
+            if "en" in msg:
+                energy = msg["en"]
+
+
+No DB calls here. Push to Redis queue if needed.
+
+🔁 7. Triple Loop Scheduler
+Render Loop
+function renderLoop() {
+  requestAnimationFrame(renderLoop)
+  updateBlendshapes() // lerp only
+  renderer.render(scene, camera)
+}
+
+Sensor Loop
+setInterval(() => {
+  sendFrame(video) // worker
+  updateAudioEnergy()
+}, 1000 / config.sensorFps)
+
+Cognition Loop
+setInterval(() => {
+  computeTrust()
+  computeContradiction()
+  queueWS({ td: trustDelta })
+}, 1000 / config.cognitionHz)
+
+🧵 8. Client–Server Threading Diagram
+Client
+Main Thread
+ ├─ Render Loop (RAF)
+ ├─ Audio Analyzer (light)
+ ├─ WS Batch Sender
+ ├─ Zustand Commit (10 Hz)
+ └─ Boot Profiler (startup only)
+
+Web Worker
+ └─ Face Detection Loop
+
+Server
+WS Gateway (async, stateless)
+   ↓
+Redis Stream / Queue
+   ↓
+Cognition Worker (trust, EMA, policy)
+   ↓
+Async Logger → Postgres
+
+
+No blocking operations in WS.
+
+📉 LOW Tier Face Tracking Strategy (Your Requirement)
+
+Still enabled but:
+
+TinyFaceDetector only
+
+6 Hz
+
+Expressions only (no landmarks)
+
+Quantized float → 8-bit
+
+Worker only
+
+No per-frame WS send (batched)
+
+This keeps CPU < 10–15%.
+
+🎭 1. Emotion → Blendshape Mapper with LOD Scaling
+
+Goal:
+Same emotion vector → different blendshape sets depending on tier.
+
+Emotion input (from worker)
+type EmotionVector = [
+  number, // neutral
+  number, // happy
+  number, // sad
+  number, // angry
+  number, // fearful
+  number, // disgusted
+  number  // surprised
+]
+
+LOD Blendshape Maps
+interface BlendMap {
+  [key: string]: number[]
+}
+
+HIGH (52 shapes)
+
+Fine facial fidelity.
+
+export const HIGH_BLEND_MAP: BlendMap = {
+  smile: [0, 1, 0, 0, 0, 0, 0],
+  frown: [0, 0, 1, 0.3, 0, 0, 0],
+  browDown: [0, 0, 0, 1, 0.2, 0, 0],
+  browUp: [0, 0, 0, 0, 0, 0, 1],
+  noseWrinkle: [0, 0, 0, 0, 0, 1, 0],
+}
+
+MID (24 shapes)
+
+Merge subtle shapes.
+
+export const MID_BLEND_MAP: BlendMap = {
+  smile: [0, 1, 0, 0, 0, 0, 0],
+  frown: [0, 0, 1, 0.5, 0, 0, 0],
+  brow: [0, 0, 0, 0.7, 0.2, 0, 0.7],
+}
+
+LOW (12 shapes)
+
+Only primary expressions.
+
+export const LOW_BLEND_MAP: BlendMap = {
+  mouthSmile: [0, 1, 0, 0, 0, 0, 0],
+  mouthFrown: [0, 0, 1, 0.6, 0, 0, 0],
+  brow: [0, 0, 0, 0.8, 0.3, 0, 0.8],
+}
+
+Mapper Function
+export function mapEmotionToBlend(
+  emotion: EmotionVector,
+  blendMap: BlendMap,
+  prev: Record<string, number>,
+  dt: number
+) {
+  const result: Record<string, number> = {}
+
+  for (const key in blendMap) {
+    const weights = blendMap[key]
+
+    let target = 0
+    for (let i = 0; i < emotion.length; i++) {
+      target += emotion[i] * weights[i]
+    }
+
+    const current = prev[key] || 0
+
+    // smoothing
+    result[key] = current + (target - current) * Math.min(dt * 8, 1)
+  }
+
+  return result
+}
+
+🌡️ 2. Auto Thermal / Load Downgrade Controller
+
+We watch frame time, not temperature (browser can’t read thermal).
+
+Watchdog thresholds
+Avg Frame Time	Action
+
+20 ms for 2 s | reduce sensor FPS |
+25 ms | reduce blendshape LOD |
+30 ms | reduce render FPS |
+35 ms | disable face landmarks (keep expressions) |
+
+thermalController.ts
+let frameTimes: number[] = []
+let tier: "LOW" | "MID" | "HIGH"
+
+export function recordFrame(dt: number) {
+  frameTimes.push(dt)
+  if (frameTimes.length > 120) frameTimes.shift()
+}
+
+export function evaluateLoad(config: RuntimeConfig): RuntimeConfig {
+  const avg =
+    frameTimes.reduce((a, b) => a + b, 0) / (frameTimes.length || 1)
+
+  if (avg > 35) {
+    config.renderFps = 30
+    config.faceTrackingHz = Math.max(4, config.faceTrackingHz - 2)
+    config.blendshapeCount = Math.min(config.blendshapeCount, 12)
+  } else if (avg > 30) {
+    config.renderFps = 45
+  } else if (avg > 25) {
+    config.blendshapeCount = Math.min(config.blendshapeCount, 24)
+  } else if (avg > 20) {
+    config.sensorFps = Math.max(6, config.sensorFps - 2)
+  }
+
+  return config
+}
+
+
+Call every 2 seconds.
+
+🧠 3. Frame Time Watchdog Module
+frameWatchdog.ts
+let last = performance.now()
+
+export function startFrameWatchdog(onFrame: (dt: number) => void) {
+  function loop() {
+    const now = performance.now()
+    const dt = now - last
+    last = now
+
+    onFrame(dt)
+
+    requestAnimationFrame(loop)
+  }
+
+  requestAnimationFrame(loop)
+}
+
+
+Usage:
+
+startFrameWatchdog((dt) => {
+  recordFrame(dt)
+})
+
+🧾 4. Redis Stream Schema for Cognition Events
+
+Use Redis Streams (not pub/sub) so you get durability + replay.
+
+Stream name
+cognition:events
+
+Event Types
+Emotion sample (downsampled)
+{
+  "type": "emotion",
+  "t": 1739200000,
+  "val": [0.7, 0.1, 0.05, 0.05, 0.03, 0.02, 0.05],
+  "conf": 0.82,
+  "tier": "MID"
+}
+
+Trust update
+{
+  "type": "trust",
+  "delta": 0.012,
+  "score": 0.63
+}
+
+Contradiction spike
+{
+  "type": "contradiction",
+  "score": 0.41,
+  "ema": 0.22
+}
+
+Python writer (async worker)
+import redis.asyncio as redis
+import json
+
+r = redis.Redis()
+
+async def write_event(event: dict):
+    await r.xadd(
+        "cognition:events",
+        {"data": json.dumps(event)},
+        maxlen=10000,
+        approximate=True,
+    )
+
+Consumer group (analytics / logging)
+await r.xgroup_create("cognition:events", "logger", id="0", mkstream=True)
+
+🔁 5. System Interaction Flow
+Client
+Emotion Worker → Blend Mapper → Render
+              → WS Batch → Server
+Frame Watchdog → Thermal Controller → Config Downgrade
+
+Server
+WS Gateway → Redis Stream → Cognition Worker → Logger → Postgres
+
+🗣️ 1. Phoneme → Viseme LOD System (Audio-Driven)
+
+Goal:
+No text timing. Drive mouth from audio envelope + phoneme hints.
+LOD controls how many visemes you solve per frame.
+
+Viseme Sets per Tier
+Tier	Visemes	Strategy
+LOW	3	open / wide / closed
+MID	8	standard ARPAbet groups
+HIGH	15	detailed coarticulation
+Viseme LOD Maps
+export const VISEME_LOD = {
+  LOW: ["sil", "open", "wide"],
+  MID: ["sil", "PP", "FF", "TH", "DD", "kk", "CH", "aa"],
+  HIGH: [
+    "sil","PP","FF","TH","DD","kk","CH","SS",
+    "nn","RR","aa","E","I","O","U"
+  ]
+}
+
+Audio Envelope Extraction
+
+Run in audio loop:
+
+export function getMouthOpenness(analyser: AnalyserNode) {
+  const data = new Uint8Array(analyser.fftSize)
+  analyser.getByteTimeDomainData(data)
+
+  let sum = 0
+  for (let i = 0; i < data.length; i++) {
+    const v = (data[i] - 128) / 128
+    sum += v * v
+  }
+
+  return Math.sqrt(sum / data.length) // RMS
+}
+
+Viseme Solver
+export function solveViseme(
+  rms: number,
+  phonemeHint: string | null,
+  lod: "LOW" | "MID" | "HIGH",
+  prev: Record<string, number>,
+  dt: number
+) {
+  const visemes = VISEME_LOD[lod]
+  const result: Record<string, number> = {}
+
+  // base openness
+  const open = Math.min(rms * 3, 1)
+
+  for (const v of visemes) {
+    let target = 0
+
+    if (v === "sil") target = 1 - open
+    else if (v === "open") target = open
+    else if (phonemeHint === v) target = open
+    else target = open * 0.3
+
+    const current = prev[v] || 0
+    result[v] = current + (target - current) * Math.min(dt * 12, 1)
+  }
+
+  return result
+}
+
+🎮 2. GPU Memory Budget Manager (Mesh + Texture Streaming)
+
+Browser GPU memory is limited (~512 MB typical).
+We enforce a budget per tier.
+
+Tier	Budget
+
+
+  HIGH	512 MB (from *BottelNeck.txt)
+
+Budget Tracker
+interface GPUBudget {
+  usedMB: number
+  limitMB: number
+}
+
+export const gpuBudget: GPUBudget = {
+  usedMB: 0,
+  limitMB: 256
+}
+
+Register Texture
+export function registerTexture(tex: THREE.Texture) {
+  const sizeMB =
+    (tex.image.width * tex.image.height * 4) / (1024 * 1024)
+
+  gpuBudget.usedMB += sizeMB
+}
+
+Streaming Policy
+
+If usedMB > limitMB:
+
+Drop to lower LOD mesh
+
+Replace 4K → 2K → 1K textures
+
+Disable normal maps on LOW tier
+
+Texture LOD Loader
+export function loadTextureLOD(path: string, lod: number) {
+  const suffix = lod === 0 ? "4k" : lod === 1 ? "2k" : "1k"
+  return new THREE.TextureLoader().load(`${path}_${suffix}.jpg`)
+}
+
+👥 3. Multi-Avatar Concurrency Scheduler
+
+If you render multiple avatars, you must not run all sensors at full rate.
+
+Avatar Priority Levels
+Priority	Example	Update Policy
+FOCUS	speaking avatar	full FPS
+ACTIVE	visible idle	half sensor rate
+BACKGROUND	off-screen	render every 3rd frame, no face
+Scheduler
+interface Avatar {
+  id: string
+  priority: "FOCUS" | "ACTIVE" | "BACKGROUND"
+}
+
+export function getAvatarUpdateRates(priority: Avatar["priority"]) {
+  switch (priority) {
+    case "FOCUS":
+      return { renderSkip: 1, sensorHz: 15 }
+    case "ACTIVE":
+      return { renderSkip: 2, sensorHz: 8 }
+    case "BACKGROUND":
+      return { renderSkip: 3, sensorHz: 0 }
+  }
+}
+
+Render Frame Skipping
+let frame = 0
+
+function renderLoop() {
+  frame++
+
+  avatars.forEach((a) => {
+    const { renderSkip } = getAvatarUpdateRates(a.priority)
+    if (frame % renderSkip === 0) {
+      renderAvatar(a)
+    }
+  })
+
+  requestAnimationFrame(renderLoop)
+}
+
+🧠 4. Trust-Driven Expressiveness Limiter
+
+Trust should control amplitude, not just behavior.
+
+Low trust → muted face
+High trust → full range
+
+Trust → Gain Curve
+export function trustGain(trust: number) {
+  // smooth curve
+  return 0.3 + 0.7 * trust
+}
+
+
+Range:
+
+Trust	Gain
+0.0	0.3
+0.5	0.65
+1.0	1.0
+Apply to Blendshapes
+export function applyExpressiveness(
+  blends: Record<string, number>,
+  trust: number
+) {
+  const gain = trustGain(trust)
+  const result: Record<string, number> = {}
+
+  for (const k in blends) {
+    result[k] = blends[k] * gain
+  }
+
+  return result
+}
+
+
+You can also:
+
+Clamp micro-expressions when trust < 0.2
+
+Disable gaze lock when trust low
+
+Reduce smile asymmetry
+
+🔁 5. Full Frame Pipeline (Final Form)
+Audio Loop → RMS → Viseme Solver (LOD)
+Face Worker → Emotion → Blend Mapper (LOD)
+Trust State → Expressiveness Gain
+Frame Watchdog → Thermal Controller → Tier Downgrade
+GPU Budget → Texture/Mesh LOD Streaming
+Concurrency Scheduler → Per-avatar rates
+Render Loop → Final blended output
+
+📊 What This Gives You
+
+Lip sync that scales from low CPU → high fidelity
+
+GPU memory never silently crashes the tab
+
+Multiple avatars without FPS collapse
+
+Trust affects visible emotional range
+
+Automatic adaptation to device + load
+
+You now have a self-regulating real-time social avatar engine.
+
+⏱️ 1. Interaction Latency Budgeter (ASR → LLM → TTS)
+
+Goal:
+Keep perceived response latency < 700 ms, even if backend is slower.
+
+We do this with:
+
+latency measurement
+
+predictive animation states
+
+time-aligned TTS start
+
+Latency Model
+
+Track per turn:
+
+interface LatencyProfile {
+  asrMs: number
+  llmMs: number
+  ttsMs: number
+  totalMs: number
+}
+
+Rolling Averages
+const latencyEMA = {
+  asr: 0,
+  llm: 0,
+  tts: 0
+}
+
+function updateEMA(key: keyof typeof latencyEMA, value: number) {
+  latencyEMA[key] = latencyEMA[key] * 0.8 + value * 0.2
+}
+
+Budget Targets
+
+
+  Stage	Target (from *BottelNeck.txt)
+
+ASR	150 ms
+LLM	350 ms
+TTS	150 ms
+Compensation Strategy
+
+If llmMs > 500:
+
+Trigger thinking micro-expression
+
+Start breath + gaze shift
+
+Preload mouth idle motion
+
+So user sees activity at ~250 ms.
+
+Response Scheduler
+export function scheduleResponse(ttsStartTime: number) {
+  const now = performance.now()
+  const delay = Math.max(ttsStartTime - now, 0)
+
+  setTimeout(() => {
+    avatarState.setSpeaking(true)
+  }, delay)
+}
+
+
+TTS audio clock becomes the master clock for lip sync.
+
+🔮 2. Predictive Viseme Pre-Roll (Streaming Speech)
+
+
+  Problem: (from *BottelNeck.txt)
+
+If you wait for audio, lips start late.
+
+Solution:
+Use first phoneme prediction from TTS chunk metadata.
+
+Pre-roll Window
+
+Start visemes 80–120 ms before audio playback.
+
+Pipeline
+TTS chunk arrives → phoneme sequence → pre-roll visemes → audio starts → RMS drives fine motion
+
+Pre-roll Buffer
+interface VisemeFrame {
+  time: number
+  viseme: string
+  weight: number
+}
+
+const preRollBuffer: VisemeFrame[] = []
+
+On TTS metadata
+function onTTSPhonemeChunk(phonemes: string[], startTime: number) {
+  let t = startTime - 100 // pre-roll
+
+  phonemes.forEach((p) => {
+    preRollBuffer.push({
+      time: t,
+      viseme: mapPhonemeToViseme(p),
+      weight: 1
+    })
+    t += 60 // phoneme duration estimate
+  })
+}
+
+
+Render loop consumes frames whose time <= audioClock.
+
+🧠 3. Cross-Tab GPU Resource Arbitration (Electron)
+
+Multiple windows = shared GPU = silent crashes.
+
+We create a GPU lease system using Electron IPC.
+
+GPU Manager (Main Process)
+let gpuBudgetMB = 512
+let clients: Record<string, number> = {}
+
+ipcMain.handle("gpu:request", (_, { id, amount }) => {
+  const used = Object.values(clients).reduce((a, b) => a + b, 0)
+
+  if (used + amount > gpuBudgetMB) {
+    return { granted: false }
+  }
+
+  clients[id] = amount
+  return { granted: true }
+})
+
+ipcMain.on("gpu:release", (_, id) => {
+  delete clients[id]
+})
+
+Renderer Request
+const res = await ipcRenderer.invoke("gpu:request", {
+  id: windowId,
+  amount: 128
+})
+
+if (!res.granted) {
+  downgradeToLowGPUMode()
+}
+
+
+This prevents two avatars loading 4K textures simultaneously.
+
+👁️ 4. Emotion → Gaze + Head Motion Coupling
+
+This removes the “floating mask” effect.
+
+We derive:
+
+gaze target
+
+saccade rate
+
+head tilt
+from emotion + trust.
+
+Emotion → Gaze Model
+Emotion	Gaze
+Happy	stable eye contact
+Sad	downward drift
+Angry	intense lock
+Fear	rapid saccades
+Neutral	idle scan
+Gaze Solver
+export function solveGaze(
+  emotion: EmotionVector,
+  trust: number,
+  dt: number,
+  prev: THREE.Vector3
+) {
+  const happy = emotion[1]
+  const sad = emotion[2]
+  const angry = emotion[3]
+  const fear = emotion[4]
+
+  let target = new THREE.Vector3(0, 0, 1)
+
+  if (sad > 0.4) target.y = -0.2
+  if (angry > 0.4) target.z = 1.2
+  if (fear > 0.4) target.x = (Math.random() - 0.5) * 0.5
+
+  // trust reduces jitter
+  const jitter = (1 - trust) * 0.02
+
+  target.x += (Math.random() - 0.5) * jitter
+  target.y += (Math.random() - 0.5) * jitter
+
+  return prev.lerp(target, Math.min(dt * 5, 1))
+}
+
+Head Motion Coupling
+
+Small head movement tied to gaze velocity:
+
+export function solveHeadFromGaze(gazeDelta: THREE.Vector3) {
+  return {
+    yaw: gazeDelta.x * 0.3,
+    pitch: gazeDelta.y * 0.2
+  }
+}
+
+
+Clamp for LOW tier to avoid extra bones.
+
+🔁 5. Full Conversational Timing Loop
+User speaks →
+ ASR latency measured →
+ Thinking animation at 250 ms →
+ LLM latency measured →
+ TTS phoneme metadata →
+ Viseme pre-roll →
+ Audio starts (master clock) →
+ RMS fine lip motion →
+ Emotion state →
+ Gaze + head coupling →
+ Trust gain →
+ Final render
+
+
+Perceived response begins before audio → feels fast.
+
+📊 Result
+
+You now have:
+
+Latency-masked responses
+
+Lips that start before sound
+
+Multi-window GPU safety
+
+Emotionally coherent eye + head motion
+
+Time-aligned speech animation
+
+This is the layer that makes users say
+“it feels alive” instead of “it’s a chatbot.”
+
+🗣️ 1. Conversational Turn-Taking Predictor (Interruptibility Model)
+
+Goal:
+Decide when the avatar:
+
+should speak
+
+should wait
+
+can be interrupted
+
+should yield
+
+We compute an interruptibility score in real time.
+
+Inputs
+Signal	Source
+User speech energy	audio RMS
+ASR partial text rate	ASR stream
+Silence duration	audio
+Avatar speaking state	TTS clock
+Trust level	cognition state
+Interruptibility Score
+
+Range: 0 → do not interrupt, 1 → safe to take turn
+
+export function computeInterruptibility({
+  userEnergy,
+  silenceMs,
+  asrStability,
+  avatarSpeaking,
+  trust
+}: {
+  userEnergy: number
+  silenceMs: number
+  asrStability: number
+  avatarSpeaking: boolean
+  trust: number
+}) {
+  if (avatarSpeaking) return 0
+
+  const silenceFactor = Math.min(silenceMs / 600, 1)
+  const energyFactor = 1 - Math.min(userEnergy * 2, 1)
+  const asrFactor = asrStability
+  const trustFactor = 0.5 + trust * 0.5
+
+  return silenceFactor * energyFactor * asrFactor * trustFactor
+}
+
+Turn Decision
+if (interruptibility > 0.65) {
+  takeTurn()
+}
+
+Barge-in Handling
+
+If user starts speaking while avatar is talking:
+
+if (userEnergy > 0.2 && avatarSpeaking) {
+  if (trust > 0.6) gracefullyStopTTS()
+  else ignoreBargeIn()
+}
+
+
+This makes high-trust avatars more polite.
+
+🧠 2. Memory → Micro-Expression Bleed (Long-Term Affect)
+
+We maintain a slow affect state that biases expressions.
+
+Affect State
+interface AffectState {
+  valence: number // -1 to 1
+  arousal: number // 0 to 1
+}
+
+
+Updated from:
+
+conversation sentiment
+
+trust trajectory
+
+contradiction EMA
+
+Slow EMA Update
+
+Runs at 0.5 Hz
+
+affect.valence = affect.valence * 0.98 + sentiment * 0.02
+affect.arousal = affect.arousal * 0.95 + engagement * 0.05
+
+Bleed into Blendshapes
+export function applyAffectBleed(blends: Record<string, number>, affect: AffectState) {
+  const result = Object.assign({}, blends)
+
+  if (affect.valence > 0.3) {
+    result.smile = (result.smile || 0) + affect.valence * 0.2
+  }
+
+  if (affect.valence < -0.3) {
+    result.frown = (result.frown || 0) + Math.abs(affect.valence) * 0.2
+  }
+
+  // arousal → micro tension
+  result.browDown = (result.browDown || 0) + affect.arousal * 0.1
+
+  return result
+}
+
+
+This creates emotional continuity across turns.
+
+🌐 3. Network Jitter Buffer for TTS Streaming
+
+Chunked audio arrives with variable delay → lip sync breaks.
+
+Solution:
+Buffer audio + phoneme metadata to a target latency window.
+
+Target Buffer
+Mode	Buffer
+LOW latency	120 ms
+Stable	200 ms
+Jitter Buffer
+interface AudioChunk {
+  audio: Float32Array
+  phonemes: any[]
+  t: number
+}
+
+const jitterBuffer: AudioChunk[] = []
+let playbackStartTime = 0
+const TARGET_BUFFER_MS = 160
+
+On chunk arrival
+function onTTSChunk(chunk: AudioChunk) {
+  jitterBuffer.push(chunk)
+
+  const bufferedMs = estimateBufferedMs()
+
+  if (!playbackStartTime && bufferedMs > TARGET_BUFFER_MS) {
+    playbackStartTime = audioCtx.currentTime
+    startPlayback()
+  }
+}
+
+Playback
+
+Always read ahead of audio clock:
+
+const playTime = audioCtx.currentTime - playbackStartTime
+
+
+Visemes read from same timeline → stays aligned.
+
+👁️ 4. Adaptive Eye-Blink Model (Cognition-Coupled)
+
+Blink rate reflects:
+
+cognitive load
+
+speaking
+
+emotion
+
+trust
+
+Blink Base Rates
+State	Blinks/min
+Idle	12
+Listening	10
+Thinking	6
+Speaking	8
+High load	4
+Blink Controller
+let nextBlinkTime = 0
+
+export function updateBlink(now: number, state: {
+  speaking: boolean
+  cognitiveLoad: number
+  emotion: EmotionVector
+}) {
+  const baseRate =
+    state.speaking ? 8 :
+    state.cognitiveLoad > 0.7 ? 4 :
+    12
+
+  const interval = 60000 / baseRate
+
+  if (now > nextBlinkTime) {
+    triggerBlink()
+    nextBlinkTime = now + interval + Math.random() * 200
+  }
+}
+
+Emotion Modulation
+
+Sad → longer blink duration
+
+Angry → shorter, sharper blinks
+
+Fear → rapid double blinks
+
+function blinkDuration(emotion: EmotionVector) {
+  if (emotion[2] > 0.4) return 180
+  if (emotion[3] > 0.4) return 90
+  if (emotion[4] > 0.4) return 70
+  return 120
+}
+
+🔁 5. Integrated Cognitive Animation Loop
+
+Runs at cognition Hz
+
+Update interruptibility
+Update affect bleed
+Update blink scheduler
+Update turn-taking state
+Push trust + memory events
+
+🧩 6. Full Interaction Timeline
+User speech →
+ Interruptibility ↓
+ Silence detected →
+ Turn taken →
+ Thinking animation (latency mask) →
+ TTS jitter buffer fill →
+ Viseme pre-roll →
+ Speech playback →
+ Affect bleed influences face →
+ Blink rate adapts to load →
+ Gaze/head follow emotion →
+ Trust modifies amplitude
+
+
+This produces temporal coherence + social timing.
+
+🎯 What You Now Have
+
+Your system now:
+
+Knows when to speak or yield
+
+Carries emotional tone across turns
+
+Survives network jitter without lip drift
+
+Blinks like a cognitively loaded agent
+
+Adapts politeness based on trust
+
+🧠 1. Turn-Level Reinforcement Reward Model (Timing Policy Learning)
+
+Goal:
+Learn when to speak, wait, or yield based on outcomes.
+
+We do per-turn rewards, not token-level.
+
+State Vector (per decision)
+interface TurnState {
+  interruptibility: number
+  silenceMs: number
+  userEnergy: number
+  trust: number
+  latencyMs: number
+  userSpeaking: boolean
+}
+
+Action Space
+type Action =
+  | "TAKE_TURN"
+  | "WAIT"
+  | "YIELD"
+  | "BARGE_IN"
+
+Reward Signals
+
+Collected after the turn:
+
+Event	Reward
+User continues speaking after avatar starts	-1.0
+User stops and listens	+0.8
+User interrupts avatar	-0.6
+Low latency perceived (<700 ms)	+0.4
+Awkward silence >1.2 s	-0.4
+User sentiment positive	+0.5
+Reward Function
+function computeTurnReward(metrics: {
+  userInterrupted: boolean
+  avatarInterrupted: boolean
+  silenceMs: number
+  latencyMs: number
+  sentiment: number
+}) {
+  let r = 0
+
+  if (metrics.userInterrupted) r -= 1
+  if (!metrics.avatarInterrupted) r += 0.8
+  if (metrics.silenceMs > 1200) r -= 0.4
+  if (metrics.latencyMs < 700) r += 0.4
+
+  r += metrics.sentiment * 0.5
+
+  return r
+}
+
+Learning Strategy
+
+Use contextual bandit (fast, stable, no full RL infra).
+
+Redis stream event:
+
+{
+  "type": "turn_reward",
+  "state": {"emotion": "neutral", "fatigue": 0.3, "trust": 0.7},
+  "action": "TAKE_TURN",
+  "reward": 0.7
+}
+
+
+Worker updates action value table:
+
+Q(state_cluster, action) ← EMA update
+
+
+Cluster state by bins (silence short/medium/long, trust low/med/high).
+
+💾 2. Cross-Session Affect Persistence (User Emotional Memory)
+
+Goal:
+Each user has a long-term affect baseline.
+
+Stored per user:
+
+interface UserAffectProfile {
+  baselineValence: number
+  baselineArousal: number
+  trustBaseline: number
+  lastUpdated: number
+}
+
+Update Rule (end of session)
+profile.baselineValence =
+  profile.baselineValence * 0.9 + sessionAffect.valence * 0.1
+
+On session start
+
+Blend with live affect:
+
+affect.valence =
+  0.7 * liveAffect.valence + 0.3 * profile.baselineValence
+
+
+This creates:
+
+user-specific warmth
+
+persistent mood bias
+
+faster trust ramp for returning users
+
+Store in Redis JSON or Postgres (not hot path).
+
+⏱️ 3. Real-Time Conversation Pacing Controller
+
+Goal:
+Match user speaking speed + pause style.
+
+Measure User Pace
+
+From ASR stream:
+
+wordsPerSecond = words / speechDuration
+avgPauseMs = totalPause / pauseCount
+
+Pace Classes
+Class	WPS	Style
+Slow	<2	longer pauses
+Normal	2–3	default
+Fast	>3	shorter pauses
+Avatar Response Timing
+function getResponseDelay(pace: "SLOW" | "NORMAL" | "FAST") {
+  switch (pace) {
+    case "SLOW": return 500
+    case "NORMAL": return 320
+    case "FAST": return 180
+  }
+}
+
+Speech Rate Matching (TTS)
+ttsRate = clamp(0.9 + (wps - 2.5) * 0.15, 0.85, 1.15)
+
+
+This prevents talking over slow speakers and lagging behind fast ones.
+
+👥 4. Multi-User Attention Arbitration (Group Gaze Logic)
+
+Goal:
+Choose who the avatar looks at and who gets the turn.
+
+Per-User Attention Score
+attention =
+  speakingWeight * isSpeaking +
+  recencyWeight * recentlySpoke +
+  trustWeight * trust +
+  proximityWeight * screenPosition +
+  mentionWeight * nameMentioned
+
+Example Implementation
+function computeAttention(user: {
+  speaking: boolean
+  lastSpokeMs: number
+  trust: number
+  mentioned: boolean
+}) {
+  const recency = Math.exp(-user.lastSpokeMs / 4000)
+
+  return (
+    (user.speaking ? 1 : 0) * 0.5 +
+    recency * 0.2 +
+    user.trust * 0.2 +
+    (user.mentioned ? 0.3 : 0)
+  )
+}
+
+
+Pick max score → gaze target.
+
+Gaze Switching Policy
+
+Hard lock while user speaking
+
+Soft dwell 600–1200 ms after
+
+Idle scan across group when no speaker
+
+Turn Allocation in Groups
+
+Use interruptibility per user.
+
+Only take turn when:
+
+maxUserInterruptibility > 0.65
+AND currentSpeakerSilence > threshold
+
+🔁 5. Redis Event Additions
+
+New stream events:
+
+Turn reward
+type: turn_reward
+
+User affect update
+type: user_affect_profile
+
+Pace classification
+type: user_pace
+class: FAST
+
+Attention shift
+type: attention_target
+userId: u123
+
+🎯 What This Unlocks
+
+Your avatar now:
+
+Learns optimal turn timing per context
+
+Remembers user emotional baseline across sessions
+
+Matches speaking tempo dynamically
+
+Handles multi-user gaze and turns naturally
+
+This is group conversational intelligence, not just animation.
+
+🧬 1. Personalization Policy Layer (Per-User Interaction Style)
+
+Goal:
+Each user gets a style profile that modulates timing, expressiveness, politeness, and verbosity.
+
+User Style Profile
+interface UserStyleProfile {
+  verbosity: number        // 0–1 (short ↔ detailed)
+  warmth: number           // 0–1 (formal ↔ friendly)
+  interruptionTolerance: number // 0–1
+  pacePreference: number   // -1 slow ↔ +1 fast
+  humorAffinity: number    // 0–1
+}
+
+
+Stored per user (Redis JSON or Postgres).
+
+Policy Application Points
+System	Controlled by
+TTS length	verbosity
+Turn delay	interruptionTolerance
+Blendshape amplitude	warmth
+Blink rate	warmth + trust
+Joke probability	humorAffinity
+Speech rate	pacePreference
+Example Policy Function
+export function applyUserStyle(
+  base: RuntimeBehavior,
+  style: UserStyleProfile
+): RuntimeBehavior {
+  return {
+    base,
+    responseMaxTokens: Math.round(80 + style.verbosity * 120),
+    turnDelayMs: base.turnDelayMs * (1 + (1 - style.interruptionTolerance) * 0.5),
+    expressivenessGain: base.expressivenessGain * (0.7 + style.warmth * 0.6),
+    speechRate: base.speechRate * (1 + style.pacePreference * 0.15),
+    humorProb: style.humorAffinity * 0.3
+  }
+}
+
+🛡️ 2. Safety-Aware Interruption Filter
+
+Goal:
+Never barge in during:
+
+emotional disclosure
+
+negative sentiment spikes
+
+high speech intensity
+
+Sensitive Speech Detector
+
+Inputs:
+
+sentiment < -0.4
+
+speech energy sustained high
+
+long uninterrupted speech (>4 s)
+
+Safety Gate
+export function interruptionAllowed(state: {
+  sentiment: number
+  userEnergy: number
+  speechDurationMs: number
+}) {
+  const emotional = state.sentiment < -0.4
+  const intense = state.userEnergy > 0.6 && state.speechDurationMs > 3000
+
+  if (emotional || intense) return false
+  return true
+}
+
+
+This overrides the interruptibility score.
+
+Behavioral Result
+
+During sensitive speech:
+
+avatar nods
+
+gaze softens
+
+blink rate decreases
+
+no turn-taking attempts
+
+🧑‍💼 3. Meeting Mode (Speaker Queue + Raised-Hand Detection)
+
+Activated when >2 users or explicit mode.
+
+Speaker Queue Model
+interface Speaker {
+  userId: string
+  raisedHand: boolean
+  lastSpokeMs: number
+}
+
+
+Queue priority:
+
+Raised hand
+
+Longest waiting
+
+Highest trust (tie-breaker)
+
+Queue Resolver
+export function nextSpeaker(queue: Speaker[]) {
+  const raised = queue.filter(u => u.raisedHand)
+  if (raised.length) {
+    return raised.sort((a, b) => a.lastSpokeMs - b.lastSpokeMs)[0]
+  }
+
+  return queue.sort((a, b) => a.lastSpokeMs - b.lastSpokeMs)[0]
+}
+
+Raised-Hand Detection
+
+Sources:
+
+UI button
+
+gesture (if vision enabled)
+
+keyword (“I have a question”)
+
+Avatar Meeting Behaviors
+
+Announces next speaker
+
+Locks gaze on current speaker
+
+Summarizes periodically
+
+Enforces soft time limits
+
+⏳ 4. Long-Horizon Trust Decay Model (Days/Weeks)
+
+Trust should decay slowly without interaction.
+
+Stored Trust State
+interface TrustRecord {
+  score: number
+  lastInteraction: number
+}
+
+Decay Function
+
+Half-life model:
+
+const HALF_LIFE_DAYS = 7
+
+export function decayTrust(record: TrustRecord, now: number) {
+  const days = (now - record.lastInteraction) / (1000 * 60 * 60 * 24)
+  const decayFactor = Math.pow(0.5, days / HALF_LIFE_DAYS)
+
+  return record.score * decayFactor
+}
+
+On New Session
+trust = decayTrust(record, Date.now())
+
+
+This gives:
+
+Days idle	Trust retained
+0	100%
+7	50%
+14	25%
+Trust Rebuild Boost
+
+Returning users regain trust faster:
+
+trust += sessionPositiveSignals * 0.1
+
+🔁 5. Policy Execution Order (Cognition Loop)
+
+Every cognition tick:
+
+Load user style profile
+Apply trust decay (if session start)
+Compute interruptibility
+Run safety interruption filter
+Apply pacing controller
+Apply personalization policy
+Update attention (group mode)
+Emit Redis policy events
+
+🧾 6. New Redis Policy Events
+User style loaded
+type: user_style_applied
+
+Safety lock
+type: interruption_blocked
+reason: emotional_speech
+
+Meeting speaker change
+type: meeting_next_speaker
+userId: u123
+
+Trust decay applied
+type: trust_decay
+old: 0.72
+new: 0.61
+
+🎯 What This Achieves
+
+Your system now:
+
+Adapts personality per user
+
+Avoids socially inappropriate interruptions
+
+Runs structured multi-user meetings
+
+Maintains long-term relationship memory
+
+This is policy-driven social behavior, which is what differentiates a product from a demo.
+
+
+  # Implementation Plan - Performance & Agentic Research Optimization (from *BottelNeck.txt)
+
+This plan addresses the critical bottlenecks identified in [BottelNecktxt](file:///d:/Code%20Base/AI%20Girl/BottelNecktxt) and implements the advanced "Web Intelligence" agent architecture described in [Networksearch.txt](file:///d:/Code%20Base/AI%20Girl/Networksearch.txt).
+
+
+  ### [Phase 1: Frontend Architecture] (from *BottelNeck.txt)
+
+#### [NEW] [bootProfiler.ts](file:///d:/Code%20Base/AI%20Girl/src/core/bootProfiler.ts)
+Detects hardware capabilities (CPU, GPU, Memory, Cores) and classifies the device into LOW, MID, or HIGH performance tiers.
+
+#### [NEW] [runtimeConfig.ts](file:///d:/Code%20Base/AI%20Girl/src/core/runtimeConfig.ts)
+Defines dynamic settings for each tier, including render FPS, sensor frequency, and face tracking Hz.
+
+#### [NEW] [faceWorker.ts](file:///d:/Code%20Base/AI%20Girl/src/systems/faceWorker.ts)
+Wraps `face-api.js` in a Web Worker to move face detection and emotion extraction off the main thread.
+
+#### [MODIFY] [RuntimeLoop.js](file:///d:/Code%20Base/AI%20Girl/src/systems/RuntimeLoop.js)
+Refactor to support multiple loops:
+1. **Render Loop (60 FPS)**: Blendshape lerp, gaze, idle.
+2. **Sensor Loop (Throttled)**: Triggers Face Worker, Audio FFT.
+3. **Cognition Loop (4-8 Hz)**: Trust, contradiction, and state logic.
+
+
+  #### [MODIFY] [store.js](file:///d:/Code%20Base/AI%20Girl/src/store.js) (from *BottelNeck.txt)
+
+Implement a state-write throttle (10Hz) for semantic data while using transient refs for per-frame animation data.
+
+---
+
+
+  #### [MODIFY] [main.py](file:///d:/Code%20Base/AI%20Girl/server/main.py) (from *BottelNeck.txt)
+
+Update WebSocket endpoint to accept `msgpack` payloads and handle batched client messages.
+
+
+  #### [NEW] [wsClient.ts](file:///d:/Code%20Base/AI%20Girl/src/core/wsClient.ts) (from *BottelNeck.txt)
+
+Handles WebSocket batching and downsampling (5-10 Hz) to minimize network saturation.
+
+---
+
+
+  ### [Phase 3: Server-side Hot Path] (from *BottelNeck.txt)
+
+#### [MODIFY] [redis_manager.py](file:///d:/Code%20Base/AI%20Girl/server/infrastructure/redis_manager.py)
+Prioritize Redis for session state and contradiction EMA; offload SQLite/Postgres logging to background tasks.
+
+---
+
+
+  ### [Phase 4: Agentic Research System] (from *BottelNeck.txt)
+
+#### [NEW] [controller.py](file:///d:/Code%20Base/AI%20Girl/server/systems/agent/controller.py)
+Implements the multi-hop research loop: Decompose → Search → Fetch → Reason → Answer.
+
+#### [NEW] [retriever.py](file:///d:/Code%20Base/AI%20Girl/server/systems/agent/retriever.py)
+Interface for Search APIs and clean content extraction using `trafilatura`.
+
+#### [NEW] [confidence.py](file:///d:/Code%20Base/AI%20Girl/server/systems/agent/confidence.py)
+Bayesian belief updating and epistemic uncertainty quantification for research findings.
+
+
+  #### [MODIFY] [llm.py](file:///d:/Code%20Base/AI%20Girl/server/systems/llm.py) (from *BottelNeck.txt)
+
+Integrate the Agent Controller to handle queries requiring external knowledge.
+
+
+  ### Automated Tests (from *BottelNeck.txt)
+
+- **Frontend Performance**: Target < 16.6ms main-thread budget in Chrome DevTools.
+- **WebSocket Efficiency**: Verify msgpack compression and battery/CPU savings from batching.
+- **Agent Accuracy**: Validate the research agent with real-time queries and citation quality.
+
+
+  ### Manual Verification (from *BottelNeck.txt)
+
+- Verify stable 60 FPS animation on varied hardware tiers.
+- Inspect the CLI (rich display) for correct state updates at reduced frequency.
+- Confirm "Research mode" output with citations in the conversation log.
+
+
+
+
+
+
+
+Unity (Recommended approach)
+
+Unity already exposes the display refresh rate. Use that.
+
+void SetTargetFPS()
+{
+    int refresh = Screen.currentResolution.refreshRateRatio.value; 
+    // Unity 2021+ uses refreshRateRatio
+
+    if (refresh >= 120)
+    {
+        Application.targetFrameRate = 120;
+    }
+    else
+    {
+        Application.targetFrameRate = 60;
+    }
+
+    QualitySettings.vSyncCount = 0; // Ensure manual FPS control
+}
+
+
+Call this once on startup.
+
+Why this works
+
+Uses actual panel capability
+
+Avoids guessing GPU power
+
+Keeps 60 as safe fallback
+
+
+🧠 If you want performance-based switching (not just refresh rate)
+
+Measure real frame time for a few seconds:
+
+IEnumerator AutoDetectFPS()
+{
+    yield return new WaitForSeconds(2f); // warmup
+
+    float avgFrameTime = 0f;
+    int samples = 120;
+
+    for (int i = 0; i < samples; i++)
+    {
+        avgFrameTime += Time.unscaledDeltaTime;
+        yield return null;
+    }
+
+    avgFrameTime /= samples;
+
+    float avgFPS = 1f / avgFrameTime;
+
+    if (avgFPS >= 110f)   // headroom threshold
+        Application.targetFrameRate = 120;
+    else
+        Application.targetFrameRate = 60;
+}
+
+
+This ensures:
+
+Weak devices don’t get forced to 120
+
+Strong devices unlock automatically
+
+⚠️ Important stability rules
+
+Always:
+
+Application.targetFrameRate = Mathf.Min(Application.targetFrameRate, Screen.currentResolution.refreshRateRatio.value);
+
+
+This prevents requesting 120 on a 60 Hz panel.
+
+🧩 Hybrid (best production pattern)
+void SetSmartFPS()
+{
+    int refresh = Screen.currentResolution.refreshRateRatio.value;
+
+    if (refresh >= 120)
+        StartCoroutine(AutoDetectFPS()); // performance test
+    else
+        Application.targetFrameRate = 60;
+
+    QualitySettings.vSyncCount = 0;
+}
+
+✅ Step 1 — Get monitor refresh rate
+
+Unity (PC):
+
+int GetMonitorHz()
+{
+    return Screen.currentResolution.refreshRateRatio.value;
+}
+
+✅ Step 2 — Apply smart FPS cap
+void SetSmartFPS()
+{
+    int hz = GetMonitorHz();
+
+    // Hard default
+    int target = 60;
+
+    if (hz >= 120)
+        target = 120;
+
+    Application.targetFrameRate = target;
+
+    QualitySettings.vSyncCount = 0; // we control FPS manually
+}
+
+
+This alone solves 90% of cases.
+
+🚀 Optional: Add performance headroom test (recommended for laptops)
+
+Some PCs have 120 Hz panels but weak GPUs.
+Add a short runtime test before locking to 120.
+
+IEnumerator SetSmartFPSWithTest()
+{
+    int hz = GetMonitorHz();
+
+    if (hz < 120)
+    {
+        Application.targetFrameRate = 60;
+        yield break;
+    }
+
+    // Temporary unlock for test
+    Application.targetFrameRate = -1;
+
+    yield return new WaitForSeconds(2f); // warmup
+
+    float avg = 0f;
+    int samples = 120;
+
+    for (int i = 0; i < samples; i++)
+    {
+        avg += Time.unscaledDeltaTime;
+        yield return null;
+    }
+
+    avg /= samples;
+    float fps = 1f / avg;
+
+    if (fps >= 110f)
+        Application.targetFrameRate = 120;
+    else
+        Application.targetFrameRate = 60;
+}
+
+⚠️ Do NOT use VSync if you want manual control
+
+If you prefer VSync instead of Application.targetFrameRate, then use:
+
+if (hz >= 120)
+    QualitySettings.vSyncCount = 1; // locks to 120 on 120 Hz
+else
+    QualitySettings.vSyncCount = 1; // locks to 60 on 60 Hz
+
+
+But note:
+
+👉 With VSync ON you cannot freely choose 60 vs 120 on high-Hz monitors
+(it will always match the monitor).
+
+So for your requirement (force 60 unless capable of 120),
+manual FPS cap is the correct method.
+
+🧠 Final recommended PC setup
+void Start()
+{
+    QualitySettings.vSyncCount = 0;
+    StartCoroutine(SetSmartFPSWithTest());
+}
+
+🎯 Design Rules
+
+Priority order:
+
+User Setting > Runtime Safety System > Monitor Capability
+
+
+So:
+
+If user forces 60 → always 60
+
+If user forces 120 → try 120 but allow safety downgrade
+
+If Auto → use smart logic
+
+🧱 Enums
+public enum FPSMode
+{
+    Auto,
+    Force60,
+    Force120
+}
+
+public enum GameState
+{
+    Menu,
+    Gameplay
+}
+
+🧠 Core Controller
+public class FPSController : MonoBehaviour
+{
+    public FPSMode userMode = FPSMode.Auto;
+    public GameState gameState = GameState.Gameplay;
+
+    int monitorHz;
+    int currentTarget = 60;
+
+    float dropTimer = 0f;
+    const float dropThreshold = 90f;   // if FPS < 90 while targeting 120 → downgrade
+    const float dropTimeRequired = 2f; // must be sustained for 2 seconds
+
+    void Start()
+    {
+        QualitySettings.vSyncCount = 0;
+        monitorHz = Screen.currentResolution.refreshRateRatio.value;
+
+        ApplyInitialCap();
+    }
+
+🚀 Initial Cap Logic
+void ApplyInitialCap()
+{
+    if (gameState == GameState.Menu)
+    {
+        SetFPS(60);
+        return;
+    }
+
+    switch (userMode)
+    {
+        case FPSMode.Force60:
+            SetFPS(60);
+            break;
+
+        case FPSMode.Force120:
+            TrySet120();
+            break;
+
+        case FPSMode.Auto:
+            if (monitorHz >= 120)
+                TrySet120();
+            else
+                SetFPS(60);
+            break;
+    }
+}
+
+🎯 Try 120 Safely
+void TrySet120()
+{
+    if (monitorHz >= 120)
+        SetFPS(120);
+    else
+        SetFPS(60);
+}
+
+🔁 Runtime Dynamic Downgrade
+void Update()
+{
+    if (currentTarget != 120) return;
+    if (userMode == FPSMode.Force60) return;
+    if (gameState != GameState.Gameplay) return;
+
+    float fps = 1f / Time.unscaledDeltaTime;
+
+    if (fps < dropThreshold)
+        dropTimer += Time.unscaledDeltaTime;
+    else
+        dropTimer = 0f;
+
+    if (dropTimer >= dropTimeRequired)
+    {
+        SetFPS(60);
+        dropTimer = 0f;
+    }
+}
+
+
+This avoids:
+
+Instant drops
+
+Flickering between 60 ↔ 120
+
+Single-frame spikes
+
+🎮 Menu vs Gameplay Caps
+
+Expose a method:
+
+public void SetGameState(GameState state)
+{
+    gameState = state;
+
+    if (state == GameState.Menu)
+    {
+        SetFPS(60);
+    }
+    else
+    {
+        ApplyInitialCap();
+    }
+}
+
+
+Typical usage:
+
+fpsController.SetGameState(GameState.Menu);
+fpsController.SetGameState(GameState.Gameplay);
+
+⚙️ User Graphics Setting Override
+
+Hook this to your settings menu:
+
+public void SetUserFPSMode(FPSMode mode)
+{
+    userMode = mode;
+    ApplyInitialCap();
+}
+
+
+Save/load with PlayerPrefs if needed.
+
+🔒 SetFPS (single authority)
+void SetFPS(int fps)
+{
+    currentTarget = fps;
+    Application.targetFrameRate = fps;
+    Debug.Log("FPS Target set to: " + fps);
+}
+
+
+🎯 New Parameters
+const float downgradeGpuMs = 11.5f;   // ~ < 87 FPS equivalent → drop from 120
+const float upgradeGpuMs   = 7.5f;    // ~ > 133 FPS headroom → allow 120
+
+const float downgradeTimeRequired = 2f;
+const float upgradeTimeRequired   = 5f;
+
+const int backgroundFPS = 30;
+
+
+Why GPU time instead of FPS?
+
+✔ FPS lies when CPU bound
+✔ GPU ms tells real render cost
+✔ Industry standard metric
+
+🧠 Access GPU Frame Time
+
+Unity:
+
+float GetGPUFrameTime()
+{
+    return FrameTimingManager.GetLatestTimings(1, frameTimings);
+
+    // but we need array defined:
+}
+
+
+Full implementation:
+
+FrameTiming[] frameTimings = new FrameTiming[1];
+
+float GetGPUFrameTime()
+{
+    FrameTimingManager.CaptureFrameTimings();
+    uint count = FrameTimingManager.GetLatestTimings(1, frameTimings);
+
+    if (count > 0)
+        return frameTimings[0].gpuFrameTime;
+    else
+        return 0f;
+}
+
+
+Time is in milliseconds.
+
+🔁 Runtime Governor Update
+
+Replace your old Update() with this:
+
+float downgradeTimer = 0f;
+float upgradeTimer = 0f;
+
+void Update()
+{
+    HandleFocusState();
+
+    if (currentTarget == 120)
+        CheckDowngrade();
+    else if (currentTarget == 60)
+        CheckUpgrade();
+}
+
+⬇️ Dynamic Downgrade (120 → 60)
+void CheckDowngrade()
+{
+    if (userMode == FPSMode.Force60) return;
+    if (gameState != GameState.Gameplay) return;
+
+    float gpuMs = GetGPUFrameTime();
+    if (gpuMs <= 0f) return;
+
+    if (gpuMs > downgradeGpuMs)
+        downgradeTimer += Time.unscaledDeltaTime;
+    else
+        downgradeTimer = 0f;
+
+    if (downgradeTimer >= downgradeTimeRequired)
+    {
+        SetFPS(60);
+        downgradeTimer = 0f;
+    }
+}
+
+⬆️ Dynamic Upgrade (60 → 120 after stability)
+void CheckUpgrade()
+{
+    if (userMode == FPSMode.Force60) return;
+    if (monitorHz < 120) return;
+    if (gameState != GameState.Gameplay) return;
+
+    float gpuMs = GetGPUFrameTime();
+    if (gpuMs <= 0f) return;
+
+    if (gpuMs < upgradeGpuMs)
+        upgradeTimer += Time.unscaledDeltaTime;
+    else
+        upgradeTimer = 0f;
+
+    if (upgradeTimer >= upgradeTimeRequired)
+    {
+        SetFPS(120);
+        upgradeTimer = 0f;
+    }
+}
+
+
+This gives:
+
+✔ Must be stable for 5 seconds before upgrading
+✔ No rapid flipping
+✔ Real GPU headroom check
+
+💤 Background / Unfocused Cap
+
+Unity provides:
+
+void OnApplicationFocus(bool hasFocus)
+{
+    if (!hasFocus)
+    {
+        Application.targetFrameRate = backgroundFPS;
+    }
+    else
+    {
+        ApplyInitialCap();
+    }
+}
+
+
+Also add:
+
+void HandleFocusState()
+{
+    if (!Application.isFocused) return;
+}
+
+
+Menu + unfocused = 30 FPS, saves laptop thermals.
+
+🎮 Graphics Quality Auto-Scaler
+
+Tie quality to GPU frame time.
+
+Example policy:
+
+GPU ms	Action
+
+14 ms | Lower quality |
+< 6 ms for 8s | Raise quality |
+
+Implementation
+float qualityUpgradeTimer = 0f;
+float qualityDowngradeTimer = 0f;
+
+void HandleQualityScaling()
+{
+    float gpuMs = GetGPUFrameTime();
+    if (gpuMs <= 0f) return;
+
+    if (gpuMs > 14f)
+    {
+        qualityDowngradeTimer += Time.unscaledDeltaTime;
+        qualityUpgradeTimer = 0f;
+
+        if (qualityDowngradeTimer > 2f)
+        {
+            LowerQuality();
+            qualityDowngradeTimer = 0f;
+        }
+    }
+    else if (gpuMs < 6f)
+    {
+        qualityUpgradeTimer += Time.unscaledDeltaTime;
+        qualityDowngradeTimer = 0f;
+
+        if (qualityUpgradeTimer > 8f)
+        {
+            RaiseQuality();
+            qualityUpgradeTimer = 0f;
+        }
+    }
+}
+
+
+Call HandleQualityScaling() inside Update().
+
+Quality Steps
+void LowerQuality()
+{
+    int q = QualitySettings.GetQualityLevel();
+    if (q > 0)
+        QualitySettings.SetQualityLevel(q - 1, true);
+}
+
+void RaiseQuality()
+{
+    int q = QualitySettings.GetQualityLevel();
+    if (q < QualitySettings.names.Length - 1)
+        QualitySettings.SetQualityLevel(q + 1, true);
+}
+
+🧱 Final Update Loop
+void Update()
+{
+    HandleFocusState();
+    HandleQualityScaling();
+
+    if (!Application.isFocused) return;
+
+    if (currentTarget == 120)
+        CheckDowngrade();
+    else if (currentTarget == 60)
+        CheckUpgrade();
+}
+
+🧠 What You Now Have (Production Grade)
+
+✔ Smart 60/120 switching
+✔ GPU-based decisions (accurate)
+✔ Stable hysteresis timers
+✔ Auto upgrade after sustained headroom
+✔ Background 30 FPS cap
+✔ Menu 60 FPS cap
+✔ Live graphics scaler
+✔ User override respected
+✔ Laptop thermals protected
+✔ No oscillation
+
+🧠 1. CPU vs GPU Bound Detection
+
+We compare:
+
+CPU frame time
+
+GPU frame time
+
+Whichever is higher = bottleneck.
+
+Add timing access
+FrameTiming[] frameTimings = new FrameTiming[1];
+
+bool GetTimings(out float cpuMs, out float gpuMs)
+{
+    FrameTimingManager.CaptureFrameTimings();
+    uint count = FrameTimingManager.GetLatestTimings(1, frameTimings);
+
+    if (count > 0)
+    {
+        cpuMs = frameTimings[0].cpuFrameTime;
+        gpuMs = frameTimings[0].gpuFrameTime;
+        return true;
+    }
+
+    cpuMs = gpuMs = 0f;
+    return false;
+}
+
+Detect bound state
+enum Bottleneck
+{
+    CPU,
+    GPU,
+    None
+}
+
+Bottleneck currentBottleneck = Bottleneck.None;
+
+void DetectBottleneck()
+{
+    if (!GetTimings(out float cpuMs, out float gpuMs)) return;
+
+    float diff = Mathf.Abs(cpuMs - gpuMs);
+
+    if (diff < 1.0f)
+        currentBottleneck = Bottleneck.None;
+    else if (cpuMs > gpuMs)
+        currentBottleneck = Bottleneck.CPU;
+    else
+        currentBottleneck = Bottleneck.GPU;
+}
+
+
+Call this every frame (cheap).
+
+🎯 How We Use It
+
+GPU bound → lower resolution / graphics
+
+CPU bound → don’t touch resolution, reduce CPU-heavy systems instead (AI tick rate, physics rate, crowd density, etc.)
+
+This prevents useless resolution drops when CPU is the problem.
+
+🧩 2. Dynamic Resolution Scaling (DRS)
+
+Unity PC:
+
+float currentScale = 1.0f;
+const float minScale = 0.7f;
+const float maxScale = 1.0f;
+const float scaleStep = 0.05f;
+
+Apply scale
+void ApplyResolutionScale()
+{
+    ScalableBufferManager.ResizeBuffers(currentScale, currentScale);
+}
+
+DRS Policy
+
+Only run when GPU bound.
+
+void HandleDRS(float gpuMs)
+{
+    if (currentBottleneck != Bottleneck.GPU) return;
+
+    if (gpuMs > 14f && currentScale > minScale)
+    {
+        currentScale -= scaleStep;
+        ApplyResolutionScale();
+    }
+    else if (gpuMs < 8f && currentScale < maxScale)
+    {
+        currentScale += scaleStep;
+        ApplyResolutionScale();
+    }
+}
+
+
+Smooth, step-based, no flicker.
+
+📉 3. Frame Pacing Debug Graph
+
+For debugging stutter you want frame time history, not FPS.
+
+Buffer
+const int graphSize = 120;
+float[] frameTimes = new float[graphSize];
+int frameIndex = 0;
+
+Record
+void RecordFrameTime()
+{
+    frameTimes[frameIndex] = Time.unscaledDeltaTime * 1000f;
+    frameIndex = (frameIndex + 1) % graphSize;
+}
+
+Simple OnGUI graph
+void OnGUI()
+{
+    float width = 300;
+    float height = 100;
+    float x = 10;
+    float y = 10;
+
+    GUI.Box(new Rect(x, y, width, height), "");
+
+    for (int i = 0; i < graphSize - 1; i++)
+    {
+        int idx = (frameIndex + i) % graphSize;
+        float t = frameTimes[idx];
+
+        float normalized = Mathf.Clamp01(t / 33f); // 33ms = 30 FPS line
+        float barHeight = normalized * height;
+
+        GUI.DrawTexture(
+            new Rect(x + i * (width / graphSize), y + height - barHeight, 2, barHeight),
+            Texture2D.whiteTexture
+        );
+    }
+}
+
+
+You’ll see:
+
+Spikes
+
+Jitter
+
+Bad frame pacing instantly
+
+🧭 4. Per-Scene Performance Profiles
+
+Different scenes have different budgets.
+
+Example:
+
+Scene	Target FPS	Quality Bias
+Menu	60	High
+Gameplay	120	Balanced
+Heavy City	60	Aggressive DRS
+Scriptable profile
+[System.Serializable]
+public class ScenePerformanceProfile
+{
+    public string sceneName;
+    public int preferredFPS = 60;
+    public float drsMinScale = 0.7f;
+    public float drsMaxScale = 1.0f;
+}
+
+
+Store a list in your controller.
+
+Apply on scene load
+public List<ScenePerformanceProfile> profiles;
+
+void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+{
+    foreach (var p in profiles)
+    {
+        if (p.sceneName == scene.name)
+        {
+            SetFPS(p.preferredFPS);
+            minScale = p.drsMinScale;
+            maxScale = p.drsMaxScale;
+            break;
+        }
+    }
+}
+
+
+Register:
+
+SceneManager.sceneLoaded += OnSceneLoaded;
+
+🔁 Final Update Loop (Order Matters)
+void Update()
+{
+    if (!Application.isFocused) return;
+
+    RecordFrameTime();
+    DetectBottleneck();
+
+    if (GetTimings(out float cpuMs, out float gpuMs))
+    {
+        HandleDRS(gpuMs);
+        HandleQualityScaling();
+    }
+
+    if (currentTarget == 120)
+        CheckDowngrade();
+    else if (currentTarget == 60)
+        CheckUpgrade();
+}
+
+🧠 What You Now Have (AAA System)
+
+✔ CPU vs GPU bottleneck detection
+✔ Resolution scaling only when it helps
+✔ Graphics scaler tied to real GPU load
+✔ Dynamic 60 ↔ 120 switching with hysteresis
+✔ Background 30 FPS cap
+✔ Per-scene performance budgets
+✔ Real frame pacing graph for stutter debugging
+
+This is essentially a console-grade adaptive performance system running on PC.
+
+🧠 1. Dynamic Physics Tick Rate (CPU bound only)
+
+Physics cost scales with:
+
+
+  Fixed timestep frequency (from *BottelNeck.txt)
+
+Solver iterations
+
+Active rigidbodies
+
+We scale Fixed Timestep safely.
+
+Baseline
+const float defaultFixedDelta = 0.02f;   // 50 Hz
+const float minFixedDelta     = 0.0333f; // 30 Hz
+const float maxFixedDelta     = 0.02f;
+
+CPU-bound scaling logic
+void HandlePhysicsScaling(float cpuMs)
+{
+    if (currentBottleneck != Bottleneck.CPU) return;
+
+    if (cpuMs > 16f) // heavy CPU load
+    {
+        Time.fixedDeltaTime = Mathf.Min(minFixedDelta, Time.fixedDeltaTime + 0.002f);
+    }
+    else if (cpuMs < 10f) // CPU headroom
+    {
+        Time.fixedDeltaTime = Mathf.Max(maxFixedDelta, Time.fixedDeltaTime - 0.002f);
+    }
+}
+
+
+Effects:
+
+✔ Fewer physics steps per second when CPU bound
+✔ No visual impact on GPU
+✔ Gradual change → no simulation explosions
+
+Optional extra:
+
+Physics.defaultSolverIterations = cpuMs > 18f ? 4 : 6;
+
+👥 2. Crowd / AI LOD Scaling
+
+CPU-bound systems should reduce:
+
+AI tick rate
+
+Pathfinding frequency
+
+Animation update rate for distant agents
+
+Global AI tick throttle
+float aiTickInterval = 0.1f; // 10 Hz default
+float aiTimer = 0f;
+
+void UpdateAI(float cpuMs)
+{
+    if (currentBottleneck == Bottleneck.CPU && cpuMs > 16f)
+        aiTickInterval = 0.25f; // 4 Hz
+    else
+        aiTickInterval = 0.1f;
+
+    aiTimer += Time.deltaTime;
+
+    if (aiTimer >= aiTickInterval)
+    {
+        aiTimer = 0f;
+        RunAITick(); // your AI manager update
+    }
+}
+
+Crowd density scaling
+
+Expose a multiplier:
+
+float crowdDensity = 1.0f;
+
+void HandleCrowdScaling(float cpuMs)
+{
+    if (currentBottleneck != Bottleneck.CPU) return;
+
+    if (cpuMs > 18f)
+        crowdDensity = Mathf.Max(0.5f, crowdDensity - 0.05f);
+    else if (cpuMs < 10f)
+        crowdDensity = Mathf.Min(1.0f, crowdDensity + 0.05f);
+
+    CrowdManager.Instance.SetDensity(crowdDensity);
+}
+
+⚙️ 3. Async Compute Detection
+
+Unity doesn’t expose a direct “async compute active” flag,
+but we can infer support:
+
+bool asyncSupported = SystemInfo.supportsAsyncCompute;
+
+Strategy
+
+If async compute is supported and GPU bound:
+
+✔ Move post-processing
+✔ GPU skinning
+✔ Particle simulation
+
+to async compute queues (HDRP/URP features or compute shaders).
+
+At runtime you can bias quality upward when async is available:
+
+if (asyncSupported && currentBottleneck == Bottleneck.GPU)
+{
+    // allow slightly higher quality before DRS kicks in
+    upgradeGpuMs = 8.5f;
+}
+
+
+This prevents over-aggressive DRS on modern GPUs.
+
+🖥️ 4. VRR (G-Sync / FreeSync) Aware Frame Pacing
+
+VRR works best when:
+
+FPS is uncapped OR
+
+Capped slightly below max refresh
+
+We detect high-Hz + VRR and change policy.
+
+Unity can’t directly detect G-Sync, but we infer:
+
+bool vrrLikely = monitorHz >= 120 && QualitySettings.vSyncCount == 0;
+
+VRR frame cap strategy
+
+Instead of hard 120, cap slightly below:
+
+int vrrCap = monitorHz - 3; // e.g. 141 for 144 Hz
+
+Apply when in VRR mode
+void ApplyVRRCap()
+{
+    if (vrrLikely && userMode != FPSMode.Force60)
+    {
+        Application.targetFrameRate = monitorHz - 3;
+    }
+}
+
+
+Benefits:
+
+✔ Prevents hitting VSync ceiling
+✔ Eliminates VRR flicker
+✔ Smoother frametime graph
+
+🔁 Integrate Into Main Loop
+
+Your updated runtime order:
+
+void Update()
+{
+    if (!Application.isFocused) return;
+
+    RecordFrameTime();
+    DetectBottleneck();
+
+    if (GetTimings(out float cpuMs, out float gpuMs))
+    {
+        HandleDRS(gpuMs);
+        HandleQualityScaling();
+        HandlePhysicsScaling(cpuMs);
+        HandleCrowdScaling(cpuMs);
+        UpdateAI(cpuMs);
+    }
+
+    if (currentTarget == 120)
+        CheckDowngrade();
+    else if (currentTarget == 60)
+        CheckUpgrade();
+
+    ApplyVRRCap();
+}
+
+🧠 System Behavior Summary
+When GPU bound
+
+✔ Resolution scales down
+✔ Graphics quality lowers
+✔ Physics unchanged
+✔ AI unchanged
+
+When CPU bound
+
+✔ Physics tick rate reduced
+✔ AI tick throttled
+✔ Crowd density lowered
+✔ Resolution untouched
+
+When stable
+
+✔ Gradual upgrade to 120 FPS
+✔ Quality scales back up
+✔ Physics returns to 50 Hz
+
+When unfocused
+
+✔ 30 FPS cap
+
+On VRR monitor
+
+✔ Cap = refresh − 3
+✔ No VSync
+✔ Smooth frametimes
+
+📊 What You Now Have
+
+This is effectively:
+
+🟢 Console-style dynamic simulation scaler
+🟢 GPU + CPU aware workload redistribution
+🟢 VRR-optimized frame pacing
+🟢 Multi-layer adaptive quality + resolution
+🟢 Scene-aware performance budgets
+
+You’ve crossed into engine-level runtime optimization, not just a settings menu.
+
+
+🎞️ 1. Dynamic Animation Update Rate Scaling (CPU bound)
+
+Animation systems are CPU heavy (skinning, state machines, root motion).
+
+We don’t disable them — we lower evaluation frequency for distant / low-priority actors.
+
+Animator update throttling
+
+Use manual update mode:
+
+animator.updateMode = AnimatorUpdateMode.Normal;
+animator.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
+
+
+Then add a global animation tick scheduler.
+
+Global animation tick interval
+float animTickInterval = 0f;   // 0 = every frame
+float animTimer = 0f;
+
+CPU-bound policy
+void HandleAnimationScaling(float cpuMs)
+{
+    if (currentBottleneck != Bottleneck.CPU)
+    {
+        animTickInterval = 0f;
+        return;
+    }
+
+    if (cpuMs > 18f)
+        animTickInterval = 0.066f; // 15 FPS anim update
+    else if (cpuMs > 14f)
+        animTickInterval = 0.033f; // 30 FPS anim update
+    else
+        animTickInterval = 0f;     // full rate
+}
+
+Central animation update
+
+All non-critical animators register to a manager:
+
+void UpdateAnimations()
+{
+    if (animTickInterval == 0f) return;
+
+    animTimer += Time.deltaTime;
+    if (animTimer < animTickInterval) return;
+
+    animTimer = 0f;
+
+    foreach (var anim in registeredAnimators)
+        anim.Update(animTickInterval);
+}
+
+
+Result:
+
+✔ Player + nearby NPCs stay full rate
+✔ Distant crowds drop to 15–30 Hz
+✔ Massive CPU savings
+
+💽 2. Streaming Budget Controller (IO bound)
+
+IO stalls cause frame spikes, not sustained load.
+We detect them via CPU spike without GPU spike.
+
+IO bound heuristic
+bool ioBound = false;
+
+void DetectIOBound(float cpuMs, float gpuMs)
+{
+    if (cpuMs > 25f && gpuMs < 10f)
+        ioBound = true;
+    else
+        ioBound = false;
+}
+
+Streaming throttle
+
+Expose a streaming budget:
+
+int maxAsyncLoadsPerFrame = 4;
+
+IO-bound policy
+void HandleStreamingBudget()
+{
+    if (ioBound)
+        maxAsyncLoadsPerFrame = 1;
+    else
+        maxAsyncLoadsPerFrame = 4;
+
+    StreamingManager.Instance.SetLoadBudget(maxAsyncLoadsPerFrame);
+}
+
+
+Also delay non-critical loads:
+
+if (ioBound)
+    StreamingManager.Instance.PausePreloads();
+else
+    StreamingManager.Instance.ResumePreloads();
+
+
+Result:
+
+✔ Prevents asset burst stalls
+✔ Smooth traversal in open worlds
+✔ Keeps gameplay streaming responsive
+
+🔥 3. Thermal / Laptop Power Mode Detection
+
+Unity doesn’t expose thermals directly on PC,
+but we can infer via sustained performance decay.
+
+Thermal throttling heuristic
+
+Track long-term GPU frame time drift:
+
+float thermalTimer = 0f;
+bool thermalThrottling = false;
+
+void DetectThermals(float gpuMs)
+{
+    if (currentTarget == 120 && gpuMs > 12f)
+        thermalTimer += Time.unscaledDeltaTime;
+    else
+        thermalTimer = Mathf.Max(0f, thermalTimer - Time.unscaledDeltaTime);
+
+    if (thermalTimer > 20f) // sustained degradation
+        thermalThrottling = true;
+    else if (thermalTimer == 0f)
+        thermalThrottling = false;
+}
+
+Thermal policy
+
+When throttling:
+
+✔ Prefer 60 FPS cap
+✔ Raise DRS aggressiveness
+✔ Lower physics back to safe baseline
+
+void HandleThermalPolicy()
+{
+    if (!thermalThrottling) return;
+
+    if (currentTarget == 120)
+        SetFPS(60);
+
+    minScale = 0.65f; // allow deeper DRS
+    Time.fixedDeltaTime = 0.025f; // ~40 Hz physics cap
+}
+
+
+Optional: detect battery mode (Windows laptops)
+
+bool OnBattery()
+{
+    return SystemInfo.batteryStatus == BatteryStatus.Discharging;
+}
+
+
+If on battery:
+
+✔ Force 60 FPS
+✔ Reduce background FPS to 15
+
+🔁 Final Integrated Update Order
+void Update()
+{
+    if (!Application.isFocused) return;
+
+    RecordFrameTime();
+    DetectBottleneck();
+
+    if (GetTimings(out float cpuMs, out float gpuMs))
+    {
+        DetectIOBound(cpuMs, gpuMs);
+        DetectThermals(gpuMs);
+
+        HandleDRS(gpuMs);
+        HandleQualityScaling();
+        HandlePhysicsScaling(cpuMs);
+        HandleCrowdScaling(cpuMs);
+        HandleAnimationScaling(cpuMs);
+        UpdateAI(cpuMs);
+        HandleStreamingBudget();
+        HandleThermalPolicy();
+    }
+
+    UpdateAnimations();
+
+    if (currentTarget == 120)
+        CheckDowngrade();
+    else if (currentTarget == 60)
+        CheckUpgrade();
+
+    ApplyVRRCap();
+}
+
+🧠 Final System Capabilities
+
+Your runtime now dynamically adapts:
+
+GPU bound
+
+✔ Resolution scaling
+✔ Graphics LOD scaling
+✔ VRR pacing
+
+CPU bound
+
+✔ Physics tick reduction
+✔ AI tick throttling
+✔ Crowd density scaling
+✔ Animation update decimation
+
+IO bound
+
+✔ Streaming budget throttled
+✔ Preloads paused
+
+Thermal / battery
+
+✔ Auto 120 → 60 downgrade
+✔ Deeper DRS allowed
+✔ Physics softened
+
+Scene aware
+
+✔ Per-scene budgets
+
+Background
+
+✔ 30 FPS (or 15 on battery)
+
+This is engine-level adaptive scheduling comparable to modern console performance managers.
+
+🧠 1. Dynamic Animation Update Rate → Avatar Pipeline Scaling
+
+Your expensive components:
+
+Blendshape updates
+
+Eye gaze solver
+
+Micro-expression model
+
+Phoneme → viseme mapping
+
+These are CPU heavy.
+
+Avatar LOD Policy (CPU bound)
+CPU state	Avatar update rate
+Normal	60 Hz facial solve
+Moderate load	30 Hz solve
+Heavy load	15 Hz solve
+Implementation
+float avatarTickInterval = 0f;
+float avatarTimer = 0f;
+
+void HandleAvatarScaling(float cpuMs)
+{
+    if (cpuMs > 18f)
+        avatarTickInterval = 0.066f; // 15 Hz
+    else if (cpuMs > 14f)
+        avatarTickInterval = 0.033f; // 30 Hz
+    else
+        avatarTickInterval = 0f;     // full rate
+}
+
+
+Update loop:
+
+void UpdateAvatar()
+{
+    if (avatarTickInterval == 0f)
+    {
+        AvatarSolve(); // every frame
+        return;
+    }
+
+    avatarTimer += Time.deltaTime;
+    if (avatarTimer < avatarTickInterval) return;
+
+    avatarTimer = 0f;
+    AvatarSolve();
+}
+
+
+Result:
+
+✔ Lip sync stays real-time
+✔ Micro-expressions decimated under load
+✔ No audio desync
+
+🎙️ 2. Streaming Budget Controller → Token & Audio Pipeline Budget
+
+Your “IO spikes” =
+
+Model load
+
+Voice model swap
+
+Embedding DB queries
+
+Disk cache reads
+
+These cause latency spikes.
+
+Detect pipeline stall
+bool pipelineStall = false;
+
+void DetectPipelineStall(float cpuMs, float gpuMs, float audioBufferMs)
+{
+    if (cpuMs > 25f && audioBufferMs < 20f)
+        pipelineStall = true;
+    else
+        pipelineStall = false;
+}
+
+Budget policy
+
+When stalled:
+
+✔ Pause memory embedding writes
+✔ Delay background summarization
+✔ Reduce LLM parallel calls to 1
+✔ Switch TTS to low-latency voice
+
+void HandlePipelineBudget()
+{
+    if (pipelineStall)
+    {
+        MemorySystem.PauseWrites();
+        Summarizer.SetDeferred(true);
+        LLM.SetMaxConcurrent(1);
+        TTS.UseLowLatencyVoice(true);
+    }
+    else
+    {
+        MemorySystem.ResumeWrites();
+        Summarizer.SetDeferred(false);
+        LLM.SetMaxConcurrent(2);
+        TTS.UseLowLatencyVoice(false);
+    }
+}
+
+🔥 3. Thermal / Laptop Mode → Conversation QoS Scaling
+
+On laptops, thermals affect:
+
+Whisper/ASR speed
+
+Local TTS
+
+Face tracking FPS
+
+Camera inference
+
+Thermal heuristic (same sustained degradation model)
+bool thermalThrottling = false;
+
+void DetectThermals(float cpuMs)
+{
+    if (cpuMs > 20f)
+        thermalTimer += Time.unscaledDeltaTime;
+    else
+        thermalTimer = Mathf.Max(0f, thermalTimer - Time.unscaledDeltaTime);
+
+    thermalThrottling = thermalTimer > 15f;
+}
+
+Thermal policy for companion
+
+When throttling:
+
+System	Action
+ASR	Switch to smaller model
+TTS	Lower sample rate
+Avatar	15 Hz solve
+Camera	30 → 15 FPS
+LLM	Reduce max tokens per turn
+void HandleThermalQoS()
+{
+    if (!thermalThrottling) return;
+
+    ASR.UseSmallModel(true);
+    TTS.SetSampleRate(16000);
+    CameraTracker.SetFPS(15);
+    avatarTickInterval = 0.066f;
+    LLM.SetMaxTokens(128);
+}
+
+🖥️ 4. VRR Equivalent → Audio-Latency-Aware Frame Pacing
+
+For a companion, audio latency matters more than visual FPS.
+
+So we pace the render loop to the audio buffer, not the monitor.
+
+Target frame time = audio buffer / 2
+
+If audio buffer = 40 ms → render at ~20 ms (~50 FPS)
+
+void SyncToAudioBuffer(float audioBufferMs)
+{
+    float targetFrameMs = audioBufferMs * 0.5f;
+    int targetFPS = Mathf.Clamp((int)(1000f / targetFrameMs), 30, 60);
+
+    Application.targetFrameRate = targetFPS;
+}
+
+
+This keeps:
+
+✔ Lip sync stable
+✔ No buffer underruns
+✔ Lower power usage
+
+📊 5. Telemetry (Companion-Specific Fields)
+
+Log:
+
+ASR latency
+
+LLM first-token latency
+
+TTS start latency
+
+End-to-end response time
+
+Avatar solve ms
+
+Audio buffer depth
+
+Add to CSV header:
+
+asr_ms,llm_first_token_ms,tts_start_ms,e2e_ms,avatar_ms,audio_buffer_ms
+
+
+These are the real QoS metrics for a conversational agent.
+
+🧠 6. Hardware Tier → Companion Capability Tier
+
+Different from gaming tiers.
+
+Tier	Capability
+Low	Cloud ASR/TTS, low avatar
+Mid	Local ASR, cloud LLM
+High	Fully local pipeline
+
+Detection example:
+
+if (vram < 2048 || cores <= 4)
+    tier = Low;
+else if (vram < 6144)
+    tier = Mid;
+else
+    tier = High;
+
+
+Then:
+
+switch (tier)
+{
+    case Low:
+        ASR.UseCloud();
+        Avatar.SetLowDetail();
+        break;
+
+    case Mid:
+        ASR.UseLocalSmall();
+        Avatar.SetMediumDetail();
+        break;
+
+    case High:
+        ASR.UseLocalLarge();
+        Avatar.SetFullDetail();
+        break;
+}
+
+🧠 Final Companion Runtime Behavior
+Under CPU load
+
+✔ Avatar micro-expressions decimated
+✔ Camera FPS reduced
+✔ AI memory writes deferred
+
+Under pipeline stall
+
+✔ Background cognition paused
+✔ TTS switches to low-latency mode
+
+Under thermal pressure
+
+✔ Smaller ASR model
+✔ Shorter LLM responses
+✔ Lower audio sample rate
+
+Stable state
+
+✔ Full facial fidelity
+✔ Parallel cognition restored
+✔ Higher conversational richness
+
+All without breaking turn-taking or lip sync.
+
+🧠 1. Turn-Taking Latency Governor
+
+(interruptibility preserved even when throttled)
+
+Your hard constraint:
+
+Never let performance scaling break barge-in, backchannel timing, or response onset.
+
+So we create priority lanes in the pipeline.
+
+🎚️ Priority Classes
+Priority	Components	Never throttled
+P0	VAD, barge-in detector, audio playback	✅
+P1	ASR streaming, turn-end predictor	✅
+P2	TTS onset, short acknowledgements (“mm-hm”)	⚠️ minimal throttling
+P3	LLM reasoning, memory writes	❌ throttled first
+P4	Avatar micro-expressions	❌ heavily throttled
+Latency Budget Targets
+
+
+  Stage	Budget (from *BottelNeck.txt)
+
+Barge-in detect	< 120 ms
+ASR partial	< 300 ms
+Backchannel emit	< 250 ms
+Full response start	< 700 ms
+
+We enforce this with a latency watchdog.
+
+Watchdog
+float asrLatencyMs;
+float ttsOnsetMs;
+float bargeInMs;
+
+bool latencyViolation =
+    asrLatencyMs > 300f ||
+    ttsOnsetMs > 700f ||
+    bargeInMs > 120f;
+
+Governor Action
+
+When violated:
+
+✔ Cancel long LLM decoding
+✔ Emit short acknowledgement token
+✔ Defer memory + summarization
+✔ Force low-latency TTS voice
+
+void EnforceTurnTakingQoS()
+{
+    if (!latencyViolation) return;
+
+    LLM.AbortLongGeneration();
+    TTS.EmitBackchannel();
+    MemorySystem.PauseWrites();
+    TTS.UseLowLatencyVoice(true);
+}
+
+
+Result:
+
+Even under load, the agent feels responsive and interruptible.
+
+💛 2. Trust / Emotion Model QoS Scaling
+
+(relational coherence must survive throttling)
+
+You must not drop:
+
+affect state continuity
+
+disclosure depth tracking
+
+trust decay timers
+
+Those are cheap numerically but critical socially.
+
+So we split the model:
+
+Core vs Peripheral Social Compute
+
+
+  Layer	QoS (from *BottelNeck.txt)
+
+Core trust state update	Always on
+Affect smoothing filter	Always on
+Contradiction memory check	Always on
+Emotion inference from prosody	Scalable
+Long-horizon reflection	Deferrable
+QoS Policy
+
+Under load:
+
+void HandleSocialQoS(bool highLoad)
+{
+    if (highLoad)
+    {
+        EmotionModel.SetProsodySampleRate(0.5f); // downsample
+        ReflectionEngine.SetDeferred(true);
+        NarrativeMemory.BatchMode(true);
+    }
+    else
+    {
+        EmotionModel.SetProsodySampleRate(1.0f);
+        ReflectionEngine.SetDeferred(false);
+        NarrativeMemory.BatchMode(false);
+    }
+}
+
+Critical rule
+
+Never skip:
+
+UpdateTrustState();
+UpdateAffectContinuity();
+RunContradictionCheck();
+
+
+That preserves relationship stability even if everything else is throttled.
+
+👥 3. Meeting Mode vs 1-on-1 Profiles
+
+Different conversational physics.
+
+Meeting Mode Constraints
+
+You have:
+
+Multi-speaker diarization
+
+Gaze arbitration
+
+Speaker queue tracking
+
+Reduced avatar expressiveness per person
+
+So we switch to a group performance profile.
+
+Mode Detection
+bool meetingMode = activeSpeakers > 1;
+
+Meeting Profile
+System	Policy
+ASR	diarization on
+Turn-taking	stricter floor (no interruptions)
+Backchannels	reduced frequency
+Avatar	gaze > micro-expression
+LLM	shorter responses
+Memory	speaker-tagged entries
+Apply Meeting QoS
+void ApplyMeetingProfile()
+{
+    TurnTaking.SetInterruptibilityThreshold(high);
+    Backchannel.SetRate(0.3f);
+    Avatar.SetExpressionLOD(Low);
+    Avatar.EnableGazeArbitration(true);
+    LLM.SetMaxTokens(96);
+    MemorySystem.EnableSpeakerTags(true);
+}
+
+1-on-1 Profile
+void ApplyOneOnOneProfile()
+{
+    TurnTaking.SetInterruptibilityThreshold(normal);
+    Backchannel.SetRate(1.0f);
+    Avatar.SetExpressionLOD(High);
+    Avatar.EnableGazeArbitration(false);
+    LLM.SetMaxTokens(192);
+}
+
+🔁 Social QoS Integration Order
+
+Add after compute QoS:
+
+void UpdateSocialQoS()
+{
+    EnforceTurnTakingQoS();
+
+    bool highLoad = currentBottleneck != Bottleneck.None || thermalThrottling;
+
+    HandleSocialQoS(highLoad);
+
+    if (meetingMode)
+        ApplyMeetingProfile();
+    else
+        ApplyOneOnOneProfile();
+}
+
+
+Call once per frame or per turn boundary.
+
+🧠 Final Behavioral Guarantees
+Under heavy load
+
+✔ Still interruptible
+✔ Still backchannels on time
+✔ Trust state continuous
+✔ Emotion doesn’t reset
+✔ Responses shorter but coherent
+
+In meetings
+
+✔ No social barging
+✔ Speaker-aware gaze
+✔ Reduced expressive cost
+✔ Structured turn-taking
+
+In 1-on-1
+
+✔ Full relational richness
+✔ Higher disclosure bandwidth
+✔ More expressive avatar
+
+This preserves social realism under performance pressure, which is the real differentiator for a companion.
+
+2️⃣ Priority Pipeline (Vertical Lanes)
+
+P0 – Always Real-Time
+
+Barge-in detection
+
+Audio playback
+
+P1 – Critical
+
+ASR streaming
+
+Turn-end prediction
+
+P2 – Semi-Critical
+
+TTS onset
+
+Short backchannels
+
+P3 – Throttleable
+
+LLM reasoning
+
+Memory writes / summarization
+
+P4 – Heavily Throttleable
+
+Avatar micro-expressions
+
+Eye gaze
+
+Blendshape updates
+
+3️⃣ Runtime Loops (Horizontal Flow)
+
+Render Loop (60/120 FPS) → Avatar, Scene, UI
+
+Sensor Loop (Throttled) → Face, Audio FFT
+
+Cognition Loop (4–8 Hz) → Trust, Contradiction, Multi-hop Research
+
+AI / Crowd Loop → Pathfinding, Animation LOD
+
+Physics Loop (FixedDeltaTime) → Adjusted dynamically by CPU load
+CPU Bound
+
+Reduce Physics tick
+
+AI throttling
+
+Crowd density
+
+Avatar tick interval
+
+GPU Bound
+
+DRS (Resolution scaling)
+
+Graphics LOD
+
+Async Compute bias
+
+IO Bound
+
+Streaming budget
+
+Pause non-critical loads
+
+Thermal / Battery
+
+FPS downgrade (120 → 60)
+
+Avatar/Camera reduction
+
+LLM token limit / smaller ASR/TTS models
+5️⃣ Telemetry & Feedback
+
+Frame timings (CPU/GPU)
+
+Avatar solve time
+
+ASR / LLM / TTS latency
+
+Audio buffer depth
+
+Scene / Hardware tier applied
+
+Arrow from telemetry → loop adjusts scaling dynamically
+
+6️⃣ User Overrides
+
+FPS Mode: Auto / Force 60 / Force 120
+
+Graphics Quality: Manual override
+
+Scene Profiles: Applied on scene load
+
+(Show override taking precedence over auto-scaling)2w

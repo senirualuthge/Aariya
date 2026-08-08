@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aariya - AI Companion</title>
+    <!-- Prevent maroon flash on analytics window by detecting route before CSS loads -->
+    <script>
+      (function() {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('route') === 'analytics' || window.location.hash.includes('analytics')) {
+          document.documentElement.style.backgroundColor = '#0a0e1a';
+          document.documentElement.style.height = 'auto';
+          document.documentElement.style.minHeight = '100vh';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

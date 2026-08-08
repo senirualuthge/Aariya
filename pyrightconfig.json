@@ -1,0 +1,17 @@
+{
+  "venvPath": "/Volumes/Volumn 1/Code Base/AI Girl/server",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "include": [
+    "server",
+    "src"
+  ],
+  "extraPaths": [
+    "/Volumes/Volumn 1/Code Base/AI Girl",
+    "/Volumes/Volumn 1/Code Base/AI Girl/server"
+  ],
+  "pythonPath": "/Volumes/Volumn 1/Code Base/AI Girl/server/.venv/bin/python",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": false,
+  "reportMissingModuleSource": false
+}

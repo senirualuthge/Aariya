@@ -1,0 +1,55 @@
+{
+  "name": "ai-girl-frontend",
+  "version": "4.0.0",
+  "private": true,
+  "main": "main.js",
+  "type": "module",
+  "dependencies": {
+    "@mediapipe/face_detection": "^0.4.1646425229",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.4.2",
+    "@tensorflow-models/face-detection": "^1.0.3",
+    "@tensorflow/tfjs": "^4.22.0",
+    "better-sqlite3": "^12.6.2",
+    "face-api.js": "^0.22.2",
+    "framer-motion": "^10.12.16",
+    "lucide-react": "^0.244.0",
+    "openai": "^6.16.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^2.6.2",
+    "three": "^0.182.0",
+    "zustand": "^5.0.9"
+  },
+  "overrides": {
+    "three-stdlib": "2.36.0",
+    "node-fetch": "2.7.0",
+    "form-data": "4.0.6"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.0",
+    "electron": "^40.0.0",
+    "vite": "^7.2.4"
+  },
+  "scripts": {
+    "backend": "bash scripts/backend.sh",
+    "backend:start": "bash scripts/backend.sh start",
+    "backend:stop": "bash scripts/backend.sh stop",
+    "backend:restart": "bash scripts/backend.sh restart",
+    "backend:status": "bash scripts/backend.sh status",
+    "health": "bash scripts/backend.sh health",
+    "dev:brain": "\"/Volumes/Volumn 1/Code Base/AI Girl/venv/bin/uvicorn\" server.main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:ui": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "dev": "node scripts/dev.mjs",
+    "build": "vite build",
+    "preview": "vite preview",
+    "gui": "electron .",
+    "start": "electron .",
+    "security:audit": "npm audit --json 2>&1 || true",
+    "security:audit:fix": "npm audit fix",
+    "test": "node --test build-summary.test.js vault-context.test.js vault-search.test.js",
+    "test:backend": "bash run_backend_tests.sh",
+    "test:backend:win": "run_backend_tests.bat",
+    "test:all": "npm test && npm run test:backend"
+  }
+}

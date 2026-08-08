@@ -1,0 +1,45 @@
+name: aariya_mobile
+description: Aariya AI Companion Mobile App
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # WebSocket connection to Python AI Brain
+  web_socket_channel: ^3.0.0
+
+  # State management
+  provider: ^6.0.5
+
+  # BUG #15 FIX: core voice + camera features were missing from pubspec
+  # These are required for the full Aariya UX documented in §7.1
+  speech_to_text: ^7.4.0        # on-device speech recognition
+  flutter_tts: ^4.0.2           # native TTS for Aariya's voice
+  camera: ^0.10.5               # live viewfinder + JPEG snapshot
+  permission_handler: ^11.3.0   # runtime permissions (mic, camera)
+
+  # BUG #13 FIX: removed 'framer_motion' — that is a React/JS library,
+  # it does not exist on pub.dev and breaks flutter pub get.
+  # Animation is handled natively via Flutter's AnimationController.
+
+  flutter_webrtc: ^1.6.0
+
+  # HTTP client for WebRTC SDP negotiation with the Python backend
+  http: ^1.2.0
+
+  # In-app dashboard (embeds the Vite analytics UI)
+  webview_flutter: ^4.8.0
+  shared_preferences: ^2.5.5
+  record: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,4468 @@
+Position in the Architecture
+                +----------------------+
+                |   Aariya Runtime     |
+                +----------+-----------+
+                           |
+        +------------------+------------------+
+        |                                     |
+  Security Capability                  Memory Capability
+        |                                     |
+        +---------------+---------------------+
+                        |
+             Crypto Service API
+                        |
+      +-----------------+------------------+
+      |                 |                  |
+ Classical Crypto   Hybrid Mode      Post-Quantum Crypto
+      |                 |                  |
+ AES-256-GCM      AES + Kyber       ML-KEM (Kyber)
+ ECDSA            ECDSA + ML-DSA    ML-DSA (Dilithium)
+ X25519           X25519 + ML-KEM   SLH-DSA (SPHINCS+)
+Directory Structure
+security/
+│
+├── CryptoManager.java
+├── KeyManager.java
+├── EncryptionService.java
+├── SignatureService.java
+├── CertificateManager.java
+│
+├── classical/
+│      AESService.java
+│      RSAService.java
+│      ECCService.java
+│
+├── pqc/
+│      MLKEMService.java
+│      MLDSAService.java
+│      SLHDSAService.java
+│
+├── hybrid/
+│      HybridKeyExchange.java
+│      HybridSignature.java
+│
+└── interfaces/
+       CryptoAlgorithm.java
+       SignatureAlgorithm.java
+       KeyExchangeAlgorithm.java
+Crypto Algorithm Interface
+public interface CryptoAlgorithm {
+
+    byte[] encrypt(byte[] data);
+
+    byte[] decrypt(byte[] cipher);
+
+    KeyPair generateKeyPair();
+
+}
+
+Every encryption algorithm implements this interface.
+
+Example:
+
+AESService
+MLKEMService
+HybridEncryption
+Signature Interface
+public interface SignatureAlgorithm {
+
+    byte[] sign(byte[] message);
+
+    boolean verify(byte[] message, byte[] signature);
+
+    KeyPair generateKeyPair();
+
+}
+
+Implemented by
+
+ECDSA
+
+ML-DSA
+
+SLH-DSA
+Key Exchange Interface
+public interface KeyExchangeAlgorithm {
+
+    byte[] encapsulate(PublicKey key);
+
+    SecretKey decapsulate(byte[] ciphertext);
+
+}
+
+Implementations
+
+X25519
+
+ML-KEM
+
+HybridKeyExchange
+Crypto Manager
+
+The rest of Aariya never talks directly to algorithms.
+
+public class CryptoManager {
+
+    private CryptoAlgorithm encryption;
+
+    private SignatureAlgorithm signature;
+
+    private KeyExchangeAlgorithm keyExchange;
+
+    public void setEncryption(CryptoAlgorithm algorithm){
+        encryption = algorithm;
+    }
+
+    public void setSignature(SignatureAlgorithm algorithm){
+        signature = algorithm;
+    }
+
+    public void setKeyExchange(KeyExchangeAlgorithm algorithm){
+        keyExchange = algorithm;
+    }
+
+}
+
+Then any subsystem can simply call
+
+crypto.encrypt(...)
+
+crypto.sign(...)
+
+crypto.verify(...)
+
+without knowing the implementation.
+
+Hybrid Encryption
+
+During the migration period, support both classical and post-quantum algorithms.
+
+Encrypt Data
+
+↓
+
+Generate AES Session Key
+
+↓
+
+Encrypt Session Key using:
+
+X25519
+
++
+
+ML-KEM
+
+↓
+
+Send Both
+
+↓
+
+Receiver decrypts using both methods
+
+↓
+
+AES decrypts the data
+
+This is known as hybrid cryptography and provides compatibility while adding quantum resistance.
+
+Aariya Security Capability
+public interface SecurityCapability extends Capability {
+
+    byte[] encrypt(byte[] data);
+
+    byte[] decrypt(byte[] cipher);
+
+    byte[] sign(byte[] data);
+
+    boolean verify(byte[] data, byte[] signature);
+
+    KeyPair generateKeys();
+
+}
+
+Any internal module only uses this interface.
+
+Key Manager
+
+Responsible for
+
+Secure key generation
+Key rotation
+Key backup
+Hardware security module support
+TPM support
+Secure deletion
+Quantum-safe key storage
+KeyManager
+
+↓
+
+Generate
+
+↓
+
+Rotate
+
+↓
+
+Store
+
+↓
+
+Recover
+
+↓
+
+Destroy
+Memory Encryption
+
+Every memory stored in Aariya should be encrypted.
+
+Conversation
+
+↓
+
+Embedding
+
+↓
+
+Encrypt
+
+↓
+
+Vector Database
+
+↓
+
+Decrypt only when needed
+
+This protects the memory database if it is compromised.
+
+Secure Agent Communication
+
+Every internal agent should establish encrypted sessions.
+
+Planner
+
+↓
+
+Executive
+
+↓
+
+Memory
+
+↓
+
+World Model
+
+↓
+
+Emotion Engine
+
+↓
+
+Security Layer
+
+↓
+
+Encrypted Channel
+
+Even if agents run on the same machine today, this prepares the system for distributed deployments.
+
+Identity Verification
+
+Each capability should have its own identity.
+
+Capability
+
+↓
+
+Private Key
+
+↓
+
+Signs Message
+
+↓
+
+Receiver verifies
+
+↓
+
+Trust Established
+
+This helps prevent unauthorized or modified components from impersonating trusted ones.
+
+Supported Algorithms
+Purpose	Classical	Post-Quantum
+Symmetric Encryption	AES-256-GCM	AES-256-GCM (already quantum-resistant aside from larger key search)
+Key Exchange	X25519 / ECDH	ML-KEM (Kyber)
+Digital Signatures	ECDSA / Ed25519	ML-DSA (Dilithium), SLH-DSA (SPHINCS+)
+Hash	SHA-256	SHA-3 / SHAKE
+Recommended Java Libraries
+Bouncy Castle (includes support for standardized PQC algorithms in recent releases)
+Open Quantum Safe (liboqs) with Java bindings if you need a wider range of experimental algorithms
+Java Cryptography Architecture (JCA) providers for integrating PQC into standard APIs
+Integration into the Aariya Core Runtime
+
+Treat security as a first-class capability alongside memory and planning:
+
+Aariya Runtime
+│
+├── Cognitive Kernel
+├── Planner
+├── Executive
+├── Memory Fabric
+├── World Model
+├── Capability Manager
+├── Security Capability
+│     ├── Crypto Manager
+│     ├── Key Manager
+│     ├── Certificate Manager
+│     ├── ML-KEM
+│     ├── ML-DSA
+│     ├── Hybrid Crypto
+│     └── Secure Channels
+└── Telemetry
+
+Phase 1 – Select Production Algorithms
+
+Use only NIST-standardized algorithms:
+
+Purpose	Algorithm	Status
+Key Encapsulation	ML-KEM-768 (formerly Kyber-768)	NIST Standard
+Digital Signature	ML-DSA-65 (formerly Dilithium-3)	NIST Standard
+Backup Signature	SLH-DSA	NIST Standard
+Symmetric Encryption	AES-256-GCM	Production
+Hash	SHA3-256 / SHAKE256	Production
+
+Do not use Falcon, Classic McEliece, or experimental algorithms as your default unless you have a specific need.
+
+Phase 2 – Add the Security Module
+
+Create a dedicated module:
+
+aariya-security/
+│
+├── src/
+│
+├── crypto/
+│
+├── pqc/
+│
+├── keys/
+│
+├── certificates/
+│
+├── interfaces/
+│
+├── providers/
+│
+└── SecurityCapability.java
+Phase 3 – Choose a Real Provider
+
+For Java, use a production-grade provider such as the latest Bouncy Castle PQC provider. This provides actual implementations of ML-KEM, ML-DSA, and related algorithms rather than placeholders.
+
+Phase 4 – Register the Provider
+
+At application startup, register the provider once.
+
+Phase 5 – Implement Capability Interfaces
+
+Define interfaces for:
+
+Encryption
+Key exchange
+Signatures
+Key storage
+Certificate management
+
+Keep the interfaces stable so implementations can evolve.
+
+Phase 6 – Implement the Algorithms
+
+Implement:
+
+MLKEMService
+
+MLDSAService
+
+AESService
+
+SHA3Service
+
+Each service should wrap only the production provider.
+
+No custom cryptography.
+
+No homemade math.
+
+Phase 7 – Key Management
+
+Create:
+
+KeyManager
+
+Responsibilities:
+
+Generate keys
+Rotate keys
+Import/export
+Secure storage
+Revocation
+Expiration
+
+Keys should never be embedded in code.
+
+Phase 8 – Secure Storage
+
+Store private keys encrypted.
+
+Examples include:
+
+OS key store
+TPM
+HSM
+Encrypted PKCS#12 keystore
+Phase 9 – Secure Communication
+
+Whenever Aariya components communicate:
+
+Planner
+
+↓
+
+Executive
+
+↓
+
+Memory
+
+↓
+
+World Model
+
+Use authenticated encryption.
+
+Never transmit plaintext.
+
+Phase 10 – Encrypt Memory
+
+Every memory object:
+
+Conversation
+
+↓
+
+Embedding
+
+↓
+
+Encrypt
+
+↓
+
+Database
+
+Decrypt only during retrieval.
+
+Phase 11 – Sign Events
+
+Every event should be signed.
+
+Example:
+
+Agent Message
+
+↓
+
+Hash
+
+↓
+
+Sign
+
+↓
+
+Transmit
+
+↓
+
+Verify
+
+This prevents tampering.
+
+Phase 12 – Secure the Plugin System
+
+Every capability:
+
+Capability
+
+↓
+
+Sign
+
+↓
+
+Verify
+
+↓
+
+Load
+
+Reject unsigned plugins.
+
+Phase 13 – Secure Model Files
+
+Protect:
+
+Weights
+
+Embeddings
+
+Adapters
+
+LoRA
+
+Config
+
+Tokenizer
+
+Store hashes and verify before loading.
+
+Phase 14 – Secure API Layer
+
+All APIs:
+
+TLS
+
++
+
+ML-KEM
+
++
+
+JWT
+
++
+
+Digital Signatures
+Phase 15 – Secure the Database
+
+Encrypt:
+
+conversations
+vector memory
+episodic memory
+semantic memory
+user profile
+
+Only decrypt when required.
+
+Phase 16 – Secure Configuration
+
+Encrypt:
+
+config.yml
+
+.env
+
+credentials
+
+API tokens
+
+Never commit secrets to source control.
+
+Phase 17 – Secure Agent Identity
+
+Every agent gets:
+
+Planner
+
+↓
+
+Private Key
+
+↓
+
+Certificate
+
+Same for:
+
+Executive
+Memory
+Vision
+Voice
+Emotion
+World Model
+Phase 18 – Secure Logging
+
+Logs should not contain:
+
+passwords
+keys
+prompts containing secrets
+decrypted memory
+
+Sign important audit logs to detect tampering.
+
+Phase 19 – Runtime Integrity
+
+At startup verify:
+
+Jar checksum
+
+↓
+
+Model checksum
+
+↓
+
+Configuration checksum
+
+↓
+
+Plugin checksum
+
+Reject altered components.
+
+Phase 20 – Security Capability
+
+Integrate as:
+
+Runtime
+
+│
+
+├── Capability Manager
+
+├── Security Capability
+
+│      ├── Crypto
+
+│      ├── Certificates
+
+│      ├── Keys
+
+│      ├── Secure Channels
+
+│      ├── Identity
+
+│      ├── Integrity
+
+│      └── Audit
+
+├── Memory
+
+├── Planner
+
+├── Executive
+
+
+Step 1 - Project Structure
+aariya/
+│
+├── aariya-core/
+│
+├── aariya-security/
+│   │
+│   ├── src/main/java/
+│   │
+│   ├── capability/
+│   │     SecurityCapability.java
+│   │
+│   ├── crypto/
+│   │     CryptoManager.java
+│   │     EncryptionService.java
+│   │     SignatureService.java
+│   │     KeyExchangeService.java
+│   │
+│   ├── keys/
+│   │     KeyManager.java
+│   │
+│   ├── certificates/
+│   │     CertificateManager.java
+│   │
+│   ├── providers/
+│   │
+│   ├── interfaces/
+│   │
+│   ├── util/
+│   │
+│   └── exceptions/
+│
+└── build.gradle
+Step 2 - Capability Interface
+package com.aariya.security.capability;
+
+public interface SecurityCapability {
+
+    void initialize() throws Exception;
+
+    void shutdown() throws Exception;
+
+    boolean isInitialized();
+}
+Step 3 - Encryption Interface
+package com.aariya.security.crypto;
+
+public interface EncryptionService {
+
+    byte[] encrypt(byte[] data) throws Exception;
+
+    byte[] decrypt(byte[] cipher) throws Exception;
+
+}
+Step 4 - Signature Interface
+package com.aariya.security.crypto;
+
+public interface SignatureService {
+
+    byte[] sign(byte[] message) throws Exception;
+
+    boolean verify(byte[] message, byte[] signature) throws Exception;
+
+}
+Step 5 - Key Exchange Interface
+package com.aariya.security.crypto;
+
+public interface KeyExchangeService {
+
+    byte[] encapsulate() throws Exception;
+
+    byte[] decapsulate(byte[] ciphertext) throws Exception;
+
+}
+Step 6 - Key Manager Interface
+package com.aariya.security.keys;
+
+import java.security.KeyPair;
+
+public interface KeyManager {
+
+    void initialize() throws Exception;
+
+    KeyPair generateKeyPair() throws Exception;
+
+    void rotateKeys() throws Exception;
+
+    void destroyKeys() throws Exception;
+
+}
+Step 7 - Crypto Manager
+package com.aariya.security.crypto;
+
+public class CryptoManager {
+
+    private final EncryptionService encryption;
+
+    private final SignatureService signature;
+
+    private final KeyExchangeService keyExchange;
+
+    public CryptoManager(
+            EncryptionService encryption,
+            SignatureService signature,
+            KeyExchangeService keyExchange
+    ) {
+        this.encryption = encryption;
+        this.signature = signature;
+        this.keyExchange = keyExchange;
+    }
+
+    public EncryptionService encryption() {
+        return encryption;
+    }
+
+    public SignatureService signature() {
+        return signature;
+    }
+
+    public KeyExchangeService keyExchange() {
+        return keyExchange;
+    }
+}
+Step 8 - Security Manager
+package com.aariya.security;
+
+import com.aariya.security.crypto.CryptoManager;
+import com.aariya.security.keys.KeyManager;
+
+public class SecurityManager {
+
+    private final CryptoManager crypto;
+
+    private final KeyManager keys;
+
+    public SecurityManager(
+            CryptoManager crypto,
+            KeyManager keys
+    ) {
+
+        this.crypto = crypto;
+        this.keys = keys;
+    }
+
+    public void initialize() throws Exception {
+
+        keys.initialize();
+
+    }
+
+    public CryptoManager crypto() {
+
+        return crypto;
+
+    }
+
+}
+Step 9 - Dependency Injection
+
+Your Runtime Kernel should never instantiate algorithms directly.
+
+Instead:
+
+RuntimeKernel
+
+↓
+
+SecurityManager
+
+↓
+
+CryptoManager
+
+↓
+
+EncryptionService
+
+↓
+
+Provider
+
+This lets you replace algorithms without changing the kernel.
+
+Aariya Hybrid Security Architecture
+                    AARIYA SECURITY CAPABILITY
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│  Security Manager                                             │
+│        │                                                      │
+│        ├──────── Crypto Manager                               │
+│        │        │                                              │
+│        │        ├── AES-256-GCM                               │
+│        │        ├── SHA3-256                                  │
+│        │        ├── X25519                                    │
+│        │        ├── Ed25519                                   │
+│        │        ├── ML-KEM-768                                │
+│        │        ├── ML-DSA-65                                 │
+│        │        └── Hybrid Crypto Engine                      │
+│        │                                                      │
+│        ├──────── Key Manager                                  │
+│        ├──────── Certificate Manager                          │
+│        ├──────── Secure Channel Manager                       │
+│        ├──────── Memory Encryption Manager                    │
+│        └──────── Integrity Manager                            │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+Hybrid Philosophy
+
+Never trust only one algorithm.
+
+Instead:
+
+Classical Crypto
+        +
+Post Quantum Crypto
+        =
+Final Security
+
+For example:
+
+AES-256-GCM
+
++
+
+X25519
+
++
+
+ML-KEM-768
+
++
+
+Ed25519
+
++
+
+ML-DSA-65
+Hybrid Key Exchange
+
+Instead of:
+
+Planner
+↓
+
+ML-KEM
+↓
+
+Memory
+
+use
+
+Planner
+
+↓
+
+X25519
+
++
+
+ML-KEM
+
+↓
+
+Shared Secret
+
+↓
+
+AES-256 Session Key
+
+↓
+
+Encrypted Channel
+
+↓
+
+Memory
+
+If one key exchange algorithm were ever broken, the other still contributes protection.
+
+Hybrid Signatures
+
+Every important message gets two signatures:
+
+Message
+
+↓
+
+Ed25519 Signature
+
+↓
+
+ML-DSA Signature
+
+↓
+
+Send Both
+
+Receiver verifies both according to your chosen policy (for example, require both for internal Aariya modules).
+
+Hybrid Encryption
+
+The actual data is encrypted with AES-256-GCM.
+
+The AES key is protected by both key exchange mechanisms.
+
+Conversation
+
+↓
+
+AES-256-GCM
+
+↓
+
+AES Key
+
+↓
+
+Protect using
+
+X25519
+
++
+
+ML-KEM
+
+↓
+
+Store
+Hybrid Key Manager
+
+Instead of one key pair:
+
+KeyManager
+
+↓
+
+Generate
+
+↓
+
+Ed25519
+
+↓
+
+X25519
+
+↓
+
+ML-KEM
+
+↓
+
+ML-DSA
+
+↓
+
+Store Securely
+Agent Identity
+
+Each Aariya agent owns:
+
+Planner
+
+Private Keys
+
+├── Ed25519
+
+├── X25519
+
+├── ML-KEM
+
+└── ML-DSA
+
+The same pattern applies to:
+
+Executive
+Memory
+Emotion
+Vision
+Speech
+World Model
+Capability Manager
+Security Levels
+Operation	Classical	PQC	Hybrid
+Encrypt Memory	AES-256	AES-256	✅
+Key Exchange	X25519	ML-KEM	✅
+Sign Messages	Ed25519	ML-DSA	✅
+Verify Plugins	Ed25519	ML-DSA	✅
+Runtime Integrity	SHA-256	SHA3-256	✅
+Recommended Packages
+com.aariya.security
+security
+│
+├── SecurityManager
+│
+├── CryptoManager
+│
+├── KeyManager
+│
+├── CertificateManager
+│
+├── HybridCryptoEngine
+│
+├── IntegrityManager
+│
+├── SecureChannelManager
+│
+├── providers
+│
+├── classical
+│      AESService
+│      X25519Service
+│      Ed25519Service
+│
+├── pqc
+│      MLKEMService
+│      MLDSAService
+│
+├── hybrid
+│      HybridKeyExchange
+│      HybridSignature
+│      HybridEncryption
+│
+└── interfaces
+The Next Step (What to Build Now)
+
+Before writing the hybrid implementations, define stable interfaces so the rest of Aariya never depends on specific algorithms.
+
+Create these interfaces first:
+
+public interface EncryptionService
+public interface SignatureService
+public interface KeyExchangeService
+public interface KeyManager
+public interface HybridCryptoEngine
+
+Then implement them in this order:
+
+AES-256-GCM (AESService) – encrypt/decrypt data.
+X25519 (X25519Service) – classical key exchange.
+Ed25519 (Ed25519Service) – classical signatures.
+ML-KEM-768 (MLKEMService) – post-quantum key encapsulation.
+ML-DSA-65 (MLDSAService) – post-quantum signatures.
+HybridKeyExchange – combine X25519 and ML-KEM.
+HybridSignature – combine Ed25519 and ML-DSA.
+HybridCryptoEngine – expose a single API that the rest of Aariya uses.
+
+With this design, every other subsystem (Memory, Planner, Executive, World Model, Plugins) only talks to HybridCryptoEngine. That means if cryptographic standards evolve in the future, you can update the engine without changing the rest of Aariya.
+
+
+1. Zero Trust Internal Architecture ⭐⭐⭐⭐⭐
+
+Don't assume any module is trusted simply because it's running inside Aariya.
+
+Every module should authenticate itself before communicating.
+
+Planner
+    │
+Authenticate
+    │
+Executive
+    │
+Authenticate
+    │
+Memory
+    │
+Authenticate
+    │
+World Model
+
+Each capability gets its own identity, keys, and permissions.
+
+2. Secure Capability Loader ⭐⭐⭐⭐⭐
+
+Since Aariya is modular, only load trusted capabilities.
+
+Capability
+
+↓
+
+Verify Signature
+
+↓
+
+Verify Hash
+
+↓
+
+Verify Version
+
+↓
+
+Load
+
+↓
+
+Execute
+
+If any verification fails, the capability is rejected.
+
+3. Runtime Integrity Monitor ⭐⭐⭐⭐⭐
+
+Continuously verify that important files haven't changed.
+
+Monitor:
+
+JAR files
+Model weights
+Configuration files
+Plugins
+Native libraries
+Prompt templates
+
+This helps detect tampering after startup.
+
+4. Secure Memory Fabric ⭐⭐⭐⭐⭐
+
+Every memory record should include:
+
+Memory
+
+↓
+
+UUID
+
+↓
+
+Timestamp
+
+↓
+
+Encrypted Data
+
+↓
+
+Hash
+
+↓
+
+Digital Signature
+
+↓
+
+Metadata
+
+This protects both confidentiality and integrity.
+
+5. Audit Ledger ⭐⭐⭐⭐☆
+
+Create an append-only audit trail.
+
+Example:
+
+Planner requested action
+
+↓
+
+Signed
+
+↓
+
+Timestamped
+
+↓
+
+Added to Audit Ledger
+
+This lets you investigate what happened if something goes wrong.
+
+6. Hardware Security Support ⭐⭐⭐⭐☆
+
+Support secure key storage when available.
+
+Examples:
+
+TPM
+Secure Enclave
+HSM
+
+Aariya should use these automatically if the host system provides them, while still working with software keystores on other systems.
+
+7. Secure Model Loading ⭐⭐⭐⭐⭐
+
+Before loading any AI model:
+
+Load Model
+
+↓
+
+Verify Hash
+
+↓
+
+Verify Signature
+
+↓
+
+Load
+
+This helps prevent loading modified or malicious model files.
+
+8. Secure Update System ⭐⭐⭐⭐⭐
+
+Every update should be:
+
+Download
+
+↓
+
+Verify Signature
+
+↓
+
+Verify Version
+
+↓
+
+Backup
+
+↓
+
+Install
+
+↓
+
+Rollback if Needed
+
+Never install unsigned updates.
+
+9. Capability Sandboxing ⭐⭐⭐⭐⭐
+
+Each capability should only receive the permissions it needs.
+
+Example:
+
+Capability	Allowed Access
+Memory	Database only
+Vision	Camera only
+Voice	Microphone only
+Planner	Memory API only
+Browser	Network only
+
+This limits the impact of bugs or compromised components.
+
+10. Secret Manager ⭐⭐⭐⭐⭐
+
+Never store secrets directly in code or configuration files.
+
+Manage:
+
+API keys
+Database passwords
+Encryption keys
+OAuth tokens
+Certificates
+
+Access should be controlled and auditable.
+
+11. Secure Boot ⭐⭐⭐⭐☆
+
+During startup:
+
+Boot
+
+↓
+
+Verify Runtime
+
+↓
+
+Verify Libraries
+
+↓
+
+Verify Models
+
+↓
+
+Verify Plugins
+
+↓
+
+Start
+
+Abort startup if critical verification fails.
+
+12. Security Policy Engine ⭐⭐⭐⭐⭐
+
+Centralize security rules.
+
+Example policies:
+
+Which capabilities may communicate.
+Which capabilities may access memory.
+Which plugins are allowed.
+Which cryptographic algorithms are permitted.
+Which resources each capability can use.
+13. Automatic Key Rotation ⭐⭐⭐⭐☆
+
+Support scheduled key rotation with versioning.
+
+Current Key
+
+↓
+
+Generate New Key
+
+↓
+
+Re-encrypt if Needed
+
+↓
+
+Retire Old Key
+14. Security Telemetry ⭐⭐⭐⭐☆
+
+Track metrics such as:
+
+Failed signature verifications
+Failed plugin validation
+Unauthorized access attempts
+Key rotations
+Integrity check failures
+
+Expose these through your Aariya dashboard.
+
+Aariya Security Stack
+Security Capability
+│
+├── Hybrid Crypto Engine
+├── Key Manager
+├── Certificate Manager
+├── Secret Manager
+├── Secure Channel Manager
+├── Memory Encryption
+├── Runtime Integrity Monitor
+├── Capability Verification
+├── Secure Update Manager
+├── Security Policy Engine
+├── Audit Ledger
+├── Security Telemetry
+├── Zero Trust Authentication
+└── Hardware Security Support
+
+
+Next Step: Security Governor (Core Runtime Component)
+
+This is not encryption.
+
+It is the brain of the security system.
+
+Every operation inside Aariya passes through it before execution.
+
+                  Runtime Kernel
+                        │
+        ┌───────────────┴───────────────┐
+        │                               │
+ Capability Manager             Security Governor
+                                        │
+             ┌───────────────┬──────────┴──────────────┐
+             │               │                         │
+        Policy Engine   Trust Engine           Risk Analyzer
+             │               │                         │
+             └───────────────┴──────────┬──────────────┘
+                                        │
+                               Execution Decision
+                                        │
+                            Allow / Deny / Ask / Log
+Responsibilities
+
+The Security Governor should decide whether an operation is allowed.
+
+Example:
+
+Planner wants:
+
+Read Memory
+
+↓
+
+Security Governor
+
+↓
+
+Check Policy
+
+↓
+
+Check Permissions
+
+↓
+
+Check Trust
+
+↓
+
+Decision
+
+↓
+
+Allow
+
+Another example:
+
+Plugin wants:
+
+Delete Database
+
+↓
+
+Security Governor
+
+↓
+
+Risk = Critical
+
+↓
+
+Permission = None
+
+↓
+
+DENY
+Directory Structure
+security/
+│
+├── governor/
+│      SecurityGovernor.java
+│      SecurityDecision.java
+│      SecurityRequest.java
+│      SecurityContext.java
+│
+├── policy/
+│      PolicyEngine.java
+│      Policy.java
+│      PolicyStore.java
+│
+├── trust/
+│      TrustEngine.java
+│      TrustLevel.java
+│
+├── risk/
+│      RiskAnalyzer.java
+│      RiskLevel.java
+│
+├── permissions/
+│      Permission.java
+│      Role.java
+│
+└── audit/
+       AuditLogger.java
+Core Decision Flow
+
+Every sensitive operation follows the same pipeline:
+
+Capability
+
+↓
+
+Create SecurityRequest
+
+↓
+
+Security Governor
+
+↓
+
+Policy Engine
+
+↓
+
+Risk Analysis
+
+↓
+
+Trust Evaluation
+
+↓
+
+Decision
+
+↓
+
+Execution Manager
+Security Decision Types
+
+Instead of only "yes" or "no", define decisions such as:
+
+ALLOW
+
+DENY
+
+REQUIRE_SIGNATURE
+
+REQUIRE_APPROVAL
+
+LOG_ONLY
+
+QUARANTINE
+
+This gives you flexibility as Aariya grows.
+
+Risk Levels
+
+Classify operations:
+
+Risk	Example
+LOW	Read non-sensitive configuration
+MEDIUM	Access conversation memory
+HIGH	Install or update a capability
+CRITICAL	Delete memory, export secrets, change security settings
+
+The Security Governor can enforce stricter checks as risk increases.
+
+Trust Levels
+
+Assign trust to each capability.
+
+Example:
+
+Capability	Trust
+Runtime Kernel	SYSTEM
+Memory Fabric	HIGH
+Planner	HIGH
+Vision	NORMAL
+Browser Capability	LIMITED
+Third-party Plugin	UNTRUSTED
+
+Trust is separate from permissions. A trusted component may still be denied if it requests an action outside its allowed scope.
+
+Security Policies
+
+Define policies in one place.
+
+Examples:
+
+Planner may read memory but not modify security settings.
+Browser capability may access the network but not private keys.
+Plugins may not write directly to the model directory.
+Only the Security Manager may rotate encryption keys.
+
+Keeping these centralized makes the system easier to audit and update.
+
+Integration with Aariya
+
+Your runtime would look like this:
+
+Runtime Kernel
+│
+├── Capability Manager
+├── Execution Manager
+├── Memory Fabric
+├── Planning Engine
+├── World Model
+├── Security Manager
+│
+└── Security Governor
+      │
+      ├── Policy Engine
+      ├── Trust Engine
+      ├── Risk Analyzer
+      ├── Audit Logger
+      └── Permission Manager
+Why Build This Before More Crypto?
+
+At this point you already have a plan for:
+
+Hybrid cryptography
+Key management
+Secure storage
+Digital signatures
+
+The Security Governor answers a different question:
+
+"Should this action be allowed at all?"
+
+Cryptography protects data. The Security Governor protects the system's behavior.
+
+Step 2: Capability Permission System
+
+Instead of letting every capability do everything, each capability must declare exactly what it needs.
+
+Think of it like Android or iOS permissions, but for AI modules.
+
+            Capability
+
+                 │
+
+        Permission Manifest
+
+                 │
+
+      Security Governor
+
+                 │
+
+     Permission Manager
+
+                 │
+
+      Runtime Decision
+
+                 │
+
+      ALLOW / DENY
+
+This becomes the foundation of Zero Trust AI.
+
+Directory Structure
+security/
+
+    permissions/
+
+        Permission.java
+
+        PermissionManager.java
+
+        PermissionManifest.java
+
+        PermissionRegistry.java
+
+        CapabilityPermission.java
+
+        ResourcePermission.java
+
+        PermissionDecision.java
+Permission Categories
+
+Instead of random strings, define fixed categories.
+
+MEMORY
+
+DATABASE
+
+FILESYSTEM
+
+NETWORK
+
+CAMERA
+
+MICROPHONE
+
+GPU
+
+CPU
+
+MODEL
+
+PLUGIN
+
+SECURITY
+
+SYSTEM
+
+WORLD_MODEL
+
+EMOTION
+
+VOICE
+
+VISION
+
+LOGGING
+
+CONFIGURATION
+Resource Types
+
+Every protected resource belongs to one category.
+
+Example
+
+Conversation Memory
+
+↓
+
+MEMORY
+Model Weights
+
+↓
+
+MODEL
+Security Keys
+
+↓
+
+SECURITY
+Permission Levels
+
+Not every permission is equal.
+
+NONE
+
+READ
+
+WRITE
+
+EXECUTE
+
+DELETE
+
+ADMIN
+
+Example
+
+Planner
+
+Memory
+
+READ
+
+Executive
+
+Memory
+
+READ
+
+WRITE
+
+Security Manager
+
+Security
+
+ADMIN
+Capability Manifest
+
+Every capability should ship with a manifest.
+
+Example
+
+Planner Capability
+
+Permissions
+
+READ MEMORY
+
+READ WORLD MODEL
+
+WRITE PLAN
+
+NO NETWORK
+
+NO SECURITY
+
+NO FILESYSTEM
+
+Vision Capability
+
+CAMERA
+
+READ
+
+GPU
+
+READ
+
+NETWORK
+
+NONE
+
+Browser Capability
+
+NETWORK
+
+READ
+
+NETWORK
+
+WRITE
+
+FILESYSTEM
+
+NONE
+
+SECURITY
+
+NONE
+Runtime Registration
+
+During startup
+
+Capability
+
+↓
+
+Read Manifest
+
+↓
+
+Permission Registry
+
+↓
+
+Validate
+
+↓
+
+Store
+
+↓
+
+Ready
+
+No capability should execute before registration.
+
+Runtime Access Check
+
+Suppose Planner wants memory.
+
+Planner
+
+↓
+
+Read Memory
+
+↓
+
+Permission Manager
+
+↓
+
+Allowed?
+
+↓
+
+Yes
+
+↓
+
+Continue
+
+Another example
+
+Browser Capability
+
+↓
+
+Read Private Keys
+
+↓
+
+Permission Manager
+
+↓
+
+Denied
+Security Governor Integration
+
+Every request becomes
+
+Capability
+
+↓
+
+Permission Check
+
+↓
+
+Risk Analysis
+
+↓
+
+Trust Analysis
+
+↓
+
+Decision
+
+↓
+
+Execution
+Capability Identity
+
+Each capability gets
+
+Capability ID
+
+UUID
+
+Version
+
+Developer
+
+Signature
+
+Permissions
+
+Trust Level
+
+Public Key
+
+Private Key
+
+Hash
+
+This identity is created when the capability is installed.
+
+Plugin Verification
+
+Before loading
+
+Plugin
+
+↓
+
+Hash
+
+↓
+
+Signature
+
+↓
+
+Manifest
+
+↓
+
+Permissions
+
+↓
+
+Governor
+
+↓
+
+Load
+
+Unsigned plugins never execute.
+
+Runtime Monitoring
+
+Track
+
+Permission Denied
+
+↓
+
+Audit
+
+↓
+
+Statistics
+
+↓
+
+Dashboard
+
+Aariya can learn which capabilities frequently request permissions they don't have.
+
+Security Dashboard
+
+Eventually your dashboard can display
+
+Capabilities
+
+Permissions
+
+Trust Levels
+
+Security Events
+
+Key Status
+
+Certificates
+
+Runtime Integrity
+
+Plugin Status
+
+Threat Level
+
+
+Step 3: Capability Lifecycle Manager
+
+Every capability should follow the same lifecycle.
+
+Not Installed
+      │
+      ▼
+Installed
+      │
+      ▼
+Verified
+      │
+      ▼
+Registered
+      │
+      ▼
+Initialized
+      │
+      ▼
+Running
+      │
+      ▼
+Paused
+      │
+      ▼
+Updated
+      │
+      ▼
+Stopped
+      │
+      ▼
+Unloaded
+
+Nothing executes unless it reaches Running.
+
+Architecture
+                   Runtime Kernel
+                         │
+                         ▼
+          Capability Lifecycle Manager
+                         │
+ ┌─────────────┬──────────────┬──────────────┐
+ │             │              │              │
+Installer   Verifier    DependencyMgr   UpdateMgr
+ │             │              │              │
+ └─────────────┴──────────────┴──────────────┘
+                         │
+                 Capability Registry
+                         │
+                 Running Capabilities
+Suggested Package Structure
+aariya-runtime/
+│
+├── lifecycle/
+│
+│   CapabilityLifecycleManager.java
+│
+│   CapabilityInstaller.java
+│
+│   CapabilityVerifier.java
+│
+│   CapabilityLoader.java
+│
+│   CapabilityStarter.java
+│
+│   CapabilityStopper.java
+│
+│   CapabilityUpdater.java
+│
+│   CapabilityRollback.java
+│
+│   CapabilityRegistry.java
+│
+│   CapabilityState.java
+│
+│   CapabilityDescriptor.java
+│
+└── ...
+Capability Descriptor
+
+Every capability should have metadata such as:
+
+Capability ID
+
+Name
+
+Version
+
+Author
+
+Dependencies
+
+Required Permissions
+
+Required Runtime Version
+
+Digital Signature
+
+Hash
+
+Status
+
+Trust Level
+
+Configuration
+
+Public Key
+
+This descriptor is read before loading the capability.
+
+Dependency Resolution
+
+Example:
+
+Voice Capability
+
+depends on
+
+↓
+
+Audio Capability
+
+↓
+
+Security Capability
+
+↓
+
+Runtime
+
+If a dependency is missing or incompatible, the capability is not started.
+
+Capability Installation Flow
+Install Package
+
+↓
+
+Verify Signature
+
+↓
+
+Verify Hash
+
+↓
+
+Read Manifest
+
+↓
+
+Resolve Dependencies
+
+↓
+
+Check Permissions
+
+↓
+
+Register
+
+↓
+
+Initialize
+
+↓
+
+Running
+
+Every stage should be explicit and logged.
+
+Hot Loading
+
+One advantage of your modular architecture is that capabilities can be added without restarting Aariya.
+
+Download Capability
+
+↓
+
+Verify
+
+↓
+
+Register
+
+↓
+
+Initialize
+
+↓
+
+Running
+
+This makes the platform easier to extend over time.
+
+Safe Updates
+
+Updates should be reversible.
+
+Running v1.2
+
+↓
+
+Backup
+
+↓
+
+Install v1.3
+
+↓
+
+Health Check
+
+↓
+
+Success → Keep
+
+Failure → Roll Back to v1.2
+
+This avoids leaving the system in a broken state.
+
+Health Monitoring
+
+Track runtime information such as:
+
+State (Running, Paused, Failed)
+Memory usage
+CPU usage
+Error count
+Last heartbeat
+Restart count
+
+This information can feed your monitoring dashboard.
+
+Integration with Existing Components
+
+Your runtime is now becoming cohesive:
+
+Runtime Kernel
+│
+├── Capability Manager
+├── Capability Lifecycle Manager
+├── Security Governor
+├── Permission Manager
+├── Hybrid Crypto Engine
+├── Memory Fabric
+├── Planning Engine
+├── Execution Manager
+├── World Model
+├── Telemetry Manager
+└── Plugin Manager
+What Comes Next?
+
+Once the Capability Lifecycle Manager is complete, the next major milestone I'd recommend is a Unified Event Bus.
+
+Instead of components calling each other directly:
+
+Planner ─────► Memory
+Planner ─────► Executive
+Planner ─────► Vision
+Planner ─────► Voice
+
+Everything communicates through a central event system:
+
+Planner
+    │
+    ▼
+Unified Event Bus
+    │
+ ┌──┼──┬──┬──┐
+ ▼  ▼  ▼  ▼  ▼
+Memory
+Voice
+Vision
+Executive
+World Model
+
+
+Step 4 — Unified Event Bus
+                     Runtime Kernel
+                           │
+                           ▼
+                 Unified Event Bus
+                           │
+     ┌─────────────┬─────────────┬─────────────┐
+     │             │             │             │
+ Memory       Planner      Executive      Security
+     │             │             │             │
+     ├─────────────┼─────────────┼─────────────┤
+     │             │             │             │
+ Emotion      Voice        Vision      World Model
+
+Every communication goes through the Event Bus.
+
+Why This Matters
+
+Without an Event Bus:
+
+Planner
+
+↓
+
+Memory
+
+↓
+
+Emotion
+
+↓
+
+Voice
+
+↓
+
+Vision
+
+↓
+
+Security
+
+Everything becomes tightly coupled.
+
+Eventually you'll have hundreds of direct dependencies.
+
+With an Event Bus:
+
+Planner
+
+↓
+
+Publish Event
+
+↓
+
+Event Bus
+
+↓
+
+Subscribers Receive Event
+
+The planner doesn't know who is listening.
+
+Event Flow
+Planner
+
+↓
+
+GoalCreatedEvent
+
+↓
+
+Event Bus
+
+↓
+
+Memory
+
+↓
+
+Executive
+
+↓
+
+Telemetry
+
+↓
+
+Dashboard
+
+One event can notify many systems.
+
+Event Categories
+SYSTEM
+
+SECURITY
+
+MEMORY
+
+PLANNING
+
+WORLD_MODEL
+
+EMOTION
+
+VOICE
+
+VISION
+
+PLUGIN
+
+NETWORK
+
+RUNTIME
+
+TASK
+
+MISSION
+
+USER
+
+MODEL
+
+TELEMETRY
+Event Priorities
+CRITICAL
+
+HIGH
+
+NORMAL
+
+LOW
+
+BACKGROUND
+
+Example:
+
+Missile Detection
+
+↓
+
+CRITICAL
+Telemetry Update
+
+↓
+
+LOW
+Event Lifecycle
+Publish
+
+↓
+
+Validate
+
+↓
+
+Security Check
+
+↓
+
+Permission Check
+
+↓
+
+Queue
+
+↓
+
+Dispatch
+
+↓
+
+Subscribers
+
+↓
+
+Audit
+
+↓
+
+Complete
+
+Notice how the Security Governor naturally fits into the flow before events are delivered.
+
+Event Metadata
+
+Every event should include:
+
+UUID
+
+Timestamp
+
+Source Capability
+
+Destination (optional)
+
+Category
+
+Priority
+
+Correlation ID
+
+Payload
+
+Signature
+
+Hash
+
+TTL (time-to-live)
+
+This makes events traceable and secure.
+
+Example Event Types
+
+Instead of generic messages, define specific events:
+
+MemoryStoredEvent
+MemoryRetrievedEvent
+GoalCreatedEvent
+GoalCompletedEvent
+CapabilityLoadedEvent
+CapabilityFailedEvent
+SecurityViolationEvent
+UserMessageReceivedEvent
+AgentResponseGeneratedEvent
+PluginInstalledEvent
+TelemetryUpdatedEvent
+
+Typed events make the system easier to understand and maintain.
+
+Event Replay
+
+Store important events in an append-only log.
+
+This enables:
+
+Debugging.
+Crash recovery.
+Auditing.
+Performance analysis.
+
+For example, you can replay the sequence of events that led to a planning decision.
+
+Distributed Ready
+
+Later, if Aariya is split across multiple machines:
+
+Machine A
+
+Planner
+
+↓
+
+Event Bus
+
+↓
+
+Network
+
+↓
+
+Event Bus
+
+↓
+
+Machine B
+
+Memory
+
+The communication model remains the same.
+
+Updated Runtime Architecture
+Runtime Kernel
+│
+├── Unified Event Bus
+├── Capability Manager
+├── Capability Lifecycle Manager
+├── Security Governor
+├── Permission Manager
+├── Hybrid Crypto Engine
+├── Memory Fabric
+├── Planning Engine
+├── Executive
+├── World Model
+├── Telemetry
+├── Plugin Manager
+└── Dashboard
+
+
+Why Aariya Needs Both Missions and Tasks
+
+Many AI systems only execute individual tasks. That makes them reactive but not goal-oriented.
+
+Instead, distinguish between:
+
+Mission – a long-term objective.
+Task – a unit of work that contributes to a mission.
+
+For example:
+
+Mission:
+Prepare Seniru for tomorrow's AI exam.
+
+Tasks:
+├── Analyze syllabus
+├── Build study plan
+├── Explain transformers
+├── Generate quiz
+├── Evaluate answers
+├── Schedule revision
+└── Report completion
+
+This separation allows the planner to pursue long-term goals while the scheduler manages execution.
+
+Architecture
+                    Runtime Kernel
+                           │
+                           ▼
+                 Mission Scheduler
+                           │
+                  Mission Manager
+                           │
+               Task Decomposition Engine
+                           │
+                  Task Scheduler
+                           │
+               Execution Queue Manager
+                           │
+                    Execution Manager
+                           │
+                    Capability Manager
+Directory Structure
+runtime/
+
+    scheduler/
+
+        MissionScheduler.java
+
+        MissionManager.java
+
+        MissionRegistry.java
+
+        MissionState.java
+
+        MissionPriority.java
+
+        MissionContext.java
+
+        TaskScheduler.java
+
+        TaskQueue.java
+
+        Task.java
+
+        TaskState.java
+
+        TaskPriority.java
+
+        TaskDependency.java
+
+        TaskExecutor.java
+
+        TaskDispatcher.java
+
+        RetryPolicy.java
+
+        DeadlineManager.java
+
+        ProgressTracker.java
+Mission Lifecycle
+
+Every mission follows a predictable state machine.
+
+CREATED
+    │
+PLANNED
+    │
+READY
+    │
+RUNNING
+    │
+PAUSED
+    │
+RESUMED
+    │
+COMPLETED
+    │
+ARCHIVED
+
+Possible alternate outcomes:
+
+FAILED
+
+CANCELLED
+
+TIMEOUT
+Task Lifecycle
+
+Tasks are smaller and move faster.
+
+CREATED
+
+↓
+
+WAITING
+
+↓
+
+READY
+
+↓
+
+RUNNING
+
+↓
+
+COMPLETED
+
+Failure path:
+
+FAILED
+
+↓
+
+Retry
+
+↓
+
+FAILED AGAIN
+
+↓
+
+Escalate
+Priority Levels
+CRITICAL
+
+HIGH
+
+NORMAL
+
+LOW
+
+BACKGROUND
+
+Examples:
+
+Task	Priority
+Emergency stop	CRITICAL
+User message	HIGH
+Memory indexing	NORMAL
+Telemetry cleanup	LOW
+Log compression	BACKGROUND
+Dependency Graph
+
+Tasks often depend on each other.
+
+Analyze PDF
+      │
+      ▼
+Extract Concepts
+      │
+      ▼
+Generate Summary
+      │
+      ▼
+Create Quiz
+      │
+      ▼
+Evaluate Answers
+
+A task should only run when its dependencies have completed successfully.
+
+Scheduling Policies
+
+Support multiple scheduling strategies rather than hardcoding one.
+
+Examples:
+
+Priority-first
+Earliest deadline first
+Round-robin
+Weighted fair scheduling
+Resource-aware scheduling
+
+The planner can choose the most appropriate policy for each mission.
+
+Resource Awareness
+
+Before starting a task, check:
+
+CPU availability
+GPU availability
+Memory usage
+Network status
+Capability readiness
+Security permissions
+
+This prevents oversubscribing system resources.
+
+Event Bus Integration
+
+Everything is event-driven.
+
+MissionCreated
+
+↓
+
+MissionScheduler
+
+↓
+
+TaskCreated
+
+↓
+
+TaskScheduler
+
+↓
+
+TaskStarted
+
+↓
+
+ExecutionManager
+
+↓
+
+TaskCompleted
+
+↓
+
+MissionUpdated
+
+↓
+
+Dashboard
+
+No direct calls are required between components.
+
+Planner Integration
+
+The planner should not execute work directly.
+
+Instead:
+
+Planner
+
+↓
+
+Mission
+
+↓
+
+Mission Scheduler
+
+↓
+
+Task Scheduler
+
+↓
+
+Execution Manager
+
+↓
+
+Capabilities
+
+This keeps planning separate from execution.
+
+Memory Integration
+
+Each mission should have its own context:
+
+Mission
+
+↓
+
+Mission Memory
+
+↓
+
+Task History
+
+↓
+
+Progress
+
+↓
+
+Failures
+
+↓
+
+Lessons Learned
+
+When a similar mission appears later, the planner can reuse successful strategies.
+
+Failure Recovery
+
+If a task fails:
+
+Task Failed
+
+↓
+
+Retry Policy
+
+↓
+
+Retry?
+
+↓
+
+YES
+
+↓
+
+Execute Again
+
+↓
+
+NO
+
+↓
+
+Escalate
+
+↓
+
+Planner
+
+The planner can then decide whether to modify the plan, choose another capability, or cancel the mission.
+
+Dashboard
+
+The runtime dashboard can display:
+
+Active Missions
+
+Queued Tasks
+
+Running Tasks
+
+Completed Tasks
+
+Failed Tasks
+
+Retry Count
+
+Execution Timeline
+
+CPU Usage
+
+GPU Usage
+
+Capability Usage
+Updated Runtime Architecture
+Runtime Kernel
+│
+├── Unified Event Bus
+├── Capability Manager
+├── Capability Lifecycle Manager
+├── Mission Scheduler
+├── Task Scheduler
+├── Execution Manager
+├── Security Governor
+├── Permission Manager
+├── Hybrid Crypto Engine
+├── Memory Fabric
+├── Planning Engine
+├── World Model
+├── Telemetry
+├── Plugin Manager
+└── Dashboard
+
+
+AARIYA CORE RUNTIME (Updated)
+                    AARIYA CORE RUNTIME
+                           │
+ ┌─────────────────────────────────────────────────────┐
+ │                                                     │
+ │ Runtime Kernel                                      │
+ │                                                     │
+ └─────────────────────────────────────────────────────┘
+          │
+          ├──────── Event Bus
+          ├──────── Mission Scheduler
+          ├──────── Execution Manager
+          ├──────── Resource Manager   ← NEW
+          ├──────── Security Governor
+          ├──────── Memory Fabric
+          └──────── Capability Manager
+
+Notice that every subsystem now depends on the Resource Manager.
+
+Why a Resource Manager?
+
+Suppose Aariya is doing all of these simultaneously:
+
+Voice Recognition
+
+↓
+
+LLM Inference
+
+↓
+
+Vector Search
+
+↓
+
+Vision Recognition
+
+↓
+
+Screen Capture
+
+↓
+
+Speech Generation
+
+↓
+
+Web Search
+
+↓
+
+Planning
+
+Without coordination:
+
+GPU memory can be exhausted.
+CPU becomes overloaded.
+Models compete for VRAM.
+Audio starts lagging.
+Response times become unpredictable.
+
+A Resource Manager prevents this.
+
+Architecture
+                    Resource Manager
+                           │
+      ┌──────────────┬──────────────┬──────────────┐
+      │              │              │              │
+ CPU Manager    GPU Manager    Memory Manager  Network Manager
+      │              │              │              │
+      └──────────────┴──────────────┴──────────────┘
+                           │
+                    Resource Scheduler
+                           │
+                    Resource Allocator
+                           │
+                    Resource Monitor
+Directory Structure
+runtime/
+
+    resource/
+
+        ResourceManager.java
+
+        ResourceAllocator.java
+
+        ResourceMonitor.java
+
+        ResourceScheduler.java
+
+        ResourceRegistry.java
+
+        ResourceReservation.java
+
+        ResourceLease.java
+
+        ResourceMetrics.java
+
+        ResourceUsage.java
+
+        ResourcePolicy.java
+
+        ResourceQuota.java
+
+        managers/
+
+            CPUManager.java
+
+            GPUManager.java
+
+            MemoryManager.java
+
+            StorageManager.java
+
+            NetworkManager.java
+
+            PowerManager.java
+Resource Categories
+
+Every hardware resource should have a manager.
+
+CPU
+
+GPU
+
+RAM
+
+Disk
+
+Network
+
+Camera
+
+Microphone
+
+Display
+
+TPU
+
+NPU
+
+Battery
+
+Sensors
+
+Future hardware can be added without changing the kernel.
+
+Resource Requests
+
+Capabilities should request resources rather than assuming they are available.
+
+Example:
+
+Vision Capability
+
+↓
+
+Needs
+
+GPU
+
+4 GB VRAM
+
+2 CPU Threads
+
+512 MB RAM
+
+The Resource Manager decides whether to grant the request.
+
+Resource Reservation
+
+Before execution:
+
+Task
+
+↓
+
+Reserve Resources
+
+↓
+
+Approved
+
+↓
+
+Execute
+
+↓
+
+Release Resources
+
+If resources are unavailable, the task waits in the scheduler.
+
+Resource Priority
+
+Not every task deserves equal resources.
+
+Example:
+
+Task	Priority
+Emergency stop	CRITICAL
+Voice conversation	HIGH
+Vision analysis	HIGH
+Memory indexing	LOW
+Log cleanup	BACKGROUND
+
+The Resource Manager should allocate accordingly.
+
+Dynamic Scaling
+
+Imagine GPU usage reaches 95%.
+
+Instead of crashing:
+
+GPU Usage
+
+↓
+
+95%
+
+↓
+
+Resource Manager
+
+↓
+
+Reduce Background Jobs
+
+↓
+
+Delay Memory Indexing
+
+↓
+
+Continue Voice Conversation
+
+The user experience remains responsive.
+
+Memory Management
+
+The Resource Manager should track:
+
+JVM heap
+Off-heap memory
+Vector database cache
+Model cache
+Embedding cache
+Image cache
+Audio cache
+
+When memory pressure rises:
+
+RAM
+
+↓
+
+90%
+
+↓
+
+Evict Cache
+
+↓
+
+Compress Memory
+
+↓
+
+Pause Background Tasks
+GPU Management
+
+If Aariya uses multiple models:
+
+LLM
+
+Vision
+
+Embedding
+
+Speech
+
+OCR
+
+The Resource Manager decides:
+
+which model stays resident in VRAM,
+which models are unloaded,
+which requests are queued.
+Capability Budgets
+
+Every capability receives a resource budget.
+
+Example:
+
+Capability	CPU	RAM	GPU
+Planner	2 cores	2 GB	None
+LLM	8 cores	8 GB	12 GB
+Vision	4 cores	2 GB	6 GB
+Voice	2 cores	1 GB	2 GB
+Memory	2 cores	4 GB	None
+
+Budgets can be adjusted by policy.
+
+Telemetry
+
+Continuously collect:
+
+CPU %
+
+GPU %
+
+VRAM
+
+RAM
+
+Disk
+
+Network
+
+Temperature
+
+Power
+
+Latency
+
+Queue Length
+
+These metrics feed the dashboard and help the scheduler make decisions.
+
+Integration with Other Core Components
+Mission Scheduler
+
+↓
+
+Task Scheduler
+
+↓
+
+Execution Manager
+
+↓
+
+Resource Manager
+
+↓
+
+Capability Manager
+
+↓
+
+Capability
+
+The Execution Manager should never start a task until the Resource Manager confirms resources are available.
+
+Updated Core Runtime
+AARIYA RUNTIME
+
+├── Runtime Kernel
+├── Unified Event Bus
+├── Mission Scheduler
+├── Task Scheduler
+├── Execution Manager
+├── Resource Manager
+├── Security Governor
+├── Permission Manager
+├── Capability Manager
+├── Capability Lifecycle Manager
+├── Memory Fabric
+├── Planning Engine
+├── World Model
+├── Hybrid Crypto Engine
+├── Telemetry Manager
+├── Plugin Manager
+└── Dashboard
+
+
+AARIYA EXECUTION ENGINE
+                    Runtime Kernel
+                           │
+                           ▼
+                  Mission Scheduler
+                           │
+                           ▼
+                    Task Scheduler
+                           │
+                           ▼
+                  Execution Engine
+                           │
+        ┌──────────┬──────────┬──────────┐
+        │          │          │          │
+  Security     Resource   Capability   Event Bus
+   Governor    Manager     Manager
+        │          │          │
+        └──────────┴──────────┘
+                 │
+          Execute Capability
+Responsibilities
+
+The Execution Engine should never:
+
+Perform AI reasoning.
+Access the database directly.
+Encrypt data itself.
+Make planning decisions.
+Load models.
+
+Instead, it should:
+
+Validate execution requests.
+Acquire permissions.
+Reserve resources.
+Dispatch work.
+Track execution.
+Recover from failures.
+Emit events.
+Package Structure
+runtime/
+
+    execution/
+
+        ExecutionEngine.java
+
+        ExecutionContext.java
+
+        ExecutionRequest.java
+
+        ExecutionResult.java
+
+        ExecutionPipeline.java
+
+        ExecutionDispatcher.java
+
+        ExecutionQueue.java
+
+        ExecutionMonitor.java
+
+        ExecutionHistory.java
+
+        ExecutionState.java
+
+        ExecutionPolicy.java
+
+        ExecutionTimeout.java
+
+        ExecutionRecovery.java
+
+        ExecutionMetrics.java
+Execution Pipeline
+
+Every task follows the exact same path.
+
+Task
+
+↓
+
+Execution Request
+
+↓
+
+Security Governor
+
+↓
+
+Permission Manager
+
+↓
+
+Resource Manager
+
+↓
+
+Capability Manager
+
+↓
+
+Execute
+
+↓
+
+Monitor
+
+↓
+
+Return Result
+
+↓
+
+Release Resources
+
+↓
+
+Publish Event
+
+This pipeline should be identical for every capability.
+
+Execution Context
+
+Every execution receives its own context.
+
+Execution Context
+
+Mission ID
+
+Task ID
+
+User ID
+
+Capability ID
+
+Security Context
+
+Memory Context
+
+Resource Lease
+
+Deadline
+
+Priority
+
+Trace ID
+
+The context travels with the task, making it easy to trace and debug.
+
+Execution State Machine
+CREATED
+
+↓
+
+VALIDATING
+
+↓
+
+WAITING_RESOURCES
+
+↓
+
+READY
+
+↓
+
+RUNNING
+
+↓
+
+COMPLETED
+
+Failure path:
+
+FAILED
+
+↓
+
+RETRYING
+
+↓
+
+FAILED
+
+↓
+
+ESCALATED
+
+Additional states:
+
+PAUSED
+
+TIMEOUT
+
+CANCELLED
+
+ABORTED
+Dispatcher
+
+The Execution Engine should not know how each capability works.
+
+Instead:
+
+Capability ID
+
+↓
+
+Capability Manager
+
+↓
+
+Capability Instance
+
+↓
+
+Execute
+
+This keeps the engine independent of capability implementations.
+
+Timeouts
+
+Every task has a deadline.
+
+Example:
+
+Task	Timeout
+Voice response	2 seconds
+Vision inference	10 seconds
+Planning	30 seconds
+Memory indexing	5 minutes
+
+If a timeout is exceeded:
+
+Execution
+
+↓
+
+Timeout
+
+↓
+
+Cancel
+
+↓
+
+Release Resources
+
+↓
+
+Notify Planner
+Retries
+
+Not every failure should be treated the same.
+
+Examples:
+
+Temporary network issue → retry.
+GPU out of memory → retry after resources free up.
+Invalid capability signature → do not retry.
+Missing dependency → do not retry.
+
+Use retry policies that depend on the failure type.
+
+Resource Leases
+
+When a task starts:
+
+Request GPU
+
+↓
+
+Resource Manager
+
+↓
+
+Lease Granted
+
+↓
+
+Execute
+
+↓
+
+Release Lease
+
+Leases ensure resources are returned even if a task crashes.
+
+Execution Monitoring
+
+Track:
+
+Start time
+End time
+Duration
+CPU time
+GPU time
+Peak memory
+Retry count
+Result
+Failure reason
+
+These metrics are valuable for optimization.
+
+Event Bus Integration
+
+Everything is observable.
+
+Task Started
+
+↓
+
+Execution Started Event
+
+↓
+
+Task Progress Event
+
+↓
+
+Task Completed Event
+
+↓
+
+Execution Finished Event
+
+The dashboard, telemetry, and audit systems can subscribe without modifying the Execution Engine.
+
+Failure Recovery
+Execution Failed
+
+↓
+
+Recovery Engine
+
+↓
+
+Retry?
+
+↓
+
+YES
+
+↓
+
+Execute Again
+
+↓
+
+NO
+
+↓
+
+Planner
+
+↓
+
+Replan Mission
+
+Recovery decisions should be configurable rather than hardcoded.
+
+Final Runtime Architecture
+AARIYA RUNTIME
+
+├── Runtime Kernel
+├── Unified Event Bus
+├── Mission Scheduler
+├── Task Scheduler
+├── Execution Engine
+├── Resource Manager
+├── Capability Manager
+├── Capability Lifecycle Manager
+├── Security Governor
+├── Permission Manager
+├── Hybrid Crypto Engine
+├── Memory Fabric
+├── Planning Engine
+├── World Model
+├── Telemetry Manager
+├── Plugin Manager
+├── Dashboard
+└── Audit Ledger
+
+
+Aariya Capability SDK (ACSDK)
+                    Capability SDK
+                           │
+    ┌──────────────────────────────────────────────┐
+    │                                              │
+    │ BaseCapability                              │
+    │ Event API                                   │
+    │ Security API                               │
+    │ Resource API                               │
+    │ Configuration API                          │
+    │ Logging API                                │
+    │ Health API                                 │
+    │ Metrics API                                │
+    │ Memory API                                 │
+    │ Lifecycle API                              │
+    └──────────────────────────────────────────────┘
+                           │
+        ┌──────────────┬──────────────┬──────────────┐
+        │              │              │              │
+     Vision         Voice         Planner        ERP
+
+Notice that every capability is built the same way.
+
+SDK Directory Structure
+aariya-sdk/
+
+    api/
+
+        Capability.java
+        CapabilityContext.java
+        CapabilityMetadata.java
+        CapabilityHealth.java
+        CapabilityMetrics.java
+
+    lifecycle/
+
+        Lifecycle.java
+        LifecycleState.java
+
+    event/
+
+        EventPublisher.java
+        EventSubscriber.java
+
+    security/
+
+        SecurityClient.java
+
+    resource/
+
+        ResourceClient.java
+
+    memory/
+
+        MemoryClient.java
+
+    configuration/
+
+        ConfigurationClient.java
+
+    logging/
+
+        Logger.java
+
+    telemetry/
+
+        MetricsClient.java
+
+    annotations/
+
+        RequiresPermission.java
+        RequiresCapability.java
+        CapabilityInfo.java
+
+    exceptions/
+
+    util/
+Every Capability Must Follow the Same Lifecycle
+Created
+
+↓
+
+Installed
+
+↓
+
+Verified
+
+↓
+
+Initialized
+
+↓
+
+Running
+
+↓
+
+Paused
+
+↓
+
+Stopped
+
+↓
+
+Shutdown
+
+The Runtime Kernel controls this lifecycle.
+
+Standard Capability Metadata
+
+Every capability should declare:
+
+Capability ID
+
+Name
+
+Version
+
+Description
+
+Author
+
+Permissions
+
+Dependencies
+
+Minimum Runtime Version
+
+Maximum Runtime Version
+
+Configuration Schema
+
+Public Key
+
+Signature
+
+Hash
+
+This metadata is used during installation and verification.
+
+Standard Context
+
+Instead of each capability creating its own environment, provide a shared context with access to runtime services.
+
+Example responsibilities of the context:
+
+Publish events.
+Access memory.
+Request resources.
+Read configuration.
+Log messages.
+Access telemetry.
+Query security services.
+
+Capabilities receive this context when they are initialized.
+
+Resource Requests
+
+Capabilities should never allocate hardware directly.
+
+Instead, they request resources through the SDK.
+
+Example requests:
+
+GPU memory
+CPU cores
+Network access
+Storage quota
+
+The Resource Manager decides whether to grant them.
+
+Security Integration
+
+Capabilities should not implement cryptography themselves.
+
+The SDK should expose services for:
+
+Signing messages.
+Verifying signatures.
+Encrypting sensitive data.
+Authenticating with the Runtime.
+
+This keeps security consistent across the platform.
+
+Event Integration
+
+Every capability should be able to:
+
+Publish events.
+Subscribe to events.
+Filter by event type.
+Receive only authorized events.
+
+The Event Bus remains the communication backbone.
+
+Health Reporting
+
+Every capability periodically reports:
+
+Current state.
+CPU usage.
+Memory usage.
+Error count.
+Queue length.
+Last heartbeat.
+
+This information feeds the dashboard and helps detect failures.
+
+Configuration
+
+Each capability should define a configuration schema.
+
+The Runtime validates configuration before starting the capability, reducing runtime errors.
+
+Logging
+
+Provide structured logging through the SDK.
+
+Each log entry should include:
+
+Capability ID
+Timestamp
+Severity
+Correlation ID
+Mission ID (if applicable)
+
+This makes distributed debugging much easier.
+
+Metrics
+
+Expose common metrics such as:
+
+Requests processed.
+Average latency.
+Failures.
+Success rate.
+Retry count.
+
+These should automatically flow into your telemetry system.
+
+Dependency Declaration
+
+Capabilities should explicitly declare the other capabilities they require.
+
+Example:
+
+Planner
+
+depends on
+
+↓
+
+Memory
+
+↓
+
+Event Bus
+
+↓
+
+Security
+
+The Lifecycle Manager resolves these before startup.
+
+Testing Support
+
+The SDK should include testing utilities so every capability can be validated in isolation.
+
+For example:
+
+Lifecycle tests.
+Permission validation.
+Event integration.
+Resource request handling.
+Health reporting.
+
+This improves quality without requiring the full runtime.
+
+Updated Runtime Architecture
+AARIYA PLATFORM
+
+├── Runtime Kernel
+├── Capability SDK
+├── Unified Event Bus
+├── Mission Scheduler
+├── Task Scheduler
+├── Execution Engine
+├── Resource Manager
+├── Capability Manager
+├── Capability Lifecycle Manager
+├── Security Governor
+├── Permission Manager
+├── Hybrid Crypto Engine
+├── Memory Fabric
+├── Planning Engine
+├── World Model
+├── Telemetry Manager
+├── Plugin Manager
+├── Dashboard
+└── Audit Ledger
+
+AARIYA KERNEL API
+                    Runtime Kernel
+                           │
+                           ▼
+                     Kernel API
+                           │
+ ┌──────────┬──────────┬──────────┬──────────┐
+ │          │          │          │          │
+Memory    Events    Security   Resources   Scheduler
+ │          │          │          │          │
+ └──────────┴──────────┴──────────┴──────────┘
+                           │
+                  Every Capability
+
+A capability should never reach into internal managers directly. It asks the Kernel API to perform operations on its behalf.
+
+Why this layer is important
+
+Without a Kernel API:
+
+Planner
+ ├── MemoryManager
+ ├── EventBus
+ ├── ResourceManager
+ ├── SecurityGovernor
+ ├── Scheduler
+ ├── Logger
+ └── Telemetry
+
+Every capability becomes tightly coupled to the runtime.
+
+With a Kernel API:
+
+Planner
+
+↓
+
+Kernel API
+
+↓
+
+Runtime Services
+
+Only one dependency exists.
+
+Responsibilities
+
+The Kernel API should expose services such as:
+
+Memory access.
+Event publishing.
+Event subscription.
+Resource requests.
+Security checks.
+Capability lookup.
+Mission creation.
+Task creation.
+Configuration access.
+Logging.
+Telemetry.
+Time services.
+Health reporting.
+
+Nothing else.
+
+Internal Architecture
+                 Kernel API
+                      │
+      ┌───────────────┼───────────────┐
+      │               │               │
+ MemoryFacade   EventFacade   SecurityFacade
+      │               │               │
+ ResourceFacade SchedulerFacade CapabilityFacade
+      │               │               │
+ ConfigurationFacade LoggingFacade TelemetryFacade
+
+Each facade hides the complexity of the underlying managers.
+
+Example Flow
+
+Suppose the Planner wants to store memory.
+
+Instead of:
+
+Planner
+
+↓
+
+MemoryManager
+
+↓
+
+Database
+
+Use:
+
+Planner
+
+↓
+
+KernelAPI
+
+↓
+
+MemoryFacade
+
+↓
+
+MemoryFabric
+
+↓
+
+Vector Database
+
+If the storage implementation changes later, the Planner does not need to change.
+
+Runtime Isolation
+
+The Kernel API also lets you:
+
+Replace implementations.
+Mock runtime services during testing.
+Enforce security policies centrally.
+Log all service calls.
+Measure performance consistently.
+Future-Proofing
+
+Because every capability depends only on the Kernel API:
+
+You can split services across processes.
+You can distribute services across multiple machines.
+You can upgrade internal managers without breaking capabilities.
+You can support remote capabilities in the future.
+Updated Platform
+AARIYA PLATFORM
+
+├── Runtime Kernel
+├── Kernel API
+├── Capability SDK
+├── Unified Event Bus
+├── Mission Scheduler
+├── Task Scheduler
+├── Execution Engine
+├── Resource Manager
+├── Capability Manager
+├── Capability Lifecycle Manager
+├── Security Governor
+├── Permission Manager
+├── Hybrid Crypto Engine
+├── Memory Fabric
+├── Planning Engine
+├── World Model
+├── Telemetry Manager
+├── Plugin Manager
+├── Dashboard
+└── Audit Ledger
+
+Aariya v1 Runtime Roadmap
+Stage 1
+──────────────
+Runtime Kernel
+Kernel API
+Event Bus
+
+↓
+
+Stage 2
+──────────────
+Security
+Hybrid Crypto
+Permission System
+
+↓
+
+Stage 3
+──────────────
+Capability SDK
+Capability Manager
+Lifecycle Manager
+
+↓
+
+Stage 4
+──────────────
+Memory Fabric
+World Model
+
+↓
+
+Stage 5
+──────────────
+Planner
+Mission Scheduler
+Execution Engine
+
+↓
+
+Stage 6
+──────────────
+Voice
+Vision
+ERP
+Browser
+OSINT
+
+↓
+
+Stage 7
+──────────────
+Self-learning
+Distributed Runtime
+Cloud Cluster
+
+This is the order I'd actually implement.
+
+Build Vertically, Not Horizontally
+
+Many projects fail because they build every subsystem to 20% completion.
+
+Instead, build one complete path.
+
+For example:
+
+User Input
+
+↓
+
+Runtime Kernel
+
+↓
+
+Event Bus
+
+↓
+
+Security
+
+↓
+
+Planner
+
+↓
+
+Execution
+
+↓
+
+Memory
+
+↓
+
+Response
+
+Get that working end-to-end before expanding.
+
+Lock the Core Interfaces
+
+Before writing production code, freeze the contracts for the core components:
+
+RuntimeKernel
+KernelAPI
+Capability
+EventBus
+SecurityGovernor
+ResourceManager
+MemoryProvider
+Planner
+ExecutionEngine
+
+Once those interfaces are stable, implementations can evolve without breaking the rest of the system.
+
+Establish Coding Standards
+
+Decide on conventions now:
+
+Package layout.
+Naming conventions.
+Error handling.
+Logging format.
+Event naming.
+Configuration format.
+Versioning policy.
+Dependency injection approach.
+Testing strategy.
+
+Consistency early saves time later.
+
+Add Observability from Day One
+
+Build telemetry into the runtime rather than adding it later.
+
+Track:
+
+Startup time.
+Capability load time.
+Event throughput.
+Queue lengths.
+Memory usage.
+CPU usage.
+Task latency.
+Failure rates.
+Security events.
+
+This will make debugging much easier.
+
+Keep the Runtime Small
+
+A good rule is:
+
+Runtime Kernel
+≈ Coordination
+
+Capabilities
+≈ Functionality
+
+Avoid putting application logic into the kernel.
+
+Version Everything
+
+Every capability should have:
+
+Capability version.
+API version.
+Manifest version.
+Configuration schema version.
+Data format version.
+
+This makes upgrades manageable.
+
+Define Extension Points
+
+Plan where third parties can extend Aariya:
+
+Capabilities.
+Skills.
+Models.
+Memory providers.
+Event listeners.
+Schedulers.
+Security policies.
+
+Use interfaces for these extension points.
+
+Testing Strategy
+
+Use layers of testing:
+
+Unit tests for individual classes.
+Integration tests for manager interactions.
+End-to-end runtime tests.
+Performance and load tests.
+Security tests.
+Chaos testing (simulate failures and verify recovery).
+Documentation
+
+Write documentation as you build:
+
+Architecture overview.
+API reference.
+Capability development guide.
+Security guide.
+Deployment guide.
+Operations guide.
+
+Keeping docs current reduces onboarding time later.
+
+A Final Recommendation
+
+Based on everything we've designed over the last conversations, I'd now divide the codebase into four repositories (or top-level modules if you prefer a monorepo):
+
+aariya-runtime/
+
+Contains:
+
+Runtime Kernel
+Event Bus
+Execution Engine
+Mission Scheduler
+Resource Manager
+Security Governor
+aariya-sdk/
+
+Contains:
+
+Capability interfaces
+Kernel API
+Event API
+Security API
+Resource API
+Testing utilities
+aariya-capabilities/
+
+Contains:
+
+Memory
+Planner
+Vision
+Voice
+ERP
+Browser
+OSINT
+Robotics
+Future capabilities
+
+Each capability lives in its own module.
+
+aariya-tools/
+
+Contains:
+
+Dashboard
+CLI
+Deployment tools
+Monitoring
+Profiling
+Benchmarking
+Package builder
+Capability installer
+
+

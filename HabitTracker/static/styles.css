@@ -1,0 +1,57 @@
+/* Dark Theme Styles */
+body {
+    background-color: #121212;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 2rem;
+}
+
+h1, h2 {
+    color: #ffffff;
+}
+
+input[type="text"] {
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    background-color: #1e1e1e;
+    color: #ffffff;
+    margin-right: 10px;
+}
+
+button, input[type="submit"] {
+    background-color: #bb86fc;
+    color: #121212;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+button:hover, input[type="submit"]:hover {
+    background-color: #985eff;
+}
+
+a {
+    color: #bb86fc;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+.streak {
+    color: #03dac6;
+    font-weight: bold;
+}
+
+.habit-entry {
+    margin-bottom: 12px;
+    padding: 10px;
+    background-color: #1e1e1e;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(187, 134, 252, 0.1);
+}

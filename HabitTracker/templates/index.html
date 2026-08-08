@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Habit Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Habit Tracker</h1>
+    <form method="post" action="/add">
+        <input type="text" name="habit" placeholder="New habit" required>
+        <button type="submit">Add Habit</button>
+    </form>
+    <h2>My Habits</h2>
+    {% for habit in habits %}
+        <div class="habit-entry">
+            {{ habit.name }} - Last done: {{ habit.last_done or 'Never' }}
+            <a href="/done/{{ habit.name }}">✔️ Mark Done</a>
+            <div class="streak">Streak: {{ stats.get(habit.name, 0) }} days</div>
+        </div>
+    {% endfor %}
+</body>
+</html>

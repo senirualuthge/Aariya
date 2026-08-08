@@ -1,0 +1,9 @@
+@echo off
+echo Starting AI Girl Brain Server...
+start "AI Girl Brain Server" cmd /k "uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload"
+
+echo Waiting for server to initialize...
+timeout /t 5
+
+echo Starting Interactive Client...
+python interactive_client.py

@@ -1,0 +1,14 @@
+# ============================================================
+# ORIGINAL FILE: *AGI.txt
+# This content was merged into prediction_engine/PREDICTION_ENGINE_UNIFIED.txt
+# along with: *NEWPredictionPRT2.txt, *NEWPredictionImprove.txt, *AdvancedPrediction.txt, *NEWPredictionEnginePrt3.txt, *NEWPredictionEnginePrt4.txt, AGI Claims.txt
+#
+# >>> Full content is in: *NEWPredictionPRT2.txt <<<
+# ============================================================
+
+This file (*AGI.txt) was part of the prediction engine merge.
+
+Its content is included in the unified document at:
+  prediction_engine/PREDICTION_ENGINE_UNIFIED.txt
+
+The full extracted copy is in: *NEWPredictionPRT2.txt

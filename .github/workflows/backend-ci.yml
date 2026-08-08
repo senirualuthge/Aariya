@@ -1,0 +1,99 @@
+# Backend CI — hermetic test suite + live dependency security scan.
+#
+# Mirrors what scripts/scan_deps.sh does locally (that script is
+# macOS/launchd-specific; CI runs the same two layers directly):
+#   1. pip-audit hard gate  — fails on any NEW vulnerability. The known,
+#      unfixable chromadb risk (PYSEC-2026-311, embedded-only usage — see
+#      AI_Girl_Security.md §11.3) is explicitly ignored.
+#   2. Live CVE-agent test   — real OSV.dev query via test_cve_live_scan.py,
+#      asserting fastapi reports zero advisories (guards the version-aware
+#      query from regressing).
+#
+# The full hermetic backend suite runs on every trigger; the schedule adds a
+# nightly belt-and-suspenders run that also catches dependency drift.
+#
+# A separate frontend-audit job gates production npm dependencies (npm audit
+# --omit=dev) on every run; the schedule catches drift there too.
+
+name: Backend CI
+
+on:
+  push:                 # every push, any branch
+  pull_request:
+  schedule:
+    - cron: "0 4 * * *" # nightly 04:00 UTC
+
+# PRs fire both push and pull_request — cancel superseded runs instead of
+# queueing duplicates on a shared repo.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r server/requirements.txt
+
+      - name: Hermetic backend suite
+        run: python -m pytest server/tests/ -q
+
+      - name: pip-audit gate (new findings fail; chromadb PYSEC-2026-311 is a documented accepted risk)
+        run: pip-audit -l --ignore-vuln PYSEC-2026-311
+
+      # Note: the CVE agent degrades gracefully — if api.osv.dev is unreachable
+      # it returns no findings, so this step passes vacuously (a documented
+      # network-outage degradation, not a real green).
+      - name: Live CVE agent scan (real OSV query — fastapi must report zero advisories)
+        env:
+          RUN_LIVE_TESTS: "1"
+        run: python -m pytest server/tests/test_cve_live_scan.py -q -s
+
+      # Final smoke: the same `npm run health` command humans use. On this
+      # Linux runner launchd doesn't exist, so health() takes its n/a branch
+      # and passes (AARIYA_NO_LAUNCHD=1 forces that branch deterministically);
+      # it still verifies the script + npm alias execute cleanly end-to-end.
+      # The real health gates are the three steps above.
+      - name: health smoke (npm run health)
+        env:
+          AARIYA_NO_LAUNCHD: "1"
+        run: npm run health
+
+  # Frontend production-dependency gate, isolated from the backend job so npm
+  # install flakiness can't block (or fail attribution of) the Python suite.
+  # Runs `npm ci` from the lockfile (legacy-peer-deps: the app deliberately
+  # runs framer-motion@10 on React 19 — npm's strict resolver rejects that
+  # combination), then gates on PRODUCTION advisories only (--omit=dev).
+  # The dev-only findings (vite, electron, ...) are deliberately not gates.
+  # Local equivalents: npm run security:audit (non-gating) / scan_deps.sh.
+  frontend-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install frontend deps (lockfile, legacy peer resolution)
+        run: npm ci --legacy-peer-deps
+
+      - name: npm audit gate (production deps must be clean)
+        run: npm audit --omit=dev
+

@@ -1,0 +1,1378 @@
+  PREAMBLE (from *Fixv2.txt)
+
+🧱 Biggest Missing Piece
+
+You are missing a turn-timing controller.
+
+You mentioned it earlier, but it’s not in the doc.
+
+You need a module that decides:
+
+when to speak
+
+when to wait
+
+when to interrupt (barge-in)
+
+when to produce backchannel (“mm”, nod)
+
+based on:
+
+VAD state
+
+user prosody
+
+trust level
+
+social intent
+
+Without this, the system will feel robotic no matter how good the cognition is.
+
+⚙️ LLM Strategy (Answering Your Earlier Question)
+
+Given this architecture, you need two models, not one.
+
+1. Fast Social Policy LLM
+
+Runs every turn
+Low latency
+Handles:
+
+intent classification
+
+tone shaping
+
+short responses
+
+Think:
+
+small GPT-class model
+
+distilled conversational model
+
+local if possible
+
+Your real moat is logs → learning.
+
+You already store:
+
+trust_history
+
+contradiction_history
+
+session valence
+
+If you add:
+
+turn timing outcomes
+
+user interruption events
+
+response latency satisfaction proxy
+
+You can train:
+
+a learned social timing model
+
+That’s where this becomes unique.
+
+🧠 Policy Router — Role in the Stack
+
+Location: Cognition loop (4–8 Hz)
+Input: Turn state bundle
+Output: Execution path
+
+It sits before:
+
+LLM call
+
+Agent pipeline
+
+Memory retrieval
+
+So it prevents unnecessary heavy work.
+
+📦 Inputs to the Router
+
+At time t, router receives:
+
+R(t) = {
+  intent,              # from fast classifier
+  user_emotion,        # VA vector
+  trust_level,         # 0–1
+  contradiction_ema,   # 0–1
+  query_complexity,    # scalar
+  turn_type,           # {backchannel, short, long, factual}
+  latency_budget_ms,   # dynamic from FPS/thermal controller
+  vad_state,           # speaking / silence / overlap
+  agent_needed_flag    # heuristic pre-check
+}
+
+
+All of these you already compute except query_complexity and turn_type (we’ll define them).
+
+🧩 Output Modes
+
+Router selects one:
+
+Mode	Path	Use Case
+BACKCHANNEL	No LLM	“mm”, nod, blink, smile
+FAST_LLM	Small model	casual chat, emotion
+MEMORY_LLM	Small + memory retrieval	personal recall
+HEAVY_LLM	Large model	deep reasoning (no tools)
+AGENT	Plan → tools → verify → synthesize	factual / research
+DEFLECT	Safe template	low trust / high contradiction
+DEFER	Wait state	user still speaking / latency guard
+⚙️ Derived Signals
+1. Turn Type Classifier (cheap rules)
+if tokens < 4 and vad_state == silence → BACKCHANNEL
+elif question_mark or wh_word → QUESTION
+elif contains_named_entities or numbers → FACTUAL
+elif tokens > 20 → LONG
+else → SHORT
+
+2. Query Complexity (0–1)
+
+Heuristic:
+
+complexity =
+  0.4 * is_factual +
+  0.3 * token_length_norm +
+  0.3 * requires_multi_hop_keywords
+
+
+Multi-hop keywords:
+
+compare, analyze, why, how does, pros and cons, architecture, design
+
+🔐 Trust & Safety Gate (Pre-Router)
+
+Before routing:
+
+if trust < 0.2 and intent in {FLIRTING, INTIMATE}:
+    return DEFLECT
+
+if contradiction_ema > 0.6:
+    force_mode = GUARDED
+
+
+This modifies tone later, not the path.
+
+⏱️ Latency Budget Integration
+
+
+Router must respect this.
+
+🧮 Routing Algorithm (Deterministic)
+
+Here is the actual decision flow.
+
+function route(R):
+
+
+  # 0. Don’t talk over the user (from *Fixv2.txt)
+
+if R.vad_state == SPEAKING:
+      return DEFER
+
+
+  # 1. Backchannel path (from *Fixv2.txt)
+
+if R.turn_type == BACKCHANNEL and R.trust_level > 0.3:
+      return BACKCHANNEL
+
+
+  # 2. Safety / trust deflection (from *Fixv2.txt)
+
+if R.trust_level < 0.2 and R.intent in HIGH_INTIMACY:
+      return DEFLECT
+
+
+  # 3. Low latency mode (thermal / FPS drop) (from *Fixv2.txt)
+
+if R.latency_budget_ms < 150:
+      return FAST_LLM
+
+
+  # 4. Factual routing (from *Fixv2.txt)
+
+if R.intent == INFORMING and R.query_complexity > 0.6:
+      if R.latency_budget_ms > 400:
+          return AGENT
+      else:
+          return HEAVY_LLM
+
+
+  # 5. Memory-triggered routing (from *Fixv2.txt)
+
+if R.intent in {COMFORTING, PERSONAL} and memory_hit_confidence > 0.5:
+      return MEMORY_LLM
+
+
+  # 6. Long emotional turns (from *Fixv2.txt)
+
+if R.turn_type == LONG and R.intent != INFORMING:
+      return FAST_LLM
+
+
+  # 7. Default (from *Fixv2.txt)
+
+return FAST_LLM
+
+
+This keeps:
+
+emotional turns fast
+
+factual turns agentic
+
+thermal drops safe
+
+🧠 Memory Hit Signal
+
+Add a cheap vector pre-check:
+
+If cosine similarity of last user utterance to episodic memory > threshold → set memory_hit_confidence.
+
+Do this before calling any LLM.
+
+🎭 Tone Modifier (Post-Router)
+
+Router chooses the path, not the tone.
+
+Tone is shaped by:
+
+tone = f(intent, trust_level, contradiction_flag)
+
+
+Example:
+
+Trust	Tone
+Low	neutral, distant
+Mid	warm
+High	playful / intimate
+
+Contradiction → guarded probing.
+
+🔄 Execution Paths
+
+
+  BACKCHANNEL (from *Fixv2.txt)
+
+No LLM call
+
+Trigger animation + short audio token (“mm-hm”)
+
+0 ms cognitive cost
+
+FAST_LLM
+
+Small model
+
+max tokens ~60
+
+temperature driven by arousal
+
+MEMORY_LLM
+
+Retrieve top 3 memories
+
+Inject into prompt
+
+small model
+
+HEAVY_LLM
+
+Large model
+
+no tools
+
+capped tokens
+
+AGENT
+
+Async:
+
+return “thinking” backchannel immediately
+
+run plan → tools → verify → synthesize
+
+stream result later
+
+Critical for perceived responsiveness.
+
+🧷 State Machine Integration
+
+Router must be stateless per turn but read from:
+
+trust system
+
+contradiction EMA
+
+thermal controller
+
+VAD
+
+Do not store internal state inside router.
+Keep it pure → testable.
+
+🧪 Logging (for future learning)
+
+Log every routing decision:
+
+router_logs:
+  turn_id
+  selected_mode
+  latency_budget
+  complexity
+  trust
+  outcome_latency
+  user_interrupt
+
+
+This becomes your training dataset later.
+
+🚀 What This Gives You
+
+With this router:
+
+You get:
+
+consistent latency
+
+no unnecessary agent calls
+
+thermal-aware cognition
+
+trust-gated intimacy
+
+instant backchannels
+
+That is what makes the avatar feel alive.
+
+🧠 Turn-Taking State Machine (TTSM)
+🎯 Design Goals
+
+Must feel:
+
+responsive (<250 ms reaction)
+
+non-interruptive at low trust
+
+more proactive at high trust
+
+human-like pause timing
+
+capable of overlap handling
+
+Runs in Sensor Loop (8–15 Hz)
+Outputs signals to Cognition Loop.
+
+📦 Inputs
+T(t) = {
+  vad_user,          # {speech, silence}
+  vad_ai,            # {speaking, silent}
+  prosody_energy,    # user arousal proxy
+  turn_length_ms,    # current user speech duration
+  silence_ms,        # time since user stopped
+  trust_level,       # 0–1
+  intent,            # from classifier
+  interruption_flag  # user started during AI speech
+}
+
+🧩 States
+State	Meaning
+LISTENING	User speaking, AI silent
+PROCESSING	User stopped, AI thinking window
+RESPONDING	AI speaking
+BACKCHANNEL_READY	Eligible to emit short feedback
+YIELDING	AI stops because user interrupted
+HOLD	Deliberate pause for natural timing
+🔄 State Transitions
+1. LISTENING
+
+Enter when: vad_user == speech
+
+Actions:
+
+accumulate turn_length_ms
+
+enable backchannel timer
+
+Transitions:
+
+→ BACKCHANNEL_READY
+if:
+
+turn_length_ms > 1200 ms
+AND prosody_energy high
+AND trust_level > 0.3
+
+
+→ PROCESSING
+if:
+
+vad_user → silence
+
+2. BACKCHANNEL_READY
+
+This is a micro-state, lasts one tick.
+
+Action:
+
+trigger nod / “mm-hm” (no LLM)
+
+return to LISTENING
+
+Rate limit:
+
+min_interval = lerp(6s → 2s based on trust)
+
+3. PROCESSING
+
+This is the human pause window.
+
+Start timer: silence_ms = 0
+
+We wait before speaking to avoid cutting in.
+
+Dynamic wait:
+
+base_wait = 220 ms
++ 0.15 * last_turn_length
++ trust_modifier
+
+
+Where:
+
+Trust	Modifier
+Low	+180 ms
+Mid	+80 ms
+High	+0 ms
+
+Transitions:
+
+→ RESPONDING
+if:
+
+silence_ms > wait_time
+AND router_mode != DEFER
+
+
+→ LISTENING
+if user resumes speech
+
+4. RESPONDING
+
+AI speaking.
+
+Monitor:
+
+if interruption_flag == true:
+    → YIELDING
+
+
+Also:
+
+send vad_ai = speaking to router
+
+block new responses
+
+5. YIELDING (Barge-In Handling)
+
+Triggered when user starts talking while AI is speaking.
+
+Actions:
+
+stop TTS immediately (stop_tts event)
+
+play quick acknowledgment animation
+
+reset timers
+
+Transition:
+
+→ LISTENING
+
+Trust effect:
+
+At low trust, AI yields faster:
+
+barge_in_threshold = 50 ms
+
+
+At high trust, slightly slower (more assertive):
+
+barge_in_threshold = 120 ms
+
+6. HOLD (Deliberate Pause)
+
+Used for:
+
+dramatic timing
+
+emotional responses
+
+high-trust intimacy pacing
+
+Enter from PROCESSING if:
+
+intent in {COMFORTING, TEASING}
+AND trust_level > 0.6
+
+
+Hold duration:
+
+300–900 ms (scaled by arousal)
+
+
+Then → RESPONDING
+
+⏱️ Timing Summary
+
+| Parameter | Value |
+Base reaction floor | 220 ms |
+Max reaction | 900 ms |
+Backchannel min gap | 2–6 s |
+Barge-in stop latency | <120 ms |
+
+These are human-like.
+
+🧠 Trust Modulates Behavior
+Low Trust (DEFENSIVE / GUARDED)
+
+longer pauses
+
+no overlap
+
+fewer backchannels
+
+instant yielding
+
+Mid Trust
+
+normal timing
+
+occasional backchannels
+
+High Trust (WARM / INTIMATE)
+
+shorter pauses
+
+more backchannels
+
+HOLD state enabled
+
+slightly more willingness to complete sentence before yielding
+
+This is what makes interaction feel relational, not scripted.
+
+🔌 Outputs to Policy Router
+
+Each tick, TTSM emits:
+
+vad_state ∈ {SPEAKING, SILENCE, AI_SPEAKING}
+turn_phase ∈ {USER_TURN, AI_TURN, TRANSITION}
+backchannel_allowed ∈ {true, false}
+response_allowed ∈ {true, false}
+
+
+Router uses:
+
+response_allowed to avoid premature LLM calls
+
+vad_state to DEFER
+
+backchannel_allowed to skip LLM entirely
+
+🧪 Edge Cases
+Fast Interrupt Speaker
+
+Short pauses (<200 ms)
+
+Solution:
+Increase adaptive wait using rolling average of user pause length.
+
+Long Monologue User
+
+Enable periodic backchannels every 2–4 s.
+
+Emotional User (high arousal)
+
+Reduce wait time by ~80 ms → faster empathy.
+
+🧱 Implementation Skeleton
+switch(state) {
+
+  case LISTENING:
+    if (vad_user) accumulateTurn()
+    if (backchannelEligible()) emitBackchannel()
+    if (!vad_user) -> PROCESSING
+    break
+
+  case PROCESSING:
+    silence_ms += dt
+    if (vad_user) -> LISTENING
+    else if (silence_ms > wait_time) {
+        if (shouldHold()) -> HOLD
+        else -> RESPONDING
+    }
+    break
+
+  case HOLD:
+    hold_ms += dt
+    if (hold_ms > hold_target) -> RESPONDING
+    break
+
+  case RESPONDING:
+    if (interruption_flag) -> YIELDING
+    break
+
+  case YIELDING:
+    stopTTS()
+    -> LISTENING
+}
+
+
+Runs cheap. No allocations. Pure timing + flags.
+
+🧠 Memory Retrieval Policy (MRP)
+🎯 Goals
+
+Recall only when it adds value
+
+Avoid repeating the same memory too often
+
+Gate depth by trust
+
+Prefer recent → relevant → emotionally aligned
+
+Stay within latency budget
+
+📦 Memory Types (from your DB)
+
+You already have:
+
+| Type | Use |
+Episodic | “Last time you mentioned exams…” |
+Pattern | “You tend to get quiet when stressed.” |
+Semantic user facts | “You use Premiere Pro.” |
+
+We’ll treat them differently.
+
+🔐 Trust Gating
+
+Max recall depth by trust tier:
+
+| Trust | Allowed Memory |
+DEFENSIVE (<0.2) | None |
+GUARDED (0.2–0.4) | Semantic facts only |
+NEUTRAL (0.4–0.6) | + Recent episodic (last 7 days) |
+WARM (0.6–0.8) | + Older episodic |
+INTIMATE (>0.8) | + Pattern memory |
+
+Pattern memory is the creepiest → highest gate.
+
+⏱️ Latency Budget Gate
+
+Memory retrieval is skipped if:
+
+latency_budget_ms < 180
+
+
+Fast emotional turns must not stall.
+
+🧩 Recall Triggers (When to Recall)
+
+We only recall if one of these is true:
+
+1. Direct Reference Trigger
+
+User says something related to stored topic.
+
+Detected via:
+
+embedding similarity > 0.75
+
+keyword match on tagged entities
+
+2. Emotional Continuity Trigger
+
+User emotion matches a past emotional episode:
+
+|VA_current - VA_memory| < 0.25
+AND memory_emotion_intensity > 0.6
+
+
+Use case: “You seemed stressed last time too…”
+
+3. Personal Question Trigger
+
+Intent ∈ {PERSONAL, COMFORTING, PLANNING}
+
+4. Long Gap Reconnection
+
+If:
+
+days_since_last_session > 3
+AND trust > 0.5
+
+
+→ allow one light recall (“How did your project go?”)
+
+🚫 Suppression Rules (Avoid Creepiness)
+
+Never recall if:
+
+memory_used_in_last_3_turns == true
+
+same memory_used_in_last_2_sessions
+
+trust < required tier
+
+user current emotion is negative AND memory is unrelated
+
+Also:
+
+Max recalls per turn = 1
+Max recalls per minute = 2
+
+🧠 Memory Scoring Function
+
+We rank candidates with:
+
+score =
+  0.35 * semantic_similarity +
+  0.25 * recency_decay +
+  0.20 * emotional_alignment +
+  0.10 * trust_weight +
+  0.10 * novelty
+
+
+Where:
+
+Recency Decay
+recency = exp(-days / 14)
+
+Novelty
+
+Penalize recently used memories:
+
+novelty = 1 - reuse_frequency
+
+📊 Retrieval Pipeline
+if trust_gate_passed and latency_ok:
+
+    candidates = vector_search(top_k=5)
+
+    filter by:
+        trust tier
+        suppression rules
+
+    rank with score()
+
+    if top_score > 0.55:
+        selected_memory = top_1
+    else:
+        no_recall
+
+🧾 Injection Strategy (Non-Creepy Prompting)
+
+Do not inject raw memory text.
+
+Convert to soft context:
+
+Bad:
+
+“You said on January 3rd at 8:42 PM that…”
+
+Good:
+
+“Last time you mentioned your exams…”
+
+Format:
+
+<personal_context>
+User previously mentioned: {abstracted_summary}
+Relevance: {topic_tag}
+Tone: light_reference
+</personal_context>
+
+🎭 Tone Modulation by Trust
+
+| Trust | Style |
+Low | no recall |
+Mid | indirect recall (“I think you mentioned…”) |
+High | confident recall (“You told me you were editing in Premiere.”) |
+
+🧪 Pattern Memory Usage
+
+Only allowed when:
+
+trust > 0.8
+AND pattern_confidence > 0.7
+AND intent == COMFORTING
+
+
+Example:
+
+“You tend to get quiet when you’re overwhelmed — is that happening now?”
+
+Never use patterns in casual chat.
+
+🔄 Memory Update Feedback Loop
+
+After a recall, log:
+
+memory_recall_log:
+  memory_id
+  turn_id
+  user_reaction ∈ {positive, neutral, negative}
+
+
+You can infer reaction via:
+
+valence shift next turn
+
+interruption
+
+explicit correction (“I never said that”)
+
+This updates reuse_penalty.
+
+⛔ Hard Safety Rules
+
+Never recall:
+
+sensitive topics without user reintroducing them
+
+negative past events during positive mood
+
+old emotional lows in casual conversation
+
+This prevents emotional whiplash.
+
+⚙️ Implementation Skeleton
+function retrieveMemory(R):
+
+  if R.trust < trustThreshold: return NONE
+  if R.latency_budget < 180: return NONE
+  if recallQuotaExceeded(): return NONE
+
+  candidates = vectorSearch(R.query, 5)
+
+  candidates = candidates.filter(trustAllowed)
+                         .filter(notRecentlyUsed)
+                         .filter(emotionCompatible)
+
+  ranked = rankByScore(candidates)
+
+  if ranked[0].score > 0.55:
+      return abstract(ranked[0])
+  else:
+      return NONE
+🧠 Inputs
+
+Per frame (interpolated):
+
+E = {
+  valence ∈ [-1, 1],
+  arousal ∈ [0, 1]
+}
+
+intent ∈ {LISTENING, COMFORTING, TEASING, INFORMING, DEFLECTING}
+trust ∈ [0, 1]
+speaking ∈ {true, false}
+backchanneling ∈ {true, false}
+
+🧩 Output Channels
+
+| Channel | Controls |
+Face | blendshape weights |
+Eyes | gaze target, saccades, blink rate |
+Head | nod, tilt, micro sway |
+Posture | spine angle, lean |
+Breathing | chest amplitude |
+Voice | pitch, rate, energy |
+
+All outputs must be low-pass filtered.
+
+🎛️ Core Principle
+
+We do additive parameter curves, not discrete states.
+
+Each behavior parameter is:
+
+param = base
+      + valence_curve(E.valence)
+      + arousal_curve(E.arousal)
+      + intent_modifier(intent)
+      + trust_modifier(trust)
+
+
+Then smoothed with EMA.
+
+😊 Valence Mapping (Face)
+Smile Intensity
+smile = clamp( max(0, valence) ^ 1.2 )
+
+Brow Inner (sadness)
+brow_inner = clamp( max(0, -valence) * 0.8 )
+
+Lip Press (guarded)
+lip_press = (1 - trust) * 0.4
+
+⚡ Arousal Mapping
+Blink Rate (blinks/min)
+blink_rate = lerp(8 → 22, arousal)
+
+Micro-saccade Frequency
+saccade_freq = lerp(0.2 Hz → 1.2 Hz, arousal)
+
+Head Micro-Motion Amplitude
+head_noise_amp = 0.2 + 0.5 * arousal
+
+👀 Gaze System
+Listening Mode
+
+When speaking == false:
+
+gaze_target = user_face
+gaze_stability = lerp(0.9 → 0.6, arousal)
+
+
+Higher arousal → more gaze shifts.
+
+Thinking Mode (PROCESSING)
+
+Add gaze aversion:
+
+if intent == INFORMING:
+    look_away_probability = 0.35
+
+Intimacy Effect (Trust)
+
+High trust:
+
+gaze_duration += 20–40%
+blink_rate -= small amount
+
+
+Creates perceived warmth.
+
+🗣️ Speaking Behavior
+
+When speaking == true:
+
+Jaw + Lip Sync
+
+Driven by phoneme visemes (you already have).
+
+Add emotional modulation:
+
+Pitch Offset
+pitch = base_pitch
+      + 40 * valence
+      + 25 * arousal
+
+Speech Rate
+rate = base_rate * (1 + 0.25 * arousal)
+
+Energy
+volume = base_volume * (0.85 + 0.3 * arousal)
+
+
+Low valence + low arousal → slower, softer speech.
+
+🫂 Intent Modifiers
+
+These override curves.
+
+
+  LISTENING (from *Fixv2.txt)
+
+slight forward lean: +4°
+
+nod probability: 0.12 per second
+
+neutral smile cap at 0.3
+
+
+  COMFORTING (from *Fixv2.txt)
+
+head tilt: +6°
+
+blink slower: -15%
+
+voice rate: -10%
+
+gaze stability: +20%
+
+
+  TEASING (from *Fixv2.txt)
+
+asymmetric smile bias
+
+eyebrow raise micro pulses
+
+faster saccades
+
+
+  INFORMING (from *Fixv2.txt)
+
+upright posture
+
+reduced smile
+
+periodic gaze aversion (thinking cue)
+
+
+  DEFLECTING (from *Fixv2.txt)
+
+lip press +
+
+reduced gaze duration
+
+neutral prosody
+
+🫁 Breathing Loop
+
+Breathing amplitude:
+
+breath_amp = 0.6 + 0.6 * arousal
+
+
+Breathing rate:
+
+breath_rate = lerp(10 → 20 BPM, arousal)
+
+
+Sync subtle torso motion → increases realism massively.
+
+🤝 Backchannel Behavior
+
+When backchanneling == true:
+
+Trigger one of:
+
+micro nod
+
+“mm-hm” viseme
+
+brief smile pulse
+
+Selection probability weighted by valence.
+
+Duration: 300–600 ms.
+
+No gaze break.
+
+⏱️ Temporal Smoothing
+
+All parameters use:
+
+y(t) = y(t-1) + α * (target - y(t-1))
+
+
+Where:
+
+| Channel | α |
+Face | 0.12 |
+Head | 0.08 |
+Gaze | 0.18 |
+Breath | 0.05 |
+
+Prevents jitter.
+
+🚫 Uncanny Valley Guards
+
+Clamp:
+
+smile ≤ 0.75
+head_tilt ≤ 10°
+gaze_lock ≤ 4.5 s
+blink_rate ≥ 6/min
+
+
+Add stochastic noise to:
+
+blink intervals
+
+saccade timing
+
+idle sway
+
+🔄 State Coupling with Turn-Taking
+LISTENING State
+
+nod enabled
+
+high gaze
+
+mouth relaxed
+
+PROCESSING State
+
+gaze aversion pulses
+
+reduced blink
+
+slight brow activity
+
+RESPONDING State
+
+lip sync active
+
+gesture pulses on stressed words (optional)
+
+⚙️ Implementation Skeleton
+function mapEmotionToBehavior(E, intent, trust, speaking, backchanneling) {
+
+  smileTarget = f_valence(E.valence)
+  blinkTarget = f_arousal(E.arousal)
+  gazeTarget = computeGaze(intent, trust, speaking)
+
+  smile = ema(smile, smileTarget, 0.12)
+  blinkRate = ema(blinkRate, blinkTarget, 0.10)
+  headTilt = ema(headTilt, intentTilt(intent), 0.08)
+
+  if (backchanneling) triggerBackchannel()
+
+  applyToBlendshapes(smile, brow, lipPress)
+  applyToSkeleton(headTilt, lean)
+}
+
+
+Runs per frame. No allocations.
+
+ack.
+
+
+🧠 Interaction Outcome Model (IOM)
+🎯 Goals
+
+Measure:
+
+Did the user stay engaged?
+
+Did interruptions decrease?
+
+Did emotional valence improve?
+
+Did trust increase?
+
+Did memory recalls help or hurt?
+
+Outputs:
+
+reward_score ∈ [-1, +1]
+
+
+Stored per turn and per session.
+
+📦 Inputs (Per Turn)
+O_turn = {
+  user_valence_before,
+  user_valence_after,
+  turn_duration_ms,
+  user_interrupt_flag,
+  ai_interrupt_flag,
+  response_latency_ms,
+  backchannel_used,
+  memory_recall_used,
+  trust_before,
+  trust_after,
+  user_silence_after_ms,
+  session_active_flag
+}
+
+
+All of these you already track or can derive.
+
+🧩 Core Metrics
+1. Valence Shift
+ΔV = user_valence_after - user_valence_before
+
+
+Normalized to [-1, 1].
+
+Positive shift → good.
+
+2. Engagement Score
+
+Proxy for “user interest”:
+
+engagement =
+  clamp(turn_duration_ms / 4000, 0, 1)
+
+
+Longer voluntary speech → higher engagement.
+
+3. Interruption Penalty
+
+User interrupting AI = bad timing.
+
+interrupt_penalty = user_interrupt_flag ? -0.4 : 0
+
+
+AI interrupting user = worse:
+
+ai_interrupt_penalty = ai_interrupt_flag ? -0.6 : 0
+
+4. Latency Satisfaction
+
+Ideal response window:
+
+| Latency | Score |
+<250 ms | +0.2 |
+250–600 ms | +0.1 |
+
+900 ms | -0.2 |
+
+5. Trust Delta
+ΔT = trust_after - trust_before
+
+
+Scaled:
+
+trust_score = ΔT * 2
+
+6. Memory Recall Effect
+
+Only evaluated if recall happened.
+
+We look at next-turn valence shift:
+
+if memory_recall_used:
+    if next_turn_valence ↑ → +0.15
+    if next_turn_valence ↓ → -0.25
+
+
+This teaches the system which memories are welcome.
+
+🧮 Turn Reward Function
+reward_turn =
+  0.30 * ΔV +
+  0.20 * engagement +
+  0.20 * trust_score +
+  latency_score +
+  interrupt_penalty +
+  ai_interrupt_penalty +
+  memory_effect
+
+
+Clamp to [-1, 1].
+
+📊 Session-Level Metrics
+
+Computed on session end.
+
+1. Session Length Score
+session_score = clamp(total_minutes / 10, 0, 1)
+
+2. Valence Trend
+
+Linear regression slope over session valence.
+
+Positive slope → good.
+
+3. Trust Gain
+session_trust_gain = trust_end - trust_start
+
+🧮 Session Reward
+reward_session =
+  0.4 * avg(turn_rewards) +
+  0.3 * session_score +
+  0.3 * session_trust_gain
+
+🗃️ Logging Schema
+
+Add table:
+
+interaction_outcomes:
+  turn_id
+  reward_turn
+  delta_valence
+  engagement
+  latency
+  user_interrupt
+  ai_interrupt
+  memory_used
+  trust_delta
+
+
+Session table add:
+
+reward_session
+valence_trend
+avg_latency
+interrupt_rate
+
+🚫 Real-Time Safety
+
+This model must not:
+
+modify behavior live
+
+change trust directly
+
+override router
+
+It is observer only.
+
+Learning happens offline.
+
+🧠 Reward Interpretation
+
+Over many sessions you learn:
+
+which response latencies reduce interruptions
+
+when memory recall increases valence
+
+which intents produce longer engagement
+
+optimal pause timing per user
+
+This becomes training data for:
+
+➡️ neural social policy
+➡️ personalized timing model
+➡️ memory selection weights
+
+🔍 Derived KPIs (Dashboard)
+
+You can compute:
+
+interruption_rate_per_session
+
+valence_lift_per_minute
+
+trust_gain_per_10_turns
+
+recall_success_rate
+
+These tell you if the system is actually improving, not just running.
+
+⚙️ Implementation Skeleton
+function computeTurnReward(O) {
+
+  dV = O.valence_after - O.valence_before
+  engagement = clamp(O.turn_duration / 4000, 0, 1)
+  trustScore = (O.trust_after - O.trust_before) * 2
+  latencyScore = latencyBucket(O.response_latency)
+
+  reward =
+    0.30 * dV +
+    0.20 * engagement +
+    0.20 * trustScore +
+    latencyScore +
+    interruptPenalty(O) +
+    memoryEffect(O)
+
+  return clamp(reward, -1, 1)
+}
+
+
+
+➡️ Offline training pipeline for the neural social policy

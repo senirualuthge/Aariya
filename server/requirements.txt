@@ -1,0 +1,64 @@
+# BUG #6 FIX: chromadb, sentence-transformers, and trafilatura were documented
+# in §4.1 tech stack but missing from this file. Added below.
+
+fastapi>=0.111.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+websockets>=11.0
+openai>=1.0.0
+faster-whisper>=0.10.0
+webrtcvad-wheels>=2.0.10
+sounddevice>=0.4.6
+numpy>=1.24.0
+redis>=4.6.0
+psycopg2-binary>=2.9.7
+python-dotenv>=1.0.0
+rich>=13.0.0
+
+# Memory & semantic search (§4.1 — were missing)
+# SECURITY NOTE: PYSEC-2026-311 / CVE-2026-45829 (pre-auth code injection in
+# chroma's HTTP server API, versions 1.0.0-1.5.9) has NO patched release yet
+# (1.5.9 is the newest on PyPI). This project uses chromadb ONLY as an embedded
+# library (PersistentClient/Client — no chroma HTTP server is mounted, no
+# /api/v2 routes are exposed), so the injection surface is not reachable here.
+# Re-check for a fixed release before ever exposing chroma's server API.
+chromadb>=0.4.0
+sentence-transformers>=2.5.0
+
+# LSTM emotion forecasting (server/systems/emotion/predictor.py — trains on
+# autonomy_snapshots history; graceful no-op when absent)
+torch>=2.0.0
+
+# Web Intelligence Agent (§3.18 — was missing)
+trafilatura>=1.6.0
+# HTML fallback extraction (server/systems/agent/retriever.py)
+beautifulsoup4>=4.12.0
+# Symbolic hallucination veto — Z3 SMT solver (server/systems/agent/symbolic_validator.py)
+z3-solver>=4.12.0
+
+# ── Test suite (server/tests — pytest-based) ────────────────────────────────
+pytest>=8.0.0
+
+# ── Real-time voice (server/realtime/webrtc_server.py) ─────────────────────
+# aiortc powers the /offer WebRTC voice endpoint consumed by the mobile app.
+aiortc>=1.9.0
+edge-tts>=6.1.0
+
+# ── Security Scanners (DevSecOps) ───────────────────────────────────────────
+# SAST: static analysis of Python code for security flaws (hardcoded secrets,
+# weak crypto, shell injection, etc.)
+bandit>=1.7.8
+
+# SCA: audit installed packages against NVD/PyPI Advisory DB for known CVEs
+pip-audit>=2.7.0
+
+# ── Security hardening pins (2026-08 triage — pip-audit findings) ────────────
+# Floors so fresh installs can never regress to vulnerable versions.
+aiohttp>=3.14.3        # 14 advisories on 3.13.5 (PYSEC-2026-2104/2105/2106/2107/2108/2109/2110/2111/2112/2113/237/3545/3546/3547)
+cryptography>=49.0.0    # GHSA-537c-gmf6-5ccf + PYSEC-2026-3552/3553/3554 on 46.0.7
+pyopenssl>=26.4.0       # allows cryptography>=49 (26.0.0 pinned <47)
+click>=8.3.3            # PYSEC-2026-2132
+idna>=3.15              # PYSEC-2026-215
+msgpack>=1.2.1          # PYSEC-2026-3625
+setuptools>=83.0.0      # PYSEC-2026-3447
+pip>=26.1.2             # PYSEC-2026-196/2875/2876

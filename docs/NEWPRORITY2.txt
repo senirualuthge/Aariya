@@ -1,0 +1,6177 @@
+STEP 8 — Cognitive Blackboard & Working Memory (The Conscious Workspace)
+
+This is the component that transforms Aariya from an AI assistant into a cognitive architecture.
+
+The Blackboard is not memory.
+
+The Blackboard is not the World Model.
+
+The Blackboard is not the LLM context.
+
+It is the temporary workspace where thinking happens.
+
+Think of it as the human working memory.
+
+8.1 Why a Blackboard?
+
+Without one:
+
+User
+
+↓
+
+Planner
+
+↓
+
+LLM
+
+↓
+
+Answer
+
+Everything depends on one large prompt.
+
+With a Blackboard:
+
+Speech
+
+Vision
+
+Memory
+
+World Model
+
+Goal Manager
+
+Reasoner
+
+Critical Thinking
+
+↓
+
+BLACKBOARD
+
+↓
+
+Planner
+
+↓
+
+Decision
+
+Every cognitive module contributes to the same workspace.
+
+8.2 Cognitive Architecture
+                   WORLD MODEL
+
+                         │
+
+                         ▼
+
+                Cognitive Blackboard
+
+      ┌────────────┬────────────┬────────────┐
+
+      ▼            ▼            ▼
+
+ Attention    Hypotheses     Evidence
+
+      ▼            ▼            ▼
+
+ Working Memory   Planner   Critical Thinking
+
+                         │
+
+                         ▼
+
+                     Decision
+8.3 Responsibilities
+
+The Blackboard stores only temporary information.
+
+Examples
+
+Current question
+Active reasoning
+Intermediate conclusions
+Competing hypotheses
+Current attention
+Evidence
+Confidence
+Planner notes
+Tool outputs
+
+Nothing permanent.
+
+8.4 Blackboard Object
+from dataclasses import dataclass
+from datetime import datetime
+
+@dataclass
+class BlackboardEntry:
+
+    id:str
+
+    source:str
+
+    type:str
+
+    content:dict
+
+    confidence:float
+
+    created_at:datetime
+
+    expires_at:datetime|None
+8.5 Working Memory
+
+Unlike long-term memory
+
+Working memory is small.
+
+Example
+
+User asked:
+
+Explain recursion
+
+↓
+
+Current Goal
+
+↓
+
+Conversation
+
+↓
+
+Retrieved Memories
+
+↓
+
+Current Plan
+
+↓
+
+Temporary Notes
+
+When the conversation ends
+
+↓
+
+Working memory clears.
+
+8.6 Attention Manager
+
+Aariya cannot think about everything.
+
+Attention chooses
+
+1000 memories
+
+↓
+
+Attention
+
+↓
+
+15 memories
+
+↓
+
+Reasoning
+
+Just like humans.
+
+Attention Score
+
+Example
+
+Importance
+
+Recency
+
+Confidence
+
+User Focus
+
+Goal Relevance
+
+↓
+
+Attention Score
+
+Highest scores enter working memory.
+
+8.7 Hypothesis Engine
+
+Critical thinking begins here.
+
+Example
+
+User says
+
+"My internet is slow."
+
+Hypotheses
+
+WiFi issue
+
+ISP outage
+
+Background downloads
+
+Router failure
+
+Device problem
+
+Not answers.
+
+Possibilities.
+
+8.8 Evidence Accumulator
+
+Each hypothesis gains evidence.
+
+Router Restarted
+
++
+
+Other Devices Slow
+
++
+
+Speed Test
+
+↓
+
+ISP Problem
+
+Confidence 92%
+
+Evidence continuously updates confidence.
+
+8.9 Cognitive Focus
+
+Only one major cognitive focus exists.
+
+Example
+
+Study
+
+↓
+
+Ignore unrelated jokes
+
+↓
+
+Stay focused
+
+Later
+
+Emergency
+
+↓
+
+Override Focus
+
+↓
+
+Safety
+8.10 Reasoning Scratchpad
+
+Temporary notes.
+
+Example
+
+Step 1
+
+Find assignment
+
+↓
+
+Step 2
+
+Read requirements
+
+↓
+
+Step 3
+
+Generate outline
+
+↓
+
+Step 4
+
+Review
+
+Nothing stored permanently.
+
+8.11 Multi-Agent Collaboration
+
+Planner writes
+
+↓
+
+Blackboard
+
+Reasoner reads
+
+↓
+
+Blackboard
+
+Critical Thinking writes
+
+↓
+
+Blackboard
+
+Memory updates
+
+↓
+
+Blackboard
+
+Everyone collaborates.
+
+8.12 Cognitive Pipeline
+Question
+
+↓
+
+Attention
+
+↓
+
+Retrieve Memories
+
+↓
+
+Retrieve Context
+
+↓
+
+Generate Hypotheses
+
+↓
+
+Evaluate Evidence
+
+↓
+
+Critical Thinking
+
+↓
+
+Planner
+
+↓
+
+Decision
+
+↓
+
+Response
+
+This becomes every reasoning cycle.
+
+8.13 Blackboard Zones
+
+Separate the workspace.
+
+Focus Zone
+
+Reasoning Zone
+
+Evidence Zone
+
+Tool Results
+
+Goals
+
+Plans
+
+Temporary Notes
+
+No mixing.
+
+8.14 Memory Layers
+Long-Term Memory
+
+↓
+
+Retrieve
+
+↓
+
+Working Memory
+
+↓
+
+Blackboard
+
+↓
+
+Reasoning
+
+↓
+
+Decision
+
+↓
+
+Forget
+
+or
+
+Save
+
+A clear flow.
+
+8.15 Blackboard Events
+blackboard.entry.created
+
+blackboard.entry.updated
+
+blackboard.entry.deleted
+
+hypothesis.created
+
+evidence.updated
+
+attention.changed
+
+focus.changed
+
+Everything is observable.
+
+8.16 Context Window Manager
+
+Future LLMs have limits.
+
+Blackboard chooses
+
+Current Goal
+
+Relevant Memories
+
+Current Context
+
+Current Hypotheses
+
+↓
+
+LLM Prompt
+
+Instead of sending everything.
+
+8.17 Collaboration Example
+
+User
+
+"Should I buy a motorcycle?"
+
+Pipeline
+
+Goal Manager
+
+↓
+
+Memory
+
+↓
+
+World Model
+
+↓
+
+Budget Information
+
+↓
+
+Critical Thinking
+
+↓
+
+Risk Analysis
+
+↓
+
+Planner
+
+↓
+
+Decision
+
+Each contributes to the Blackboard before any answer is produced.
+
+8.18 Blackboard API
+
+Example
+
+blackboard.add()
+
+blackboard.remove()
+
+blackboard.find()
+
+blackboard.update()
+
+blackboard.clear()
+
+blackboard.expire()
+
+blackboard.current_focus()
+8.19 Folder Structure
+capabilities/
+
+blackboard/
+
+├── capability.py
+├── entry.py
+├── attention.py
+├── hypotheses.py
+├── evidence.py
+├── focus.py
+├── scratchpad.py
+├── working_memory.py
+├── context_window.py
+├── collaboration.py
+├── monitor.py
+├── events.py
+└── tests/
+8.20 Blackboard Rules
+The Blackboard stores only temporary cognitive state.
+Long-term facts belong in Memory, not the Blackboard.
+Every entry has a lifetime (TTL).
+Attention limits what enters Working Memory.
+Hypotheses are separate from facts.
+Evidence changes confidence, not truth directly.
+All reasoning-capable modules use the Blackboard for collaboration.
+The Blackboard is cleared or pruned as tasks complete.
+Updates are event-driven and traceable.
+The Blackboard is the only shared workspace for active cognition.
+8.21 Integration with Previous Steps
+User
+
+↓
+
+Speech
+
+↓
+
+Goal Manager
+
+↓
+
+World Model
+
+↓
+
+Memory
+
+↓
+
+BLACKBOARD
+
+↓
+
+Critical Thinking
+
+↓
+
+Reasoner
+
+↓
+
+Planner
+
+↓
+
+Scheduler
+
+↓
+
+Capabilities
+
+↓
+
+Response
+
+Notice that Critical Thinking and Reasoning are now separate stages. That distinction is intentional:
+
+Reasoning generates and evaluates possible conclusions.
+Critical Thinking challenges those conclusions, looks for missing evidence, tests assumptions, and searches for alternative explanations before a decision is finalized.
+
+Critical Addition Before Step 9
+
+This is where I'd introduce a component that many AI systems lack:
+
+Meta-Cognition (Thinking About Thinking)
+
+So far, Aariya can:
+
+Remember
+Plan
+Manage goals
+Build a world model
+Maintain working memory
+
+But it still doesn't evaluate its own reasoning process.
+
+A Meta-Cognition layer would monitor:
+
+Confidence in conclusions
+Signs of conflicting evidence
+Whether more information is needed
+Whether a different reasoning strategy would be better
+Whether to ask the user a clarifying question instead of guessing
+
+This supervisory layer helps prevent overconfidence and improves decision quality.
+
+
+STEP 9 — Meta-Cognition & Critical Thinking Engine (Thinking About Thinking)
+
+This is where Aariya becomes fundamentally different from a standard AI assistant.
+
+Most AI systems follow this pattern:
+
+Input
+
+↓
+
+LLM
+
+↓
+
+Output
+
+Aariya should instead follow:
+
+Input
+
+↓
+
+Reasoning
+
+↓
+
+Critical Thinking
+
+↓
+
+Meta-Cognition
+
+↓
+
+Decision
+
+↓
+
+Reflection
+
+↓
+
+Response
+
+The system evaluates its own reasoning before responding.
+
+9.1 Cognitive Stack
+                 USER
+
+                   │
+
+                   ▼
+
+             Goal Manager
+
+                   │
+
+                   ▼
+
+             World Model
+
+                   │
+
+                   ▼
+
+          Cognitive Blackboard
+
+                   │
+
+          ┌────────┴─────────┐
+
+          ▼                  ▼
+
+     Reasoning       Critical Thinking
+
+          │                  │
+
+          └────────┬─────────┘
+
+                   ▼
+
+            Meta-Cognition
+
+                   │
+
+                   ▼
+
+              Final Decision
+9.2 Responsibilities
+
+The Meta-Cognition Engine does not solve problems.
+
+Instead it supervises the thinking process.
+
+It answers:
+
+Am I confident?
+Did I overlook evidence?
+Should I ask a question?
+Are there contradictions?
+Which reasoning strategy should I use?
+Is there a better solution?
+9.3 Major Components
+critical_thinking/
+
+├── Meta-Cognition
+├── Reflection Engine
+├── Confidence Engine
+├── Assumption Tracker
+├── Bias Detector
+├── Evidence Validator
+├── Alternative Generator
+├── Strategy Selector
+├── Decision Auditor
+├── Explanation Generator
+└── Learning Feedback
+9.4 Reasoning Pipeline
+
+Instead of
+
+Question
+
+↓
+
+Answer
+
+Use
+
+Question
+
+↓
+
+Understand
+
+↓
+
+Retrieve Knowledge
+
+↓
+
+Generate Hypotheses
+
+↓
+
+Evaluate Evidence
+
+↓
+
+Challenge Assumptions
+
+↓
+
+Look for Alternatives
+
+↓
+
+Estimate Confidence
+
+↓
+
+Choose Best Answer
+
+↓
+
+Explain Why
+9.5 Assumption Tracker
+
+Every conclusion contains assumptions.
+
+Example
+
+User:
+
+"My PC won't turn on."
+
+Assumptions
+
+Power available
+
+Battery charged
+
+Power button works
+
+Motherboard works
+
+Instead of treating assumptions as facts.
+
+9.6 Evidence Validator
+
+Every conclusion must have evidence.
+
+Example
+
+Internet Slow
+
+↓
+
+Evidence
+
+Speed Test
+
+WiFi Signal
+
+Other Devices
+
+Router Logs
+
+↓
+
+Conclusion
+
+Unsupported conclusions are flagged.
+
+9.7 Alternative Generator
+
+Never stop after one answer.
+
+Example
+
+Problem
+
+↓
+
+Hypothesis A
+
+↓
+
+Hypothesis B
+
+↓
+
+Hypothesis C
+
+↓
+
+Compare
+
+The best-supported option wins.
+
+9.8 Confidence Engine
+
+Every decision receives a confidence score.
+
+Example
+
+Answer
+
+Confidence
+
+96%
+
+Evidence
+
+Strong
+
+Risk
+
+Low
+
+Low confidence may trigger clarification.
+
+9.9 Clarification Policy
+
+If confidence is too low:
+
+Confidence
+
+42%
+
+↓
+
+Ask User
+
+↓
+
+Receive More Information
+
+↓
+
+Reason Again
+
+Avoid guessing.
+
+9.10 Strategy Selector
+
+Different problems require different thinking.
+
+Example
+
+Math
+
+↓
+
+Logical Reasoning
+Programming
+
+↓
+
+Step-by-Step Analysis
+Planning
+
+↓
+
+Hierarchical Planning
+Creative Writing
+
+↓
+
+Divergent Thinking
+
+The engine chooses the appropriate strategy.
+
+9.11 Reflection Engine
+
+After every major decision:
+
+Decision
+
+↓
+
+Was it successful?
+
+↓
+
+Yes
+
+↓
+
+Store Experience
+
+No
+
+↓
+
+Analyze Failure
+
+↓
+
+Improve
+
+Reflection creates continuous improvement.
+
+9.12 Bias Detector
+
+Checks for cognitive errors such as:
+
+Confirmation Bias
+
+Anchoring
+
+Overconfidence
+
+Incomplete Evidence
+
+Circular Reasoning
+
+False Cause
+
+Availability Bias
+
+It doesn't eliminate them completely, but it raises warnings.
+
+9.13 Decision Auditor
+
+Every important decision gets an audit record.
+
+Decision
+
+↓
+
+Evidence Used
+
+↓
+
+Assumptions
+
+↓
+
+Alternatives
+
+↓
+
+Confidence
+
+↓
+
+Chosen Solution
+
+↓
+
+Reason
+
+Useful for debugging and explainability.
+
+9.14 Self-Monitor
+
+The engine constantly evaluates itself.
+
+Questions include:
+
+Am I uncertain?
+
+Need more memory?
+
+Need web search?
+
+Need vision?
+
+Need clarification?
+
+Need another capability?
+
+This prevents premature conclusions.
+
+9.15 Multi-Pass Reasoning
+
+Instead of one reasoning pass:
+
+Pass 1
+
+↓
+
+Draft Answer
+
+↓
+
+Pass 2
+
+Challenge Answer
+
+↓
+
+Pass 3
+
+Improve Answer
+
+↓
+
+Pass 4
+
+Final Review
+
+The number of passes can depend on task complexity.
+
+9.16 Critical Thinking Cycle
+Question
+
+↓
+
+Facts
+
+↓
+
+Assumptions
+
+↓
+
+Evidence
+
+↓
+
+Alternatives
+
+↓
+
+Risks
+
+↓
+
+Decision
+
+↓
+
+Reflection
+
+This cycle is the heart of Aariya's reasoning.
+
+9.17 Learning Feedback
+
+If a prediction was wrong:
+
+Prediction
+
+↓
+
+Reality
+
+↓
+
+Difference
+
+↓
+
+Update Confidence
+
+↓
+
+Improve Future Decisions
+
+This is about calibrating confidence and strategies, not automatically rewriting the system.
+
+9.18 API Example
+critical_thinking.analyze(problem)
+
+critical_thinking.challenge(plan)
+
+critical_thinking.reflect(result)
+
+critical_thinking.score_confidence()
+
+critical_thinking.generate_alternatives()
+
+critical_thinking.audit()
+9.19 Folder Structure
+capabilities/
+
+critical_thinking/
+
+├── capability.py
+├── meta_cognition.py
+├── strategy_selector.py
+├── assumption_tracker.py
+├── evidence_validator.py
+├── alternative_generator.py
+├── confidence.py
+├── bias_detector.py
+├── reflection.py
+├── auditor.py
+├── explanation.py
+├── learning_feedback.py
+├── events.py
+└── tests/
+9.20 Interaction with Other Components
+Memory
+      │
+World Model
+      │
+Goal Manager
+      │
+Blackboard
+      │
+Reasoner
+      │
+Critical Thinking
+      │
+Meta-Cognition
+      │
+Planner
+      │
+Scheduler
+      │
+Execution
+
+Meta-Cognition supervises the reasoning pipeline before plans are committed.
+
+9.21 Decision Flow Example
+
+User asks:
+
+"Should I buy a Kawasaki ZX-4RR or save my money?"
+
+Aariya's internal flow might be:
+
+Goal
+Understand user's objective
+        │
+Retrieve Memory
+Budget, preferences, previous discussions
+        │
+World Model
+Current financial situation (if known)
+        │
+Generate Alternatives
+Buy now / Wait / Consider another bike
+        │
+Evaluate Evidence
+Costs, benefits, risks
+        │
+Challenge Assumptions
+Do we know the user's budget?
+        │
+Confidence Check
+Not enough information
+        │
+Ask Clarifying Question
+"What budget are you working with?"
+        │
+Re-evaluate
+        │
+Recommendation
+
+Notice that it asks for missing information instead of pretending certainty.
+
+9.22 Rules
+Never confuse assumptions with facts.
+Confidence is earned through evidence.
+Always consider alternatives before major decisions.
+Ask for clarification when evidence is insufficient.
+Reflection happens after significant outcomes.
+Reasoning strategies are selected based on the problem.
+Decision audits are retained for transparency.
+Bias detection informs the process but does not replace evidence.
+Meta-Cognition supervises; it does not execute tasks.
+Learning adjusts future reasoning strategies rather than rewriting core architecture automatically.
+
+STEP 10 — Executive Orchestrator & Cognitive Control Loop (The Conductor of Aariya)
+
+This is the layer that ties everything together.
+
+If the Kernel is the Operating System...
+
+If the World Model is the Brain...
+
+If the Memory is Long-Term Knowledge...
+
+If the Blackboard is Working Memory...
+
+If the Critical Thinking Engine evaluates ideas...
+
+Then the Executive Orchestrator is the Prefrontal Cortex.
+
+It decides what happens next.
+
+10.1 What is the Executive Orchestrator?
+
+The Executive Orchestrator never performs intelligence itself.
+
+Instead it continuously asks:
+
+What is happening?
+
+What am I trying to achieve?
+
+What do I already know?
+
+What information is missing?
+
+Should I think more?
+
+Should I ask the user?
+
+Should I use tools?
+
+Should I execute?
+
+Should I wait?
+10.2 Overall Architecture
+                    USER
+
+                      │
+
+                      ▼
+
+          Executive Orchestrator
+
+──────────────────────────────────────────
+
+        Goal Manager
+
+        Context Engine
+
+        World Model
+
+        Blackboard
+
+        Memory
+
+        Planner
+
+        Critical Thinking
+
+        Scheduler
+
+──────────────────────────────────────────
+
+              Capability System
+
+The Executive Orchestrator owns the complete cognitive cycle.
+
+10.3 Responsibilities
+
+It is responsible for:
+
+✔ Cognitive routing
+
+✔ Attention management
+
+✔ Tool selection
+
+✔ Planning control
+
+✔ Execution approval
+
+✔ Reflection
+
+✔ Resource awareness
+
+✔ Recovery
+
+✔ Interrupt handling
+
+✔ Continuous thinking
+
+10.4 Main Cognitive Loop
+
+Instead of
+
+User
+
+↓
+
+LLM
+
+↓
+
+Answer
+
+Aariya becomes
+
+Observe
+
+↓
+
+Understand
+
+↓
+
+Retrieve Memory
+
+↓
+
+Update World Model
+
+↓
+
+Build Blackboard
+
+↓
+
+Reason
+
+↓
+
+Critical Thinking
+
+↓
+
+Need More Information?
+
+↓
+
+YES
+
+↓
+
+Ask User
+
+↓
+
+NO
+
+↓
+
+Plan
+
+↓
+
+Need Tools?
+
+↓
+
+YES
+
+↓
+
+Execute
+
+↓
+
+Observe Results
+
+↓
+
+Reflect
+
+↓
+
+Learn
+
+↓
+
+Finish
+
+This loop runs continuously.
+
+10.5 Cognitive State Machine
+Idle
+
+↓
+
+Observe
+
+↓
+
+Understand
+
+↓
+
+Reason
+
+↓
+
+Plan
+
+↓
+
+Execute
+
+↓
+
+Monitor
+
+↓
+
+Reflect
+
+↓
+
+Learn
+
+↓
+
+Idle
+
+Every interaction follows this cycle.
+
+10.6 Executive States
+Idle
+
+Listening
+
+Thinking
+
+Planning
+
+Executing
+
+Monitoring
+
+Learning
+
+Sleeping
+
+Emergency
+
+Only one major executive state is active at a time.
+
+10.7 Executive Decisions
+
+Every cycle the orchestrator decides:
+
+Should I answer?
+
+Should I wait?
+
+Need memory?
+
+Need reasoning?
+
+Need web?
+
+Need vision?
+
+Need robot?
+
+Need clarification?
+
+Need planning?
+
+Need execution?
+
+Need reflection?
+
+No capability makes these decisions alone.
+
+10.8 Decision Tree
+
+Example
+
+User:
+
+"Find my glasses."
+
+Understand Request
+
+↓
+
+Need Memory?
+
+↓
+
+YES
+
+↓
+
+Need Vision?
+
+↓
+
+YES
+
+↓
+
+Need Robot?
+
+↓
+
+Maybe
+
+↓
+
+Need Planner?
+
+↓
+
+YES
+
+↓
+
+Execute Search
+
+The Executive decides the path.
+
+10.9 Tool Selection
+
+Instead of hardcoding
+
+Question
+
+↓
+
+LLM
+
+Use
+
+Question
+
+↓
+
+Executive
+
+↓
+
+Choose
+
+Memory
+
+Vision
+
+Calculator
+
+Browser
+
+OSINT
+
+Critical Thinking
+
+Planner
+
+Robot
+
+Every capability becomes a tool.
+
+10.10 Interrupt Management
+
+Suppose Aariya is speaking.
+
+Suddenly
+
+Smoke Detector
+
+↓
+
+Emergency
+
+↓
+
+Interrupt Speech
+
+↓
+
+Switch Priority
+
+↓
+
+Emergency Response
+
+Executive always owns interruptions.
+
+10.11 Attention Switching
+
+Example
+
+Study Session
+
+↓
+
+Phone Rings
+
+↓
+
+Evaluate Importance
+
+↓
+
+Ignore
+
+or
+
+Switch Focus
+
+Like a human brain.
+
+10.12 Multi-Goal Management
+
+Current goals
+
+Study
+
+↓
+
+Reminder
+
+↓
+
+Music
+
+↓
+
+Battery Low
+
+↓
+
+Robot Charging
+
+Executive prioritizes.
+
+10.13 Thinking Budget
+
+Not every problem deserves deep reasoning.
+
+Simple
+
+2+2
+
+↓
+
+One reasoning pass
+
+Complex
+
+Design AI Architecture
+
+↓
+
+Multiple reasoning cycles
+
+↓
+
+Critical Thinking
+
+↓
+
+Reflection
+
+↓
+
+Review
+
+Executive chooses the thinking depth.
+
+10.14 Resource Budget
+
+Executive monitors
+
+GPU
+
+CPU
+
+RAM
+
+Battery
+
+Temperature
+
+Network
+
+Heavy reasoning may be postponed if resources are constrained.
+
+10.15 Self Monitoring
+
+Executive continuously checks
+
+Planner Healthy?
+
+Memory Healthy?
+
+Vision Healthy?
+
+Speech Healthy?
+
+Robot Healthy?
+
+Event Bus Healthy?
+
+If something fails
+
+↓
+
+Recovery.
+
+10.16 Recovery Manager
+
+Planner crashes
+
+↓
+
+Executive detects
+
+↓
+
+Restart Planner
+
+↓
+
+Resume Goal
+
+↓
+
+Continue
+
+No system restart.
+
+10.17 Reflection Loop
+
+After execution
+
+Goal Finished
+
+↓
+
+Successful?
+
+↓
+
+YES
+
+↓
+
+Store Experience
+
+↓
+
+Improve Confidence
+
+↓
+
+Return Idle
+
+Or
+
+Failed
+
+↓
+
+Analyze
+
+↓
+
+Re-plan
+
+↓
+
+Retry
+10.18 Cognitive Policies
+
+Policies define behavior.
+
+Examples
+
+Never interrupt emergency.
+
+Never answer with confidence below threshold without clarification.
+
+Never execute dangerous actions without approval.
+
+Always reflect after complex planning.
+
+Always save important experiences.
+
+Policies are configurable, not hardcoded.
+
+10.19 Executive API
+executive.observe()
+
+executive.reason()
+
+executive.plan()
+
+executive.execute()
+
+executive.reflect()
+
+executive.learn()
+
+executive.pause()
+
+executive.resume()
+
+executive.shutdown()
+
+The rest of the system interacts through these high-level actions.
+
+10.20 Folder Structure
+capabilities/
+
+executive/
+
+├── capability.py
+├── executive.py
+├── cognitive_loop.py
+├── state_machine.py
+├── decision_router.py
+├── tool_selector.py
+├── attention_manager.py
+├── interrupt_manager.py
+├── recovery.py
+├── reflection.py
+├── policies.py
+├── resource_monitor.py
+├── monitor.py
+├── events.py
+└── tests/
+10.21 Complete Cognitive Cycle
+                 USER
+
+                   │
+
+                   ▼
+
+        Executive Orchestrator
+
+                   │
+
+         Observe Environment
+
+                   │
+
+                   ▼
+
+          World Model Update
+
+                   │
+
+                   ▼
+
+          Retrieve Memories
+
+                   │
+
+                   ▼
+
+      Populate Blackboard
+
+                   │
+
+                   ▼
+
+        Critical Thinking
+
+                   │
+
+                   ▼
+
+        Need More Information?
+
+          │            │
+
+         YES          NO
+
+          │            │
+
+ Ask User       Generate Plan
+
+                     │
+
+                     ▼
+
+          Scheduler
+
+                     │
+
+                     ▼
+
+           Execute Capabilities
+
+                     │
+
+                     ▼
+
+         Observe Outcome
+
+                     │
+
+                     ▼
+
+           Reflection
+
+                     │
+
+                     ▼
+
+             Learn
+
+                     │
+
+                     ▼
+
+             Idle
+10.22 Executive Rules
+The Executive is the only component that controls the full cognitive cycle.
+It coordinates capabilities but does not replace them.
+All execution decisions pass through policy and permission checks.
+It chooses the appropriate reasoning depth based on task complexity.
+It can interrupt, suspend, or resume goals.
+It continuously monitors system health and recovery.
+It triggers reflection after significant outcomes.
+It keeps cognition explainable by recording why decisions were made.
+It avoids unnecessary computation by selecting only the capabilities needed.
+It is deterministic in control flow, while allowing nondeterministic reasoning inside reasoning modules.
+
+
+nstead of:
+
+Executive
+     │
+     ▼
+ Skill Registry
+     │
+     ▼
+Capabilities
+
+Use:
+
+Executive
+     │
+     ▼
+Task Planner
+     │
+     ▼
+Skill Registry
+     │
+     ▼
+Skill
+     │
+     ▼
+Capability
+     │
+     ▼
+Provider
+
+For example:
+
+Skill:
+Read PDF
+
+↓
+
+Capability:
+Document Processing
+
+↓
+
+Provider:
+PyMuPDF
+pdfplumber
+OCR
+Future PDF Engine
+
+The Executive only knows skills, not implementations.
+
+STEP 11 — Universal Skill Framework & Tool Registry
+
+This is one of the biggest milestones.
+
+After this step Aariya changes from
+
+"AI that can think"
+
+to
+
+"AI that can think and act."
+
+11.1 Architecture
+                    Executive
+
+                        │
+
+                        ▼
+
+                Task Planner
+
+                        │
+
+                        ▼
+
+                 Skill Registry
+
+──────────────────────────────────────────
+
+Skill Resolver
+
+Permission Manager
+
+Version Manager
+
+Telemetry
+
+Workflow Engine
+
+──────────────────────────────────────────
+
+                        │
+
+        ┌───────────────┼────────────────┐
+
+        ▼               ▼                ▼
+
+    Memory Skill   Vision Skill   Browser Skill
+
+        ▼               ▼                ▼
+
+   Memory Cap.     Vision Cap.    Browser Cap.
+
+        ▼               ▼                ▼
+
+     Provider       Provider        Provider
+11.2 Why Skills?
+
+Capabilities are too large.
+
+Example
+
+Memory Capability
+
+contains
+
+Store
+
+Retrieve
+
+Search
+
+Summarize
+
+Forget
+
+Consolidate
+
+Embed
+
+Backup
+
+Each becomes its own Skill.
+
+11.3 Skill Definition
+
+A Skill performs one atomic action.
+
+Examples
+
+memory.store
+
+memory.retrieve
+
+memory.search
+
+browser.search
+
+browser.open
+
+vision.detect_person
+
+vision.detect_object
+
+tts.speak
+
+speech.listen
+
+email.send
+
+calendar.create
+
+robot.move
+
+robot.pick
+
+robot.navigate
+
+osint.search_username
+
+document.read_pdf
+
+document.summarize
+
+database.query
+
+Planner reasons over Skills.
+
+11.4 Universal Skill Interface
+from abc import ABC, abstractmethod
+
+class Skill(ABC):
+
+    @property
+    @abstractmethod
+    def metadata(self):
+        """Return immutable skill metadata."""
+        ...
+
+    @abstractmethod
+    async def validate(self, request):
+        """Validate input schema and permissions."""
+        ...
+
+    @abstractmethod
+    async def execute(self, request):
+        """Run the skill."""
+        ...
+
+    @abstractmethod
+    async def health(self):
+        """Return health/availability."""
+        ...
+
+Notice that skills do one thing.
+
+11.5 Skill Manifest
+
+Every skill has metadata.
+
+id: browser.search
+
+name: Web Search
+
+version: 2.1.0
+
+capability: browser
+
+provider: duckduckgo
+
+description: Search the public web
+
+permissions:
+  - internet
+
+input_schema: SearchRequest
+
+output_schema: SearchResult
+
+timeout: 20
+
+retries: 2
+
+tags:
+  - search
+  - internet
+11.6 Skill Registry
+Skill Registry
+
+↓
+
+browser.search
+
+browser.open
+
+browser.download
+
+vision.detect
+
+tts.speak
+
+email.send
+
+robot.navigate
+
+Everything becomes searchable.
+
+11.7 Skill Discovery
+
+During startup
+
+plugins/
+
+↓
+
+Find manifest
+
+↓
+
+Register Skill
+
+↓
+
+Validate
+
+↓
+
+Ready
+
+No manual coding.
+
+11.8 Input Schema
+
+Every skill validates inputs.
+
+Example
+
+class SearchRequest:
+
+    query:str
+
+    max_results:int
+
+    language:str
+
+No arbitrary dictionaries.
+
+11.9 Output Schema
+
+Example
+
+class SearchResult:
+
+    title:str
+
+    url:str
+
+    snippet:str
+
+    confidence:float
+
+Planner always knows what comes back.
+
+11.10 Skill Permissions
+
+Example
+
+Browser
+
+Internet
+
+Email
+
+Email
+
+Robot
+
+Motor Control
+
+Camera
+
+Camera Access
+
+Executive checks permissions first.
+
+11.11 Skill Selection
+
+Planner asks
+
+Need
+
+↓
+
+Search Web
+
+Registry returns
+
+browser.search
+
+Later
+
+Need
+
+↓
+
+Summarize PDF
+
+Registry returns
+
+document.summarize
+11.12 Provider Layer
+
+One Skill
+
+Many providers.
+
+Speech Skill
+
+↓
+
+Coqui
+
+↓
+
+Piper
+
+↓
+
+XTTS
+
+↓
+
+Future TTS
+
+No code changes.
+
+11.13 Skill Composition
+
+Complex tasks become workflows.
+
+Example
+
+Read PDF
+
+↓
+
+Extract Text
+
+↓
+
+Summarize
+
+↓
+
+Translate
+
+↓
+
+Speak
+
+Five Skills.
+
+One Workflow.
+
+11.14 Workflow Engine
+
+Workflow
+
+User uploads PDF
+
+↓
+
+Read PDF
+
+↓
+
+Extract Images
+
+↓
+
+OCR
+
+↓
+
+Summarize
+
+↓
+
+Save Memory
+
+↓
+
+Reply
+
+Planner builds workflows dynamically.
+
+11.15 Tool Selection Strategy
+
+Executive evaluates:
+
+Speed
+
+Accuracy
+
+Cost
+
+Latency
+
+Availability
+
+Permissions
+
+Confidence
+
+Then selects the best skill/provider.
+
+11.16 Versioning
+
+Example
+
+document.read
+
+v1
+
+↓
+
+v2
+
+↓
+
+v3
+
+Old workflows still function until compatibility is dropped.
+
+11.17 Telemetry
+
+Every execution records:
+
+Latency
+
+Success Rate
+
+Failure Rate
+
+Retries
+
+Average Cost
+
+CPU
+
+GPU
+
+Memory
+
+Usage Count
+
+The planner can prefer reliable skills.
+
+11.18 Skill Health
+
+Dashboard
+
+Skill
+
+Healthy
+
+↓
+
+Latency
+
+↓
+
+Provider
+
+↓
+
+Errors
+
+↓
+
+Availability
+11.19 Folder Structure
+skills/
+
+├── registry/
+│   ├── registry.py
+│   ├── discovery.py
+│   ├── resolver.py
+│   ├── validator.py
+│   ├── permissions.py
+│   ├── versioning.py
+│   ├── telemetry.py
+│   ├── workflow.py
+│   ├── selector.py
+│   └── tests/
+│
+├── interfaces/
+│   ├── skill.py
+│   ├── request.py
+│   ├── response.py
+│   └── metadata.py
+│
+├── manifests/
+│
+├── providers/
+│
+└── workflows/
+11.20 Cognitive Flow
+Goal
+
+↓
+
+Executive
+
+↓
+
+Planner
+
+↓
+
+Skill Resolver
+
+↓
+
+Permission Check
+
+↓
+
+Provider Selection
+
+↓
+
+Execute Skill
+
+↓
+
+Observe Result
+
+↓
+
+Blackboard
+
+↓
+
+Reflection
+
+↓
+
+Memory
+
+This is now the standard execution path.
+
+11.21 Skill Rules
+A skill performs one well-defined action.
+Skills are independent of providers.
+Every skill has explicit input and output schemas.
+Skills are versioned and discoverable.
+All skill execution passes through permission checks.
+Skills report telemetry and health.
+Workflows compose skills instead of embedding logic.
+The Executive plans using skills, not internal implementation details.
+Providers are replaceable without changing the skill interface.
+Every skill invocation is observable and traceable.
+
+
+STEP 12 — Reasoning Strategy Engine (Choosing How to Think)
+
+This is one of the most important architectural additions in the entire Aariya Cognitive OS.
+
+Up until now, we've built:
+
+Memory (stores knowledge)
+World Model (understands reality)
+Blackboard (working memory)
+Critical Thinking (evaluates ideas)
+Executive (controls cognition)
+Planner (creates plans)
+Skill Framework (executes actions)
+
+But there is still one missing question:
+
+Before planning, how should Aariya think?
+
+Different problems require different reasoning strategies.
+
+This is the job of the Reasoning Strategy Engine (RSE).
+
+12.1 Why a Reasoning Strategy Engine?
+
+Without RSE:
+
+Executive
+      │
+      ▼
+Planner
+      │
+      ▼
+Plan
+
+Everything uses the same planning algorithm.
+
+With RSE:
+
+Executive
+
+      │
+
+      ▼
+
+Reasoning Strategy Engine
+
+      │
+
+───────────────
+
+Rule Engine
+
+RAG
+
+Simulation
+
+Graph Search
+
+Constraint Solver
+
+Debate
+
+Probabilistic
+
+───────────────
+
+      │
+
+      ▼
+
+Planner
+
+Now Aariya selects how to think before planning.
+
+12.2 Responsibilities
+
+The RSE decides:
+
+Which reasoning algorithm to use
+Whether multiple strategies should collaborate
+How much computation to spend
+Which data sources are required
+Whether external tools are needed
+When to stop reasoning
+
+It does not generate the final execution plan.
+
+12.3 Reasoning Strategies
+Rule-Based
+
+Best for:
+
+Math
+
+Permissions
+
+Policies
+
+Safety Rules
+
+Business Logic
+
+Fast and deterministic.
+
+Retrieval-Augmented Reasoning (RAG)
+
+Best for:
+
+Documentation
+
+Past Conversations
+
+Research Papers
+
+Memory
+
+Knowledge Base
+
+Retrieve before thinking.
+
+Graph Search
+
+Best for:
+
+Navigation
+
+Relationships
+
+Dependency Graphs
+
+Knowledge Graphs
+
+Workflow Search
+
+Uses your World Model.
+
+Constraint Solving
+
+Best for:
+
+Scheduling
+
+Timetables
+
+Resource Allocation
+
+Deadlines
+
+Optimization
+Simulation
+
+"What if..."
+
+Example:
+
+If I buy Bike A
+
+↓
+
+Budget
+
+↓
+
+Insurance
+
+↓
+
+Fuel
+
+↓
+
+Maintenance
+
+↓
+
+Future Cost
+
+Planner evaluates outcomes before acting.
+
+Probabilistic Reasoning
+
+Useful when information is uncertain.
+
+Example:
+
+Rain
+
+70%
+
+↓
+
+Traffic
+
+60%
+
+↓
+
+Delay
+
+45%
+
+Planner reasons with probabilities.
+
+Multi-Agent Debate
+
+Several internal agents independently reason.
+
+Example
+
+Financial Agent
+
+↓
+
+Safety Agent
+
+↓
+
+Learning Agent
+
+↓
+
+Social Agent
+
+↓
+
+Consensus
+
+Very useful for difficult decisions.
+
+12.4 Strategy Metadata
+
+Each strategy exposes:
+
+id: rag
+
+name: Retrieval Augmented Reasoning
+
+speed: medium
+
+accuracy: high
+
+cost: medium
+
+requires:
+  - memory
+
+supports:
+  - research
+  - learning
+  - coding
+
+The Executive uses this metadata.
+
+12.5 Strategy Selector
+
+Input:
+
+Task
+
+↓
+
+Context
+
+↓
+
+Goal
+
+↓
+
+World Model
+
+↓
+
+Blackboard
+
+Output:
+
+Strategy
+
+↓
+
+Planner
+12.6 Selection Rules
+
+Example
+
+Question
+
+↓
+
+Need Memory?
+
+↓
+
+YES
+
+↓
+
+Use RAG
+
+Example
+
+Need Scheduling
+
+↓
+
+Constraint Solver
+
+Example
+
+Need Safety Decision
+
+↓
+
+Rule Engine
+
++
+
+Critical Thinking
+
+Strategies can be combined.
+
+12.7 Hybrid Reasoning
+
+Most difficult tasks require multiple strategies.
+
+Example:
+
+User asks:
+
+"Plan a two-week study schedule around my exams."
+
+Pipeline:
+
+Goal
+
+↓
+
+Retrieve Calendar
+
+↓
+
+Retrieve User Preferences
+
+↓
+
+Constraint Solver
+
+↓
+
+Simulation
+
+↓
+
+Critical Thinking
+
+↓
+
+Planner
+
+One strategy isn't enough.
+
+12.8 Reasoning Graph
+
+Instead of a chain:
+
+Question
+
+↓
+
+Answer
+
+Build a graph.
+
+Question
+
+↓
+
+Retrieve
+
+↓
+
+Analyze
+
+↓
+
+Simulate
+
+↓
+
+Evaluate
+
+↓
+
+Debate
+
+↓
+
+Plan
+12.9 Thinking Budget
+
+Simple question
+
+Capital of Japan?
+
+↓
+
+Rule
+
+↓
+
+Answer
+
+Complex question
+
+Design an AI Operating System
+
+↓
+
+Multiple strategies
+
+↓
+
+Simulation
+
+↓
+
+Critical Thinking
+
+↓
+
+Reflection
+
+↓
+
+Planner
+
+The Executive sets the maximum time and compute budget.
+
+12.10 Strategy Performance
+
+Track:
+
+Success Rate
+
+Latency
+
+Accuracy
+
+Confidence
+
+Failure Rate
+
+Average Cost
+
+The Executive gradually learns which strategies work best for which task categories.
+
+12.11 Fallback Chain
+
+Example
+
+Graph Search
+
+↓
+
+Failed
+
+↓
+
+RAG
+
+↓
+
+Failed
+
+↓
+
+LLM Reasoning
+
+↓
+
+Ask User
+
+Never stop after one failure.
+
+12.12 Strategy API
+class ReasoningStrategy:
+
+    async def supports(self, task):
+        ...
+
+    async def estimate_cost(self, task):
+        ...
+
+    async def reason(self, context):
+        ...
+
+    async def confidence(self):
+        ...
+12.13 Folder Structure
+reasoning/
+
+├── engine.py
+├── selector.py
+├── strategy.py
+├── registry.py
+├── metadata.py
+├── evaluator.py
+├── fallback.py
+├── telemetry.py
+│
+├── strategies/
+│   ├── rag.py
+│   ├── rules.py
+│   ├── graph.py
+│   ├── simulation.py
+│   ├── constraint.py
+│   ├── debate.py
+│   ├── probabilistic.py
+│   └── hybrid.py
+│
+└── tests/
+12.14 Complete Cognitive Pipeline
+User
+
+↓
+
+Executive
+
+↓
+
+Reasoning Strategy Engine
+
+↓
+
+Reasoning Strategy
+
+↓
+
+Planner
+
+↓
+
+Skill Registry
+
+↓
+
+Scheduler
+
+↓
+
+Capabilities
+
+↓
+
+Observe Results
+
+↓
+
+Reflection
+
+↓
+
+Learning
+
+Notice the Planner no longer decides how to reason. It receives a reasoning context already prepared by the selected strategy.
+
+12.15 Rules
+The Executive never hardcodes reasoning algorithms.
+Strategies are pluggable and independently testable.
+Multiple strategies may be composed.
+Every strategy exposes cost, confidence, and capability metadata.
+The Executive allocates a thinking budget before reasoning begins.
+Strategy failures trigger structured fallbacks.
+Performance metrics continuously improve future strategy selection.
+Strategies provide evidence and rationale, not just conclusions.
+New strategies can be added without changing the Executive or Planner.
+The Planner consumes reasoning outputs, not strategy implementations.
+
+
+
+STEP 13 — Experience & Lifelong Learning System (The Evolution Engine)
+
+This is the component that allows Aariya to grow.
+
+Not by rewriting its own code.
+
+Not by modifying its neural network live.
+
+But by continuously improving its decision-making policies based on experience.
+
+This is the difference between:
+
+Memory → remembering what happened.
+
+and
+
+Experience → learning what works.
+
+13.1 The Learning Hierarchy
+
+This is one of the most important distinctions in the entire architecture.
+
+                           Cognition
+
+                               │
+
+      ┌───────────────┬──────────────┬──────────────┐
+
+      ▼               ▼              ▼
+
+   Memory         Knowledge       Experience
+
+                                      │
+
+                                      ▼
+
+                                   Policies
+
+                                      │
+
+                                      ▼
+
+                                    Skills
+
+                                      │
+
+                                      ▼
+
+                                   Behavior
+
+These should never be mixed together.
+
+13.2 The Five Learning Layers
+Layer 1 — Memory
+
+Memory stores events.
+
+Example
+
+Yesterday
+
+↓
+
+User asked SQL question
+
+↓
+
+Answer given
+
+↓
+
+Saved
+
+No conclusions.
+
+Only observations.
+
+Layer 2 — Knowledge
+
+Knowledge stores facts.
+
+Example
+
+SQL
+
+↓
+
+SELECT
+
+retrieves rows.
+
+Knowledge is generally true.
+
+Layer 3 — Skills
+
+Skills store procedures.
+
+Example
+
+Open Browser
+
+↓
+
+Navigate
+
+↓
+
+Search
+
+↓
+
+Extract
+
+↓
+
+Return Result
+
+Skills describe how.
+
+Layer 4 — Experience
+
+Experience stores outcomes.
+
+Example
+
+User
+
+↓
+
+Asked difficult question
+
+↓
+
+Used RAG
+
+↓
+
+Confidence increased
+
+↓
+
+User satisfied
+
+↓
+
+Success
+
+Experience records performance.
+
+Layer 5 — Policies
+
+Policies decide future behavior.
+
+Example
+
+Programming Question
+
+↓
+
+Use
+
+Memory
+
++
+
+RAG
+
+↓
+
+Avoid
+
+Direct LLM
+
+Policies improve with experience.
+
+13.3 Complete Learning Loop
+Task
+
+↓
+
+Planner
+
+↓
+
+Execution
+
+↓
+
+Observe
+
+↓
+
+Outcome
+
+↓
+
+Reflection
+
+↓
+
+Experience Record
+
+↓
+
+Policy Update
+
+↓
+
+Future Improvement
+
+Nothing modifies the code directly.
+
+13.4 Experience Record
+from dataclasses import dataclass
+from datetime import datetime
+
+@dataclass
+class Experience:
+
+    id:str
+
+    goal:str
+
+    strategy:str
+
+    skills:list[str]
+
+    outcome:str
+
+    success:bool
+
+    confidence:float
+
+    reward:float
+
+    duration:float
+
+    timestamp:datetime
+
+    notes:dict
+
+Every important task creates one.
+
+13.5 Reward Model
+
+Experiences receive rewards.
+
+Example
+
+User Happy
+
++5
+
+------------
+
+Fast Answer
+
++2
+
+------------
+
+Wrong Answer
+
+−6
+
+------------
+
+Unsafe Decision
+
+−100
+
+Rewards guide policy updates.
+
+13.6 Reflection Engine
+
+After execution
+
+Finished
+
+↓
+
+Successful?
+
+↓
+
+YES
+
+↓
+
+Why?
+
+↓
+
+Record
+
+↓
+
+Improve Policy
+
+Or
+
+Failed
+
+↓
+
+Root Cause
+
+↓
+
+Alternative Strategy
+
+↓
+
+Store Lesson
+
+Reflection is structured, not automatic code editing.
+
+13.7 Root Cause Analysis
+
+Instead of
+
+Failure
+
+Record
+
+Failure
+
+↓
+
+Reason
+
+↓
+
+Wrong Memory
+
+↓
+
+Poor Strategy
+
+↓
+
+Bad Tool
+
+↓
+
+Timeout
+
+↓
+
+Permission Denied
+
+This makes learning actionable.
+
+13.8 Policy Engine
+
+Policies are learned preferences.
+
+Example
+
+Old policy
+
+Always
+
+Use Web Search
+
+Experience
+
+↓
+
+Too slow
+
+↓
+
+New Policy
+
+Local Memory first
+
+↓
+
+Web only if confidence < 0.7
+
+Policies evolve safely.
+
+13.9 Skill Performance
+
+Track every skill.
+
+Example
+
+browser.search
+
+Latency
+
+1.2 s
+
+Success
+
+98%
+
+Failures
+
+2%
+
+Average Confidence
+
+95%
+
+The Executive can choose higher-performing skills over time.
+
+13.10 Strategy Learning
+
+Track reasoning strategies.
+
+Simulation
+
+↓
+
+Works well
+
+Financial Planning
+
+↓
+
+Use more often
+Debate
+
+↓
+
+Too expensive
+
+Simple Tasks
+
+↓
+
+Avoid
+
+Strategy selection improves through evidence.
+
+13.11 User Preference Learning
+
+Instead of only storing facts:
+
+User prefers
+
+Short answers
+
+Store confidence and evidence.
+
+Evidence:
+
+5 conversations
+
+Confidence:
+
+0.94
+
+Preferences can change with new evidence.
+
+13.12 Long-Term Performance Metrics
+
+Measure:
+
+Average Accuracy
+
+Average Confidence
+
+Planning Success
+
+Goal Completion
+
+Skill Reliability
+
+Reasoning Success
+
+User Satisfaction
+
+Recovery Rate
+
+These metrics guide future improvements.
+
+13.13 Safety Boundaries
+
+The learning system must not:
+
+Rewrite source code automatically.
+Change safety rules.
+Escalate permissions.
+Modify the Executive architecture.
+Alter critical policies without explicit review.
+
+It may:
+
+Adjust policy weights.
+Update confidence estimates.
+Recommend better strategies.
+Learn user preferences.
+Improve workflow selection.
+13.14 Learning API
+learning.record_experience()
+
+learning.reflect()
+
+learning.root_cause()
+
+learning.update_policy()
+
+learning.skill_statistics()
+
+learning.strategy_statistics()
+
+learning.user_preferences()
+
+learning.recommend()
+13.15 Folder Structure
+learning/
+
+├── capability.py
+├── experience.py
+├── experience_store.py
+├── reflection.py
+├── reward_model.py
+├── policy_engine.py
+├── root_cause.py
+├── preference_learning.py
+├── strategy_learning.py
+├── skill_learning.py
+├── metrics.py
+├── recommendations.py
+├── safety.py
+├── events.py
+└── tests/
+13.16 Integration
+Execution
+
+↓
+
+Executive
+
+↓
+
+Reflection
+
+↓
+
+Experience
+
+↓
+
+Policy Engine
+
+↓
+
+Reasoning Strategy Engine
+
+↓
+
+Planner
+
+↓
+
+Future Tasks
+
+Learning influences future decisions without bypassing the Executive.
+
+13.17 Experience Lifecycle
+Task
+
+↓
+
+Execute
+
+↓
+
+Observe
+
+↓
+
+Evaluate
+
+↓
+
+Reward
+
+↓
+
+Reflect
+
+↓
+
+Store Experience
+
+↓
+
+Update Policy
+
+↓
+
+Archive
+
+Each stage is observable and auditable.
+
+13.18 Learning Rules
+Memories record events, not conclusions.
+Knowledge stores validated facts.
+Skills define procedures.
+Experiences capture outcomes and context.
+Policies guide future decisions.
+Every policy change must be traceable to evidence.
+Reflection follows meaningful successes and failures.
+Learning improves behavior, not core safety rules.
+Confidence is recalibrated using accumulated evidence.
+Learning is continuous but bounded by safety policies.
+
+
+STEP 14 — Mission & Project Management Layer (The Long-Term Executive)
+
+This is the layer that transforms Aariya from an intelligent assistant into an autonomous project manager capable of pursuing objectives over days, weeks, or even months.
+
+Think of the hierarchy like this:
+
+Reactive AI
+      ↓
+Goal-Oriented AI
+      ↓
+Mission-Oriented AI
+      ↓
+Autonomous Cognitive System
+
+Everything built so far (Executive, Planner, Goal Manager, Scheduler, Skills, Learning, World Model) now becomes infrastructure that serves missions.
+
+14.1 Cognitive Hierarchy
+
+This becomes the highest decision hierarchy in Aariya.
+
+Mission
+
+    │
+
+    ▼
+
+Goals
+
+    │
+
+    ▼
+
+Plans
+
+    │
+
+    ▼
+
+Tasks
+
+    │
+
+    ▼
+
+Skills
+
+    │
+
+    ▼
+
+Providers
+
+This hierarchy should never be violated.
+
+A Skill never creates a Mission.
+
+A Task never changes a Goal.
+
+Everything flows downward.
+
+14.2 Overall Architecture
+                     USER
+
+                       │
+
+                       ▼
+
+             Mission Manager
+
+────────────────────────────────────────────
+
+Mission Repository
+
+Mission Planner
+
+Milestone Manager
+
+Risk Manager
+
+Progress Tracker
+
+Dependency Graph
+
+Mission Scheduler
+
+Mission Analytics
+
+────────────────────────────────────────────
+
+                       │
+
+                       ▼
+
+                Goal Manager
+
+                       ▼
+
+                  Planner
+
+                       ▼
+
+                Runtime Scheduler
+
+                       ▼
+
+                     Skills
+
+Mission Manager becomes the highest planning layer.
+
+14.3 Responsibilities
+
+Mission Manager owns:
+
+Mission creation
+Mission decomposition
+Goal generation
+Milestone management
+Long-term scheduling
+Resource planning
+Risk analysis
+Progress tracking
+Mission suspension
+Mission recovery
+Mission completion
+Cross-goal coordination
+14.4 Mission Object
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+
+class MissionStatus(Enum):
+    CREATED = "created"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    BLOCKED = "blocked"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+@dataclass
+class Mission:
+
+    id: str
+
+    title: str
+
+    description: str
+
+    priority: int
+
+    status: MissionStatus
+
+    owner: str
+
+    start_date: datetime
+
+    target_date: datetime | None
+
+    success_criteria: list[str]
+
+    metadata: dict
+14.5 Mission Decomposition
+
+Example
+
+Mission
+
+Build Aariya
+
+↓
+
+Goals
+
+Architecture
+
+Backend
+
+Frontend
+
+AI
+
+Avatar
+
+Testing
+
+Deployment
+
+↓
+
+Plans
+
+↓
+
+Tasks
+
+↓
+
+Skills
+
+Mission Manager automatically creates Goal trees.
+
+14.6 Mission Timeline
+Month 1
+
+Architecture
+
+██████████
+
+Month 2
+
+Backend
+
+██████████████
+
+Month 3
+
+AI
+
+███████████
+
+Month 4
+
+Testing
+
+████████
+
+Timeline planning becomes native.
+
+14.7 Milestones
+
+Mission
+
+Build Aariya
+
+Milestones
+
+✓ Architecture Complete
+
+✓ Memory System
+
+□ World Model
+
+□ Critical Thinking
+
+□ Avatar
+
+□ Deployment
+
+Milestones generate progress automatically.
+
+14.8 Deliverables
+
+Each milestone produces outputs.
+
+Example
+
+Milestone
+
+Memory System
+
+↓
+
+Deliverables
+
+Database
+
+API
+
+Tests
+
+Dashboard
+
+Documentation
+
+Deliverables are measurable.
+
+14.9 Dependency Graph
+Architecture
+
+↓
+
+Memory
+
+↓
+
+Planner
+
+↓
+
+Executive
+
+↓
+
+Learning
+
+↓
+
+Deployment
+
+Tasks cannot start until dependencies finish.
+
+14.10 Resource Planning
+
+Mission Manager allocates
+
+GPU
+
+CPU
+
+RAM
+
+Storage
+
+Time
+
+Budget
+
+Internet
+
+Robot
+
+Cloud
+
+Across the entire mission.
+
+14.11 Risk Management
+
+Every mission tracks risks.
+
+Example
+
+Risk
+
+GPU Failure
+
+Probability
+
+25%
+
+Impact
+
+High
+
+Mitigation
+
+Cloud Backup
+
+Risks become first-class objects.
+
+14.12 Progress Engine
+
+Instead of
+
+80%
+
+Progress uses evidence.
+
+Completed Tasks
+
+Completed Milestones
+
+Goal Completion
+
+Deliverables
+
+Tests Passed
+
+Confidence
+
+↓
+
+Overall Progress
+
+More realistic than arbitrary percentages.
+
+14.13 Automatic Replanning
+
+Example
+
+Vision Model Delayed
+
+↓
+
+Dependency Broken
+
+↓
+
+Mission Manager
+
+↓
+
+Generate New Timeline
+
+↓
+
+Update Goals
+
+↓
+
+Continue
+
+Mission adapts automatically.
+
+14.14 Multi-Mission Support
+
+Example
+
+Mission 1
+
+Build Aariya
+
+Mission 2
+
+University Exams
+
+Mission 3
+
+Research Paper
+
+Mission Manager decides
+
+Priority
+
+Resources
+
+Deadlines
+
+Conflicts
+
+14.15 Executive Integration
+
+Executive no longer asks
+
+Current Goal?
+
+Instead
+
+Current Mission?
+
+↓
+
+Current Goal?
+
+↓
+
+Current Plan?
+
+↓
+
+Current Task?
+
+Mission becomes the top context.
+
+14.16 Mission Dashboard
+
+Dashboard
+
+Mission
+
+↓
+
+Goals
+
+↓
+
+Milestones
+
+↓
+
+Progress
+
+↓
+
+Risks
+
+↓
+
+Upcoming Work
+
+↓
+
+Blocked Items
+
+↓
+
+ETA
+
+↓
+
+Confidence
+
+One screen summarizes months of work.
+
+14.17 Mission Analytics
+
+Track
+
+Average Completion Time
+
+Prediction Accuracy
+
+Schedule Drift
+
+Goal Success Rate
+
+Risk Frequency
+
+Learning Improvement
+
+Resource Usage
+
+These metrics feed the Experience System.
+
+14.18 Mission API
+mission.create()
+
+mission.pause()
+
+mission.resume()
+
+mission.cancel()
+
+mission.progress()
+
+mission.timeline()
+
+mission.add_goal()
+
+mission.complete()
+
+mission.replan()
+14.19 Folder Structure
+missions/
+
+├── capability.py
+├── mission.py
+├── repository.py
+├── planner.py
+├── milestones.py
+├── timeline.py
+├── dependency_graph.py
+├── risk_manager.py
+├── progress.py
+├── analytics.py
+├── scheduler.py
+├── dashboard.py
+├── events.py
+└── tests/
+14.20 Complete Architecture
+Mission
+
+↓
+
+Goal Manager
+
+↓
+
+Reasoning Strategy Engine
+
+↓
+
+Executive
+
+↓
+
+Planner
+
+↓
+
+Skill Registry
+
+↓
+
+Scheduler
+
+↓
+
+Capabilities
+
+↓
+
+Observation
+
+↓
+
+Reflection
+
+↓
+
+Experience
+
+↓
+
+Policy Learning
+
+↓
+
+Mission Update
+
+Notice how experience feeds back into mission management. Future missions become more accurate because estimates, risks, and planning strategies improve over time.
+
+14.21 Mission Rules
+Missions are long-term objectives spanning multiple goals.
+Goals belong to one mission (or have explicit shared ownership).
+Every mission defines measurable success criteria.
+Milestones are objective checkpoints, not arbitrary dates.
+Dependencies are validated before scheduling.
+Risk assessment is continuous.
+Progress is evidence-based.
+Replanning preserves completed work whenever possible.
+Mission history is retained for learning and analytics.
+Mission decisions remain subject to Executive policies and safety constraints.
+
+
+STEP 15 — Governance, Safety & Trust Framework (The Constitution of Aariya)
+
+This is the final foundational layer before implementation.
+
+At this point, Aariya has become a complete Cognitive Operating System:
+
+Thinks
+Plans
+Learns
+Executes
+Evolves
+
+But without governance, all of those capabilities operate without a single constitutional authority.
+
+The Governance Layer becomes Aariya's Constitution.
+
+It doesn't make decisions.
+
+It decides which decisions are allowed.
+
+15.1 The Constitutional Architecture
+
+Instead of:
+
+Executive
+
+↓
+
+Planner
+
+↓
+
+Skills
+
+↓
+
+Execution
+
+Every action passes through Governance:
+
+Executive
+
+↓
+
+Governance Layer
+
+↓
+
+Planner
+
+↓
+
+Governance Layer
+
+↓
+
+Skill Registry
+
+↓
+
+Governance Layer
+
+↓
+
+Execution
+
+Nothing bypasses Governance.
+
+15.2 Core Responsibilities
+
+The Governance Framework owns:
+
+Authentication
+Identity
+Authorization
+Permission Management
+Safety Policies
+Privacy Enforcement
+Data Governance
+Audit Logging
+Human Approval
+Secure Execution
+Compliance Policies
+Risk Assessment
+15.3 Governance Architecture
+                 Governance
+
+──────────────────────────────────
+
+Identity Manager
+
+Authentication
+
+Authorization
+
+Permission Engine
+
+Policy Engine
+
+Privacy Manager
+
+Audit Logger
+
+Approval Manager
+
+Security Manager
+
+Compliance Engine
+
+Risk Evaluator
+
+──────────────────────────────────
+
+        Every Capability
+15.4 Identity Manager
+
+Every actor has an identity.
+
+Example
+
+Owner
+
+Administrator
+
+Family
+
+Guest
+
+Robot
+
+Cloud Service
+
+Plugin
+
+Capability
+
+Agent
+
+Identity comes before permissions.
+
+15.5 Authentication
+
+Support multiple authentication methods.
+
+Example
+
+Password
+
+Face Recognition
+
+Voice Recognition
+
+Fingerprint
+
+Hardware Key
+
+OAuth
+
+API Key
+
+Each session has a verified identity.
+
+15.6 Authorization
+
+Authentication answers:
+
+Who are you?
+
+Authorization answers:
+
+What are you allowed to do?
+
+Example
+
+Guest
+
+↓
+
+Read Calendar
+
+✓
+
+Delete Calendar
+
+✗
+
+Shutdown PC
+
+✗
+15.7 Role-Based Access Control (RBAC)
+
+Example
+
+Owner
+
+Everything
+
+------------------
+
+Admin
+
+System Settings
+
+------------------
+
+Student
+
+Study Tools
+
+------------------
+
+Guest
+
+Conversation Only
+15.8 Attribute-Based Access Control (ABAC)
+
+Some permissions depend on context.
+
+Example
+
+Camera
+
+↓
+
+Allowed
+
+Only
+
+If
+
+User Present
+
+Or
+
+Delete Files
+
+↓
+
+Only
+
+Owner
+
+AND
+
+Confirmed
+
+Context matters.
+
+15.9 Capability Authorization
+
+Every skill declares required permissions.
+
+Example
+
+skill: email.send
+
+permissions:
+  - email
+
+approval:
+  owner
+
+The Executive cannot bypass this.
+
+15.10 Privacy Manager
+
+Different data receives different handling.
+
+Public
+
+↓
+
+Normal Storage
+
+----------------
+
+Personal
+
+↓
+
+Encrypted
+
+----------------
+
+Sensitive
+
+↓
+
+Encrypted
+
+Approval Required
+
+----------------
+
+Temporary
+
+↓
+
+Auto Delete
+15.11 Data Classification
+
+Every stored item gets a label.
+
+Public
+
+Internal
+
+Confidential
+
+Sensitive
+
+Temporary
+
+This drives retention and access.
+
+15.12 Data Retention
+
+Examples
+
+Conversation
+
+30 days
+
+↓
+
+Delete
+Mission Logs
+
+Permanent
+Temporary Blackboard
+
+Immediately
+
+After Task
+
+Retention is policy-driven.
+
+15.13 Safety Policies
+
+Examples
+
+Never
+
+Delete user files
+
+Without confirmation
+Never
+
+Control robot
+
+Without permission
+Never
+
+Execute external code
+
+Automatically
+
+These are immutable runtime policies.
+
+15.14 Approval Workflows
+
+High-impact actions require approval.
+
+Example
+
+Delete Folder
+
+↓
+
+Risk Check
+
+↓
+
+Owner Approval
+
+↓
+
+Execute
+
+Not everything should be automated.
+
+15.15 Risk Engine
+
+Every action receives a risk score.
+
+Example
+
+Speak
+
+Low
+
+---------
+
+Open Browser
+
+Low
+
+---------
+
+Send Email
+
+Medium
+
+---------
+
+Delete Folder
+
+High
+
+---------
+
+Shutdown Server
+
+Critical
+
+Risk influences approval requirements.
+
+15.16 Secure Execution Sandbox
+
+Skills execute inside controlled environments.
+
+Skill
+
+↓
+
+Sandbox
+
+↓
+
+Resource Limits
+
+↓
+
+Permission Check
+
+↓
+
+Execute
+
+↓
+
+Return Result
+
+A failing skill cannot compromise the whole system.
+
+15.17 Audit Logger
+
+Every important event is recorded.
+
+Example
+
+Timestamp
+
+User
+
+Skill
+
+Inputs
+
+Outputs
+
+Decision
+
+Approval
+
+Result
+
+Logs support debugging and accountability.
+
+15.18 Policy Engine
+
+Policies are declarative.
+
+Example
+
+policy:
+  id: delete_files
+
+  requires:
+    owner_confirmation: true
+
+  risk: high
+
+  audit: required
+
+  timeout: 30
+
+No business logic is hardcoded into capabilities.
+
+15.19 Governance API
+governance.authenticate()
+
+governance.authorize()
+
+governance.evaluate_policy()
+
+governance.request_approval()
+
+governance.audit()
+
+governance.classify_data()
+
+governance.assess_risk()
+
+All capabilities use these interfaces.
+
+15.20 Folder Structure
+governance/
+
+├── capability.py
+├── identity.py
+├── authentication.py
+├── authorization.py
+├── permissions.py
+├── policy_engine.py
+├── privacy.py
+├── retention.py
+├── approval.py
+├── risk_engine.py
+├── security.py
+├── sandbox.py
+├── audit.py
+├── compliance.py
+├── events.py
+└── tests/
+15.21 Complete Execution Flow
+User
+
+↓
+
+Executive
+
+↓
+
+Governance
+
+↓
+
+Reasoning Strategy
+
+↓
+
+Planner
+
+↓
+
+Governance
+
+↓
+
+Skill Registry
+
+↓
+
+Permission Check
+
+↓
+
+Sandbox
+
+↓
+
+Execution
+
+↓
+
+Audit
+
+↓
+
+Reflection
+
+↓
+
+Experience
+
+↓
+
+Memory
+
+Governance is consulted at every critical transition.
+
+15.22 Governance Rules
+Every action requires an authenticated identity.
+Authorization is evaluated before execution.
+High-risk actions require human approval.
+Skills execute within defined permission boundaries.
+Sensitive data is classified and protected.
+Every significant action is auditable.
+Safety policies cannot be bypassed by planners or skills.
+Resource limits are enforced for all execution.
+Policy changes are versioned and reviewed.
+Governance decisions are transparent and explainable.
+15.23 Deliverables Completed
+
+After Step 15, Aariya now has:
+
+✅ Identity Management
+✅ Authentication
+✅ Authorization (RBAC & ABAC)
+✅ Capability Authorization
+✅ Privacy Management
+✅ Data Classification
+✅ Retention Policies
+✅ Safety Guardrails
+✅ Human Approval Workflows
+✅ Risk Assessment
+✅ Secure Execution Sandbox
+✅ Audit Logging
+✅ Policy Engine
+✅ Governance API
+The Complete Cognitive Operating System
+
+At this point, the architecture includes:
+
+Mission Layer
+        │
+Goal Manager
+        │
+Executive Orchestrator
+        │
+Reasoning Strategy Engine
+        │
+Critical Thinking & Meta-Cognition
+        │
+Cognitive Blackboard
+        │
+World Model
+        │
+Memory System
+        │
+Planner
+        │
+Skill Registry
+        │
+Runtime Scheduler
+        │
+Capability Layer
+        │
+Provider Layer
+        │
+Infrastructure (Kernel, Event Bus, Storage)
+
+Surrounding every layer:
+
+Governance
+Learning
+Telemetry
+Monitoring
+Security
+
+
+PHASE 16 — Platform Layer (Production Infrastructure)
+                 AARIYA COGNITIVE OS
+
+┌──────────────────────────────────────────────┐
+│              Mission Layer                   │
+├──────────────────────────────────────────────┤
+│            Executive Layer                   │
+├──────────────────────────────────────────────┤
+│          Cognitive Architecture              │
+├──────────────────────────────────────────────┤
+│          Capability Framework                │
+├──────────────────────────────────────────────┤
+│          Infrastructure Layer                │
+└──────────────────────────────────────────────┘
+
+──────────────────────────────────────────────
+
+        PLATFORM LAYER (Cross Cutting)
+
+    Observability
+
+    Simulation
+
+    Deployment
+
+    Security
+
+    Monitoring
+
+    Backup
+
+    Diagnostics
+
+──────────────────────────────────────────────
+
+The Platform Layer is horizontal—it supports every other layer.
+
+Step 16.1 — Observability Platform
+
+Aariya should be able to explain everything it did.
+
+Most AI systems only log errors.
+
+Aariya should log its thinking.
+
+Architecture
+Executive
+
+↓
+
+Decision
+
+↓
+
+Planner
+
+↓
+
+Skills
+
+↓
+
+Execution
+
+↓
+
+Observability
+
+↓
+
+Dashboard
+
+Everything emits telemetry.
+
+Components
+observability/
+
+├── logger.py
+├── metrics.py
+├── tracing.py
+├── profiler.py
+├── event_recorder.py
+├── dashboard.py
+├── cognitive_graph.py
+├── health.py
+├── alerts.py
+└── exporter.py
+Structured Logging
+
+Instead of:
+
+Memory Retrieved
+
+Log:
+
+{
+  "timestamp":"2026-07-15T10:30:00Z",
+  "component":"memory",
+  "operation":"retrieve",
+  "duration_ms":41,
+  "status":"success",
+  "correlation_id":"abc123"
+}
+
+Every log is machine-readable.
+
+Distributed Tracing
+
+Every request gets a trace.
+
+User Request
+
+↓
+
+Executive
+
+↓
+
+Planner
+
+↓
+
+Memory
+
+↓
+
+Reasoning
+
+↓
+
+Skills
+
+↓
+
+Response
+
+One trace.
+
+One ID.
+
+Easy debugging.
+
+Metrics
+
+Every component reports:
+
+Latency
+
+Memory Usage
+
+CPU
+
+GPU
+
+Requests
+
+Failures
+
+Retries
+
+Queue Length
+
+Confidence
+
+Reasoning Time
+Cognitive Timeline
+
+Imagine this dashboard:
+
+12:10:01
+
+User Question
+
+↓
+
+12:10:02
+
+Memory Retrieval
+
+↓
+
+12:10:03
+
+Critical Thinking
+
+↓
+
+12:10:04
+
+Planner
+
+↓
+
+12:10:05
+
+Browser Search
+
+↓
+
+12:10:07
+
+Answer
+
+You can replay every decision.
+
+Decision Graph
+Question
+
+↓
+
+Reasoning Strategy
+
+↓
+
+Planner
+
+↓
+
+Skill
+
+↓
+
+Result
+
+↓
+
+Reflection
+
+Every edge is visible.
+
+Step 16.2 — Digital Twin & Simulation Platform
+
+Never test new behavior on the real system first.
+
+Everything goes through simulation.
+
+Architecture
+Reality
+
+↓
+
+Digital Twin
+
+↓
+
+Simulation Engine
+
+↓
+
+Executive
+
+↓
+
+Evaluation
+
+The Executive doesn't know whether it's in simulation or reality.
+
+Components
+simulation/
+
+├── world.py
+├── environment.py
+├── virtual_robot.py
+├── sensors.py
+├── users.py
+├── events.py
+├── replay.py
+├── scenarios.py
+├── failure.py
+└── metrics.py
+Virtual World
+Room
+
+↓
+
+Furniture
+
+↓
+
+Robot
+
+↓
+
+Objects
+
+↓
+
+Humans
+
+Everything is represented digitally.
+
+Simulated Users
+
+Create different personas:
+
+Friendly User
+
+Busy User
+
+Confused User
+
+Expert User
+
+Child
+
+Teacher
+
+Useful for regression testing.
+
+Sensor Simulation
+
+Instead of using real hardware:
+
+Camera
+
+↓
+
+Image Generator
+
+Microphone
+
+↓
+
+Audio Generator
+
+Temperature
+
+↓
+
+Virtual Sensor
+
+This allows deterministic testing.
+
+Failure Injection
+
+Simulate problems deliberately.
+
+Examples:
+
+Internet Down
+
+↓
+
+Camera Failure
+
+↓
+
+Battery Low
+
+↓
+
+GPU Overloaded
+
+↓
+
+Memory Corruption
+
+↓
+
+Tool Timeout
+
+Recovery logic should be validated here.
+
+Scenario Replay
+
+Replay previous sessions.
+
+Yesterday's Bug
+
+↓
+
+Replay
+
+↓
+
+New Code
+
+↓
+
+Did it still happen?
+
+This prevents regressions.
+
+Step 16.3 — Deployment & Operations Platform
+
+Eventually Aariya becomes many services.
+
+Treat it like a cloud-native platform.
+
+Components
+operations/
+
+├── deployment.py
+├── backup.py
+├── restore.py
+├── configuration.py
+├── plugins.py
+├── secrets.py
+├── health.py
+├── updates.py
+├── rollback.py
+└── monitoring.py
+Configuration Management
+
+Everything configurable.
+
+memory:
+  provider: pgvector
+
+vision:
+  enabled: true
+
+speech:
+  provider: piper
+
+llm:
+  model: dolphin-3
+
+No magic numbers in code.
+
+Plugin Lifecycle
+Discover
+
+↓
+
+Install
+
+↓
+
+Validate
+
+↓
+
+Activate
+
+↓
+
+Monitor
+
+↓
+
+Update
+
+↓
+
+Disable
+
+↓
+
+Remove
+
+The Skill Registry integrates with this.
+
+Health Monitoring
+
+Each component reports:
+
+Healthy
+
+Degraded
+
+Offline
+
+Recovering
+
+The Executive adapts to degraded systems.
+
+Model Versioning
+Model v1
+
+↓
+
+Model v2
+
+↓
+
+Model v3
+
+Keep compatibility information and rollback support.
+
+Backup Strategy
+
+Back up separately:
+
+Memory database
+World model
+Missions
+Policies
+User preferences
+Configuration
+Audit logs
+
+Avoid storing everything in a single snapshot.
+
+Secrets Management
+
+Never hardcode:
+
+API keys
+Passwords
+Tokens
+Certificates
+
+Use a dedicated secret manager or encrypted storage.
+
+CI/CD Pipeline
+
+Every change should pass:
+
+Unit Tests
+
+↓
+
+Integration Tests
+
+↓
+
+Simulation Tests
+
+↓
+
+Performance Tests
+
+↓
+
+Security Tests
+
+↓
+
+Deployment
+
+Simulation should be mandatory before deployment.
+
+Complete Platform Folder
+platform/
+
+├── observability/
+│
+├── simulation/
+│
+├── operations/
+│
+├── monitoring/
+│
+├── security/
+│
+├── backups/
+│
+├── diagnostics/
+│
+├── configuration/
+│
+└── tests/
+
+
+Aariya Core Interface Architecture
+1. Capability Interface
+
+Purpose: A standardized unit of ability.
+
+Examples:
+
+Search web
+Solve math
+Analyze image
+Control avatar
+Retrieve memory
+Run OSINT investigation
+from abc import ABC, abstractmethod
+from typing import Dict, Any
+
+
+class Capability(ABC):
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def version(self) -> str:
+        pass
+
+
+    @abstractmethod
+    async def execute(
+        self,
+        input_data: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute capability
+        """
+        pass
+
+
+    @abstractmethod
+    async def health_check(self) -> bool:
+        pass
+
+Example:
+
+VisionCapability
+    |
+    ├── ImageDetection
+    ├── FaceAnalysis
+    └── SceneUnderstanding
+2. Skill Interface
+
+Difference:
+
+Capability = what Aariya can do.
+
+Skill = learned procedure for doing it.
+
+Example:
+
+Capability:
+
+Answer Question
+
+Skill:
+
+Explain Physics Concept To Student
+
+Interface:
+
+class Skill(ABC):
+
+    @property
+    def skill_id(self):
+        pass
+
+
+    @abstractmethod
+    async def can_handle(
+        self,
+        task
+    )->float:
+        """
+        Returns confidence score
+        0.0 - 1.0
+        """
+        pass
+
+
+    @abstractmethod
+    async def run(
+        self,
+        task,
+        memory,
+        context
+    ):
+        pass
+3. ReasoningStrategy Interface
+
+This is where Aariya's intelligence style lives.
+
+Examples:
+
+Chain of Thought
+Tree Search
+Debate
+Reflection
+Critical Thinking
+Hypothesis Testing
+class ReasoningStrategy(ABC):
+
+    @property
+    def name(self):
+        pass
+
+
+    @abstractmethod
+    async def reason(
+        self,
+        problem,
+        knowledge,
+        constraints
+    ):
+        pass
+
+Possible implementations:
+
+ReasoningStrategy
+
+├── AnalyticalReasoning
+├── CreativeReasoning
+├── CriticalThinking
+├── ScientificReasoning
+├── EthicalReasoning
+└── StrategicPlanning
+4. Planner Interface
+
+Responsible for converting goals into actions.
+
+class Planner(ABC):
+
+    @abstractmethod
+    async def create_plan(
+        self,
+        goal,
+        available_tools,
+        constraints
+    ):
+        """
+        Returns action sequence
+        """
+        pass
+
+
+    @abstractmethod
+    async def update_plan(
+        self,
+        feedback
+    ):
+        pass
+
+Example output:
+
+{
+ "goal":"Prepare exam",
+ 
+ "steps":[
+   {
+    "action":"analyze syllabus"
+   },
+   {
+    "action":"create schedule"
+   },
+   {
+    "action":"generate quizzes"
+   }
+ ]
+}
+5. Executive Interface
+
+The executive is the "brain manager".
+
+Responsibilities:
+
+Decide priority
+Select agents
+Interrupt tasks
+Manage attention
+class Executive(ABC):
+
+
+    @abstractmethod
+    async def decide(
+        self,
+        situation
+    ):
+        pass
+
+
+    @abstractmethod
+    async def allocate_resources(
+        self,
+        task
+    ):
+        pass
+
+
+    @abstractmethod
+    async def monitor_execution(
+        self
+    ):
+        pass
+
+Architecture:
+
+Executive
+
+      |
+      |
+ -------------------
+ |        |        |
+Planner  Memory  Agents
+6. MemoryProvider Interface
+
+Important for Aariya.
+
+Must support replacing:
+
+PostgreSQL
+pgvector
+Neo4j
+Chroma
+Redis
+class MemoryProvider(ABC):
+
+
+    @abstractmethod
+    async def store(
+        self,
+        memory
+    ):
+        pass
+
+
+    @abstractmethod
+    async def retrieve(
+        self,
+        query,
+        limit=10
+    ):
+        pass
+
+
+    @abstractmethod
+    async def update(
+        self,
+        memory_id,
+        data
+    ):
+        pass
+
+
+    @abstractmethod
+    async def forget(
+        self,
+        memory_id
+    ):
+        pass
+
+Implementation:
+
+MemoryProvider
+
+├── VectorMemory
+├── EpisodicMemory
+├── SemanticMemory
+├── WorkingMemory
+└── GraphMemory
+7. WorldModel Interface
+
+Aariya's understanding of the world.
+
+Contains:
+
+People
+Objects
+Events
+Relationships
+Environment
+class WorldModel(ABC):
+
+
+    @abstractmethod
+    async def observe(
+        self,
+        observation
+    ):
+        pass
+
+
+    @abstractmethod
+    async def predict(
+        self,
+        action
+    ):
+        pass
+
+
+    @abstractmethod
+    async def query(
+        self,
+        entity
+    ):
+        pass
+
+Example:
+
+World Model
+
+Student
+ |
+ ├── Studies Physics
+ |
+ ├── Weakness: Calculus
+ |
+ └── Goal: University Exam
+8. MissionManager Interface
+
+Controls long-term objectives.
+
+class MissionManager(ABC):
+
+
+    @abstractmethod
+    async def create_mission(
+        self,
+        objective
+    ):
+        pass
+
+
+    @abstractmethod
+    async def evaluate_progress(
+        self
+    ):
+        pass
+
+
+    @abstractmethod
+    async def terminate_mission(
+        self,
+        reason
+    ):
+        pass
+
+Example:
+
+Mission:
+
+"Help Seniru prepare for engineering entrance"
+
+Duration:
+6 months
+
+Metrics:
+- grades
+- completion
+- confidence
+9. GovernanceService Interface
+
+Very important for Aariya.
+
+Controls:
+
+Permissions
+Safety
+Boundaries
+Self-modification rules
+class GovernanceService(ABC):
+
+
+    @abstractmethod
+    async def authorize(
+        self,
+        action
+    ):
+        pass
+
+
+    @abstractmethod
+    async def check_risk(
+        self,
+        action
+    ):
+        pass
+
+
+    @abstractmethod
+    async def audit(
+        self,
+        event
+    ):
+        pass
+
+Architecture:
+
+Any Action
+
+    |
+    v
+
+Governance Layer
+
+    |
+ Allowed?
+    |
+ Execute
+10. TelemetryProvider Interface
+
+Observability system.
+
+Tracks:
+
+Performance
+Errors
+Agent behavior
+Memory usage
+Decisions
+class TelemetryProvider(ABC):
+
+
+    @abstractmethod
+    async def log_event(
+        self,
+        event
+    ):
+        pass
+
+
+    @abstractmethod
+    async def metric(
+        self,
+        name,
+        value
+    ):
+        pass
+
+
+    @abstractmethod
+    async def trace(
+        self,
+        operation
+    ):
+        pass
+
+Possible:
+
+TelemetryProvider
+
+├── Prometheus
+├── OpenTelemetry
+├── Custom Neural Dashboard
+11. SimulationEnvironment Interface
+
+For training and testing.
+
+Used for:
+
+Agent training
+Planning experiments
+Reinforcement learning
+class SimulationEnvironment(ABC):
+
+
+    @abstractmethod
+    async def reset(self):
+        pass
+
+
+    @abstractmethod
+    async def step(
+        self,
+        action
+    ):
+        pass
+
+
+    @abstractmethod
+    async def observe(self):
+        pass
+
+
+    @abstractmethod
+    async def reward(
+        self
+    ):
+        pass
+
+Examples:
+
+SimulationEnvironment
+
+├── StudySimulation
+├── SocialSimulation
+├── RoboticsSimulation
+├── OSINTSimulation
+└── VirtualWorld
+Final Aariya Core Dependency Graph
+                  Governance
+                      |
+                      |
+                  Executive
+                      |
+        ---------------------------
+        |            |            |
+    Planner    Reasoning     Mission
+        |
+    Skills
+        |
+ Capabilities
+        |
+ External Tools
+
+
+
+MemoryProvider
+       |
+       |
+ WorldModel
+
+
+
+Telemetry
+       |
+Everything
+Recommended Next Step Before Coding
+
+Create this folder first:
+
+aariya_core/
+
+├── interfaces/
+│
+├── capability.py
+├── skill.py
+├── reasoning.py
+├── planner.py
+├── executive.py
+├── memory.py
+├── world_model.py
+├── mission.py
+├── governance.py
+├── telemetry.py
+└── simulation.py
+
+Only after this:
+
+implementations/
+
+├── local_llm/
+├── postgres_memory/
+├── pgvector_memory/
+├── unity_avatar/
+├── whisper_voice/
+├── osint_agents/
+└── tools/
+

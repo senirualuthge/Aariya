@@ -1,0 +1,24 @@
+# Pulse AI News + Face Identification — Python requirements
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+psycopg2-binary==2.9.9
+httpx==0.25.2
+httpx-sse==0.4.0
+confluent-kafka==2.3.0
+qdrant-client==1.7.3
+apscheduler==3.10.4
+python-dotenv==1.0.0
+numpy==1.26.2
+scikit-learn==1.3.2
+scipy==1.11.4
+torch>=2.0.0
+hnswlib==0.7.0
+opencv-python==4.8.1.78
+insightface==0.7.3
+onnxruntime>=1.16.0
+deep_sort_realtime==1.3.2
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+opentelemetry-instrumentation-httpx==0.42b0
+# Optional: deepface for fallback detection
+# deepface==0.0.79

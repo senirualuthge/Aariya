@@ -1,0 +1,953 @@
+# GAP ANALYSIS — All *-prefixed .txt files (AFTER FIXES)
+# Generated: analysis of remaining todo, missing, placeholder, pass, NotImplementedError, stub, gap patterns
+
+RANKED BY REMAINING GAP SIGNAL
+========================================================================
+
+    59  *NEWPredictionPRT2.txt
+    19  *fixes.txt
+    18  *voice TTS.txt
+    15  *AutomateAgents.txt
+    13  *AnalyticDashBOardImrove.txt
+    12  *NEWSpeech.txt
+    11  *NEWCiticalThinking.txt
+    10  *user telemetry.txt
+    10  *Security.txt
+    10  *News Teller.txt
+    10  *New News Teller.txt
+    10  *New Agents Swarm  Visualize.txt
+    10  *AppPlan.txt
+    10  *Agents Swarm  Visualize.txt
+     9  *RecoorectionSystem.txt
+     8  *NEW RL System.txt
+     7  *New Cyber vulnerbility Cheker.txt
+     7  *Cyber vulnerbility Cheker.txt
+     6  *RAG Visualization DashB.txt
+     6  *Person Identify System.txt
+     6  *New RAG Visualization DashB.txt
+     6  *New Person Identify System.txt
+     6  *Dashboard integrate  (Recoret,app).txt
+     5  *read.txt
+     5  *RAG sys.txt
+     4  *SystemRestructure.txt
+     4  *SDKRecorrectionSys.txt
+     3  *NEW Roles.txt
+     3  *Mobile Achi v2.txt
+     3  *BottelNeck.txt
+     2  *implementationplan.txt
+     2  *OSNIT Layer.txt
+     2  *Networksearch.txt
+     2  *Fix4.txt
+     2  *Auto functioning.txt
+     2  *AccessFIles.txt
+     2  *AI Girl 2.txt
+     1  *Weakness.txt
+     1  *NewBugs.txt
+     1  *NEWUpgrade.txt
+     1  *NEWPre-Cognition System.txt
+     1  *FIXV3 .txt
+     1  *Autonomous Web Research.txt
+     0  *voice detetct.txt
+     0  *WorlMonitorMap.txt
+     0  *Real Intelligence vs Simulated Intelligence.txt
+     0  *NEWSelfDiagnost.txt
+     0  *NEWPredictionImprove.txt
+     0  *NEWPredictionEnginePrt4.txt
+     0  *NEWPredictionEnginePrt3.txt
+     0  *MoodAdvance.txt
+     0  *Local Ruuning.txt
+     0  *Fixv2.txt
+     0  *Emotions.txt
+     0  *BetterIfHad.txt
+     0  *Autonomy.txt
+     0  *AdvancedPrediction.txt
+     0  *AGI.txt
+     0  *AGI Claims.txt
+
+========================================================================
+
+============================================
+FILE: *AGI Claims.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *AGI.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *AI Girl 2.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      2 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  7
+    'fix' references:    5
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *AccessFIles.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       2
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *AdvancedPrediction.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Agents Swarm  Visualize.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      9 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   1
+    'missing' mentions:  3
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *AnalyticDashBOardImrove.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      13 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  3
+    'fix' references:    7
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *AppPlan.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      10 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       1
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Auto functioning.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      2 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *AutomateAgents.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      12 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       2
+    NotImplementedError: 0
+    'placeholder':       1
+    'stub' references:   0
+    'missing' mentions:  10
+    'fix' references:    3
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Autonomous Web Research.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      1 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  3
+    'fix' references:    8
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Autonomy.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  4
+    'fix' references:    8
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *BetterIfHad.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  5
+    'fix' references:    34
+    TODO/FIXME/XXX:      3
+    'TBD':               0
+
+============================================
+FILE: *BottelNeck.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      3 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    1
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Cyber vulnerbility Cheker.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      7 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  8
+    'fix' references:    58
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Dashboard integrate  (Recoret,app).txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      6 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    19
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Emotions.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  2
+    'fix' references:    2
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *FIXV3 .txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      1 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  6
+    'fix' references:    10
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Fix4.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      2 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  2
+    'fix' references:    3
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Fixv2.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  2
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Local Ruuning.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  1
+    'fix' references:    1
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Mobile Achi v2.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      3 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  1
+    'fix' references:    13
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *MoodAdvance.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  1
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEW RL System.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      8 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  1
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEW Roles.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      2 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       1
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEWCiticalThinking.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      11 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  4
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEWPre-Cognition System.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       1
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  1
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEWPredictionEnginePrt3.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEWPredictionEnginePrt4.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEWPredictionImprove.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEWPredictionPRT2.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      54 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       4
+    NotImplementedError: 0
+    'placeholder':       1
+    'stub' references:   0
+    'missing' mentions:  13
+    'fix' references:    3
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEWSelfDiagnost.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  5
+    'fix' references:    4
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEWSpeech.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      12 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  3
+    'fix' references:    2
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *NEWUpgrade.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      1 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  3
+    'fix' references:    2
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Networksearch.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      2 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *New Agents Swarm  Visualize.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      9 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   1
+    'missing' mentions:  3
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *New Cyber vulnerbility Cheker.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      7 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  8
+    'fix' references:    58
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *New News Teller.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      10 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  2
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *New Person Identify System.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      6 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  3
+    'fix' references:    14
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *New RAG Visualization DashB.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      6 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    12
+    TODO/FIXME/XXX:      1
+    'TBD':               0
+
+============================================
+FILE: *NewBugs.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      1 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  6
+    'fix' references:    7
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *News Teller.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      10 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  2
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *OSNIT Layer.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      2 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   1
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      2
+    'TBD':               0
+
+============================================
+FILE: *Person Identify System.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      6 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  3
+    'fix' references:    14
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *RAG Visualization DashB.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      6 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    12
+    TODO/FIXME/XXX:      1
+    'TBD':               0
+
+============================================
+FILE: *RAG sys.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      5 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  1
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Real Intelligence vs Simulated Intelligence.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  1
+    'fix' references:    2
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *RecoorectionSystem.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      9 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       1
+    'stub' references:   0
+    'missing' mentions:  6
+    'fix' references:    84
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *SDKRecorrectionSys.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      4 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  2
+    'fix' references:    16
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Security.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      9 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       1
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    5
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *SystemRestructure.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 1
+    'placeholder':       3
+    'stub' references:   0
+    'missing' mentions:  5
+    'fix' references:    26
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *Weakness.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      1 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  2
+    'fix' references:    1
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *WorlMonitorMap.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  24
+    'fix' references:    2
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *fixes.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      19 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  6
+    'fix' references:    2
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *implementationplan.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      2 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    0
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *read.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      5 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  2
+    'fix' references:    2
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *user telemetry.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      7 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       3
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  3
+    'fix' references:    3
+    TODO/FIXME/XXX:      1
+    'TBD':               0
+
+============================================
+FILE: *voice TTS.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      18 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  1
+    'fix' references:    7
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+
+============================================
+FILE: *voice detetct.txt
+============================================
+  Remaining gap counts:
+    '...' ellipsis:      0 (mostly speech/math/JS spread)
+    'pass' (code stubs): 0
+    'return None':       0
+    NotImplementedError: 0
+    'placeholder':       0
+    'stub' references:   0
+    'missing' mentions:  0
+    'fix' references:    1
+    TODO/FIXME/XXX:      0
+    'TBD':               0
+

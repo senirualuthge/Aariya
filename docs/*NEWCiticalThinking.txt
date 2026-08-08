@@ -1,0 +1,5566 @@
+Critical Thinking Engine (CTE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IMPLEMENTED at: server/systems/critical_thinking/
+
+Modules:
+  • engine.py          — CriticalThinkingEngine (unified orchestrator)
+  • assumption_analyzer.py  — AssumptionAnalyzer
+  • counterargument_generator.py — CounterargumentGenerator
+  • risk_analyzer.py   — RiskAnalyzer
+  • decision_scorer.py — DecisionScorer
+  • confidence_estimator.py — ConfidenceEstimator
+  • bias_detector.py   — BiasDetector
+  • reflection_interface.py — ReflectionInterface
+
+All modules fall back to LLM when available, with deterministic
+fallback logic when LLM is unreachable.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+User Request
+      │
+      ▼
+Intent Understanding
+      │
+      ▼
+Planner
+      │
+      ▼
+Critical Thinking Engine
+      │
+      ▼
+Execution Manager
+      │
+      ▼
+Capabilities
+Responsibilities
+
+The CTE should:
+
+Challenge assumptions.
+Detect missing information.
+Generate alternative plans.
+Evaluate risks and trade-offs.
+Verify facts before acting.
+Estimate confidence.
+Explain why it chose a solution.
+Detect contradictions with memory or the world model.
+Internal Modules
+Critical Thinking Engine
+
+├── Assumption Analyzer
+├── Evidence Evaluator
+├── Hypothesis Generator
+├── Counterargument Generator
+├── Risk Analyzer
+├── Decision Scorer
+├── Confidence Estimator
+├── Fact Verification
+├── Bias Detector
+└── Reflection Interface
+Example
+
+User:
+
+"Delete all duplicate files."
+
+Instead of immediately acting:
+
+Planner
+
+↓
+
+Critical Thinking
+
+↓
+
+Questions:
+
+• What defines "duplicate"?
+• Is the recycle bin available?
+• Should system folders be excluded?
+• Is a backup needed?
+• What if file names match but contents differ?
+
+↓
+
+Create safer plan
+
+↓
+
+Execute
+Decision Score
+
+Every important decision could produce an internal report:
+
+Goal:
+  Clean duplicate files
+
+Confidence:
+  0.94
+
+Risks:
+  Low
+
+Alternatives:
+  3
+
+Evidence:
+  File hashes
+  Folder structure
+
+Recommendation:
+  Delete only verified duplicates
+
+Requires Confirmation:
+  Yes
+
+The planner receives this before execution.
+
+Thinking Modes
+
+The engine can adapt its depth based on the task:
+
+Fast Mode – Quick responses for simple questions.
+Balanced Mode – Default for everyday interactions.
+Deep Analysis – Multi-step reasoning, comparison, and research.
+Devil's Advocate – Intentionally search for flaws and counterarguments.
+Creative Exploration – Brainstorm multiple possibilities before selecting one.
+Interaction with Other Components
+Planner
+     │
+     ▼
+Critical Thinking Engine
+     │
+ ┌───┼───────────────┐
+ │   │               │
+Memory        World Model
+ │                 │
+Knowledge Graph    │
+ │                 │
+Evidence & Context │
+ └───────┬─────────┘
+         ▼
+ Decision Report
+         ▼
+ Execution Manager
+Long-Term Learning
+
+After each significant task, the Reflection Engine can ask:
+
+Was the decision successful?
+Which assumptions were wrong?
+Which evidence was most useful?
+Could a better plan have been chosen?
+
+Those lessons become part of procedural memory, improving future decisions.
+
+One enhancement
+
+I would also add a Reasoning Strategy Manager above the Critical Thinking Engine. Instead of always using the same reasoning process, it chooses the most appropriate strategy for the task:
+
+Deductive reasoning for rule-based problems.
+Inductive reasoning for finding patterns from examples.
+Abductive reasoning for inferring the most likely explanation from incomplete evidence.
+Causal reasoning for understanding cause and effect.
+Probabilistic reasoning when uncertainty is high.
+Ethical and policy reasoning for sensitive actions.
+Systems thinking for complex problems with interacting parts.
+
+Phase 1 – Project Foundation
+
+Create the repository structure.
+
+aariya/
+├── core/
+├── capabilities/
+├── memory/
+├── runtime/
+├── events/
+├── planner/
+├── reasoning/
+├── world_model/
+├── safety/
+├── sdk/
+├── configs/
+├── tests/
+└── main.py
+Phase 2 – Event Bus
+
+Implement an event system that supports:
+
+Publish/Subscribe
+Event priorities
+Event history
+Event filtering
+
+Core files:
+
+events/
+    bus.py
+    event.py
+    priority.py
+Phase 3 – Capability SDK
+
+Build a standard interface that every capability must implement.
+
+Core files:
+
+sdk/
+    capability.py
+    manifest.py
+    loader.py
+Phase 4 – Capability Manager
+
+Implement:
+
+Automatic capability discovery
+Manifest loading
+Dependency checking
+Hot loading/unloading
+Health monitoring
+Phase 5 – Runtime Scheduler
+
+Create:
+
+Task queue
+Priority scheduler
+Worker pool
+Retry logic
+Timeouts
+Metrics
+Phase 6 – Memory Fabric
+
+Implement layered memory:
+
+Working Memory
+Episodic Memory
+Semantic Memory
+Procedural Memory
+Vector Store
+Knowledge Graph
+Phase 7 – World Model
+
+Represent:
+
+User
+Desktop
+Browser
+Files
+Devices
+Environment
+
+The planner should use this model rather than querying every capability directly.
+
+Phase 8 – Planner
+
+Build a planner that:
+
+Creates goals
+Breaks goals into tasks
+Builds task graphs
+Estimates cost
+Selects required capabilities
+Phase 9 – Critical Thinking Engine (CTE)
+
+This is the component you asked about.
+
+Suggested directory:
+
+reasoning/
+    critical_thinking/
+        engine.py
+        assumption_analyzer.py
+        evidence_evaluator.py
+        hypothesis_generator.py
+        counterargument.py
+        risk_analyzer.py
+        confidence.py
+        fact_checker.py
+        decision_scorer.py
+        strategy_manager.py
+
+Recommended execution pipeline:
+
+Goal
+↓
+Assumption Analysis
+↓
+Evidence Collection
+↓
+Hypothesis Generation
+↓
+Counterarguments
+↓
+Risk Analysis
+↓
+Decision Scoring
+↓
+Confidence Estimation
+↓
+Planner
+↓
+Execution
+Phase 10 – Reflection Engine
+
+After tasks complete:
+
+Compare expected vs. actual outcome
+Extract lessons
+Update procedural memory
+Improve future planning
+Phase 11 – Safety Governor
+
+Every action passes through:
+
+Permission checks
+Policy validation
+Simulation (where applicable)
+User confirmation for sensitive actions
+Audit logging
+Phase 12 – Capability Modules
+
+Develop independent modules such as:
+
+Voice
+Vision
+Browser
+Desktop
+Coding
+Robotics
+Finance
+Medical
+CAD
+OSINT
+
+Each module follows the SDK contract from Phase 3.
+
+Phase 13 – Developer Dashboard
+
+Visualize:
+
+Event stream
+Active goals
+Running capabilities
+Memory usage
+World model
+Planner decisions
+Resource usage
+Errors and health status
+
+Step 1 — Create the Repository
+Aariya/
+│
+├── apps/
+│   ├── desktop/
+│   ├── mobile/
+│   ├── web/
+│   └── api/
+│
+├── core/
+│
+├── capabilities/
+│
+├── services/
+│
+├── sdk/
+│
+├── runtime/
+│
+├── memory/
+│
+├── world/
+│
+├── reasoning/
+│
+├── planning/
+│
+├── learning/
+│
+├── safety/
+│
+├── events/
+│
+├── models/
+│
+├── configs/
+│
+├── data/
+│
+├── logs/
+│
+├── tests/
+│
+├── docs/
+│
+└── main.py
+
+This is your permanent project structure.
+
+Step 2 — Runtime Layer
+
+Create
+
+runtime/
+
+    runtime.py
+
+    scheduler.py
+
+    state.py
+
+    lifecycle.py
+
+    metrics.py
+
+Responsibilities
+
+Boot
+
+Shutdown
+
+Load capabilities
+
+Tick
+
+Resource monitoring
+
+Scheduling
+
+Health
+
+Nothing AI-specific belongs here.
+
+Step 3 — Event Layer
+events/
+
+    bus.py
+
+    event.py
+
+    priority.py
+
+    subscriber.py
+
+    publisher.py
+
+    middleware.py
+
+Everything communicates using events.
+
+Never:
+
+Planner
+
+↓
+
+Vision
+
+Always:
+
+Planner
+
+↓
+
+Event Bus
+
+↓
+
+Vision
+Step 4 — SDK
+
+Create
+
+sdk/
+
+    capability.py
+
+    tool.py
+
+    manifest.py
+
+    permissions.py
+
+    health.py
+
+    config.py
+
+Every capability must inherit from the SDK.
+
+Step 5 — Capability Folder
+capabilities/
+
+    browser/
+
+    vision/
+
+    desktop/
+
+    voice/
+
+    robotics/
+
+    coding/
+
+    osint/
+
+    finance/
+
+    cad/
+
+    medical/
+
+Each looks like
+
+vision/
+
+    manifest.json
+
+    capability.py
+
+    tools.py
+
+    config.py
+
+    events.py
+
+    health.py
+
+    tests/
+
+Exactly identical.
+
+Step 6 — Memory
+memory/
+
+    working/
+
+    episodic/
+
+    semantic/
+
+    procedural/
+
+    vector/
+
+    graph/
+
+    archive/
+
+    api.py
+
+    manager.py
+
+Memory becomes its own subsystem.
+
+Step 7 — Reasoning
+reasoning/
+
+    planner/
+
+    critical_thinking/
+
+    creativity/
+
+    reflection/
+
+    prediction/
+
+    curiosity/
+
+    social/
+
+    emotion/
+
+Notice:
+
+Emotion is only one reasoning service.
+
+Step 8 — Critical Thinking Engine
+
+This becomes one of the largest subsystems.
+
+critical_thinking/
+
+    engine.py
+
+    strategies/
+
+    validators/
+
+    analyzers/
+
+    scorers/
+
+    explainability/
+
+    verification/
+
+    reports/
+Step 9 — World Model
+world/
+
+    desktop.py
+
+    browser.py
+
+    devices.py
+
+    people.py
+
+    environment.py
+
+    projects.py
+
+    calendar.py
+
+    state.py
+
+The planner asks the World Model questions instead of directly querying capabilities.
+
+Step 10 — Planning
+planning/
+
+    planner.py
+
+    goals.py
+
+    tasks.py
+
+    workflow.py
+
+    executor.py
+
+    graph.py
+
+    optimizer.py
+
+Planner produces task graphs.
+
+Step 11 — Learning
+learning/
+
+    reflection.py
+
+    reinforcement.py
+
+    pattern_discovery.py
+
+    skill_learning.py
+
+    personalization.py
+Step 12 — Safety
+safety/
+
+    governor.py
+
+    permissions.py
+
+    policy.py
+
+    audit.py
+
+    simulator.py
+Step 13 — Services
+
+Everything reusable becomes a service.
+
+services/
+
+    llm/
+
+    embedding/
+
+    tts/
+
+    stt/
+
+    vision/
+
+    ocr/
+
+    search/
+
+    translation/
+
+Notice:
+
+These are not capabilities.
+
+They are backend services.
+
+Step 14 — AI Models
+
+Never hardcode one model.
+
+models/
+
+    reasoning/
+
+    embedding/
+
+    vision/
+
+    speech/
+
+    planning/
+
+    emotion/
+
+Each model is interchangeable.
+
+Step 15 — Dashboard
+dashboard/
+
+    Runtime
+
+    Events
+
+    Memory
+
+    World
+
+    Goals
+
+    Planner
+
+    Capabilities
+
+    CPU
+
+    GPU
+
+    Agents
+
+You will spend hundreds of hours here debugging.
+
+Step 16 — Documentation
+
+Create
+
+docs/
+
+    ADR/
+
+    SDK/
+
+    API/
+
+    Memory/
+
+    Runtime/
+
+    Planning/
+
+    Safety/
+
+Every architectural decision gets documented.
+
+Step 17 — Testing
+tests/
+
+    runtime/
+
+    planner/
+
+    memory/
+
+    capabilities/
+
+    sdk/
+
+    safety/
+
+    integration/
+
+Testing is not optional.
+
+Step 18 — Configuration
+configs/
+
+    development.yaml
+
+    production.yaml
+
+    laptop.yaml
+
+    server.yaml
+
+    robot.yaml
+
+Never hardcode paths or settings.
+
+Step 19 — Dependency Injection
+
+Everything is injected.
+
+Never
+
+planner = Planner()
+
+Always
+
+planner = container.get(Planner)
+
+This makes testing and replacement much easier.
+
+Step 20 — Version Everything
+
+Every component has
+
+Version
+
+Author
+
+Dependencies
+
+Configuration
+
+Health
+
+API Version
+
+Capabilities
+
+Permissions
+
+AARIYA Executive Intelligence Layer (EIL)
+
+Think of it as the CEO of the entire AI.
+
+The planner creates plans.
+
+The capabilities perform actions.
+
+The Executive Intelligence decides what deserves attention, what can wait, which agents to use, and when to interrupt or recover.
+
+Complete Architecture
+                          USER
+                            │
+                  Conversation Layer
+                            │
+                  Executive Intelligence
+                            │
+     ┌──────────────────────────────────────────┐
+     │ Executive Controller                     │
+     │------------------------------------------│
+     │ Goal Manager                             │
+     │ Attention Manager                        │
+     │ Agent Coordinator                        │
+     │ Strategy Selector                        │
+     │ Critical Thinking Engine                 │
+     │ Reflection Manager                       │
+     │ Safety Supervisor                        │
+     └──────────────────────────────────────────┘
+                            │
+                     Planner Runtime
+                            │
+                    Capability Runtime
+                            │
+                     Hardware / APIs
+Executive Controller
+
+This becomes the highest level of intelligence.
+
+Responsibilities:
+
+Prioritize competing goals
+Decide which reasoning strategy to use
+Interrupt running tasks if something urgent happens
+Allocate agents
+Manage cognitive resources
+Monitor progress
+Recover from failures
+
+Instead of asking "How do I solve this?", it asks "What should I focus on right now?"
+
+Attention Manager
+
+Humans don't process everything equally.
+
+Aariya shouldn't either.
+
+Every incoming event receives a score based on:
+
+Urgency
+
+Importance
+
+Novelty
+
+Risk
+
+Confidence
+
+Deadline
+
+User Priority
+
+Current Goal
+
+Only the highest-value events receive immediate attention.
+
+Goal Manager
+
+Goals should be hierarchical:
+
+Mission
+    │
+Long-Term Goal
+    │
+Project Goal
+    │
+Session Goal
+    │
+Task
+    │
+Action
+
+Example:
+
+Mission:
+Help user succeed
+
+↓
+
+Project:
+AI Research
+
+↓
+
+Goal:
+Build Capability SDK
+
+↓
+
+Task:
+Write interface
+
+↓
+
+Action:
+Create capability.py
+Agent Coordinator
+
+Instead of one planner solving everything:
+
+Executive
+
+↓
+
+Research Agent
+
+↓
+
+Planning Agent
+
+↓
+
+Memory Agent
+
+↓
+
+Critical Thinking Agent
+
+↓
+
+Coding Agent
+
+↓
+
+Vision Agent
+
+↓
+
+Browser Agent
+
+Each agent returns:
+
+Result:
+Confidence:
+Reasoning:
+Evidence:
+Estimated Cost:
+
+The Executive combines them into one decision.
+
+Strategy Selector
+
+Different problems require different thinking.
+
+Problem	Strategy
+Math	Deductive
+Debugging	Root Cause Analysis
+Research	Evidence-Based
+Design	Systems Thinking
+Brainstorming	Divergent Thinking
+Decision	Multi-Criteria Analysis
+Prediction	Probabilistic Reasoning
+
+The Executive selects the reasoning strategy before planning begins.
+
+Critical Thinking Pipeline
+
+Every important task passes through:
+
+Understand
+
+↓
+
+Challenge Assumptions
+
+↓
+
+Gather Evidence
+
+↓
+
+Generate Alternatives
+
+↓
+
+Evaluate Risks
+
+↓
+
+Compare Trade-offs
+
+↓
+
+Estimate Confidence
+
+↓
+
+Recommend Decision
+
+The planner then executes the recommended plan.
+
+Reflection Manager
+
+After completion:
+
+Expected Result
+
+↓
+
+Actual Result
+
+↓
+
+Difference
+
+↓
+
+Root Cause
+
+↓
+
+Lesson Learned
+
+↓
+
+Memory Update
+
+Reflection improves future performance without modifying code.
+
+Cognitive Budget
+
+Not every task deserves deep analysis.
+
+Assign budgets:
+
+Mode	Time	Use Case
+Fast	<100 ms	Conversation
+Standard	<1 s	Daily tasks
+Deep	5–30 s	Research
+Extended	Minutes	Long-running analysis
+
+This keeps interactions responsive while allowing deeper reasoning when appropriate.
+
+Trust and Confidence
+
+Every recommendation carries metadata:
+
+Answer:
+Confidence: 0.91
+Evidence:
+  - Memory
+  - Browser
+  - World Model
+Alternatives Considered: 3
+Outstanding Unknowns:
+  - Waiting for browser response
+
+This allows Aariya to express uncertainty rather than overcommitting.
+
+Performance Metrics
+
+The Executive monitors itself.
+
+Metrics include:
+
+Task success rate
+Average planning time
+Capability reliability
+Memory retrieval accuracy
+User corrections
+Agent utilization
+Resource consumption
+
+These metrics guide optimization over time.
+
+Recommended Implementation Order
+
+With the architecture largely complete, I'd implement in this order:
+
+Core Runtime – lifecycle, scheduler, dependency injection.
+Event Bus – publish/subscribe infrastructure.
+Capability SDK – standard interfaces and manifests.
+Capability Manager – discovery, loading, health.
+Memory Fabric – layered memory APIs.
+World Model – structured representation of environment.
+Planner – task graphs and execution.
+Executive Intelligence Layer – attention, goals, strategy selection.
+Critical Thinking Engine – evidence evaluation and decision support.
+Capabilities – browser, voice, vision, desktop, coding, and beyond.
+
+AARIYA Cognitive Architecture (ACA)
+
+Think of the architecture like the human brain.
+
+Instead of copying ChatGPT, we copy cognitive science.
+
+                       Conscious Mind
+                             │
+                     Executive Intelligence
+                             │
+ ┌────────────────────────────────────────────────────┐
+ │               Cognitive Pipeline                   │
+ │                                                    │
+ │ Perception → Attention → Reasoning → Decision      │
+ │                                                    │
+ └────────────────────────────────────────────────────┘
+                             │
+      ┌─────────────────────────────────────────┐
+      │         Long-Term Cognitive Systems     │
+      │                                         │
+      │ Memory                                 │
+      │ World Model                            │
+      │ Knowledge Graph                        │
+      │ Personality                            │
+      │ Values                                 │
+      │ Skills                                 │
+      └─────────────────────────────────────────┘
+                             │
+                Capability Runtime (Body)
+
+Notice something important.
+
+The LLM isn't shown anywhere.
+
+Because the LLM is only one reasoning tool.
+
+The architecture survives even if you replace every AI model.
+
+The Missing Component
+
+Until now we have:
+
+✅ Memory
+
+✅ Planner
+
+✅ Critical Thinking
+
+✅ Capabilities
+
+✅ Runtime
+
+✅ Safety
+
+But something is missing.
+
+Metacognition
+
+Metacognition means:
+
+Thinking about thinking.
+
+Humans constantly do this.
+
+Example:
+
+"I don't understand enough."
+
+"I should verify."
+
+"I'm making assumptions."
+
+"This answer feels weak."
+
+Current LLMs rarely do this well by default.
+
+Metacognition Engine
+Planner
+
+↓
+
+Metacognition
+
+↓
+
+Critical Thinking
+
+↓
+
+Execution
+
+Responsibilities:
+
+Monitor reasoning quality
+Was the plan complete?
+
+Was evidence sufficient?
+
+Did memory contradict it?
+
+Did I ignore alternatives?
+
+Am I overconfident?
+Detect uncertainty
+
+Instead of
+
+"I know."
+
+Aariya learns to say
+
+Confidence 38%
+
+Need more evidence.
+Detect hallucination risk
+Question
+
+↓
+
+Memory?
+
+↓
+
+World Model?
+
+↓
+
+Capability?
+
+↓
+
+Evidence?
+
+↓
+
+Reliable?
+
+↓
+
+Answer
+
+If evidence is weak:
+
+Search first.
+
+Detect reasoning loops
+Planning
+
+↓
+
+Planning
+
+↓
+
+Planning
+
+↓
+
+Planning
+
+Metacognition notices
+
+"I'm stuck."
+
+Then
+
+Change strategy
+
+Ask user
+
+Research
+
+Break task apart
+Self Monitoring
+
+Every subsystem reports health.
+
+Planner
+
+Confidence 91%
+
+Memory
+
+Confidence 99%
+
+Vision
+
+Offline
+
+Browser
+
+Busy
+
+Robot
+
+Disconnected
+
+The Executive always knows the system state.
+
+Cognitive Modes
+
+Humans don't think the same way all day.
+
+Neither should Aariya.
+
+Modes:
+
+Conversation
+
+Fast
+
+Low latency
+
+Small context
+
+Research
+
+Slow
+
+Evidence heavy
+
+Deep planning
+
+Coding
+
+Structured reasoning
+
+Verification
+
+Testing
+
+Robotics
+
+Real-time
+
+Safety first
+
+Sensor fusion
+
+Learning
+
+Background
+
+Reflection
+
+Memory cleanup
+
+Creativity
+
+Divergent thinking
+
+Idea generation
+
+Imagination
+
+Sleep
+
+No conversation
+
+Instead
+
+Compress memory
+
+Learn patterns
+
+Backup
+
+Optimize indexes
+
+Update graph
+
+Summarize
+Attention System
+
+Humans ignore 99% of sensory input.
+
+Aariya should too.
+
+Every event gets scored.
+
+Importance
+
+Novelty
+
+Risk
+
+User Priority
+
+Deadline
+
+Emotion
+
+Current Goal
+
+Frequency
+
+Only important events reach consciousness.
+
+Working Memory
+
+One of the biggest missing pieces in AI systems.
+
+Think of it as RAM.
+
+Current conversation
+
+Current task
+
+Recent observations
+
+Temporary facts
+
+Open questions
+
+Running hypotheses
+
+Partial plans
+
+When task finishes
+
+Working memory clears.
+
+Long-term memory remains.
+
+Internal Dialogue
+
+Instead of one chain of thought.
+
+Think:
+
+Planner
+
+↓
+
+Research Agent
+
+↓
+
+Critical Thinking
+
+↓
+
+Reflection
+
+↓
+
+Executive
+
+↓
+
+Answer
+
+Each contributes.
+
+No single component controls everything.
+
+Intent Hierarchy
+
+Don't only understand words.
+
+Understand intent.
+
+User says
+
+"Can you look at this PDF?"
+
+↓
+
+Literal Intent
+
+Read PDF
+
+↓
+
+Underlying Intent
+
+Needs summary
+
+↓
+
+Hidden Intent
+
+Preparing for exam
+
+↓
+
+Long-term Goal
+
+Help user study
+
+That is true intelligence.
+
+Cognitive Energy
+
+Humans get mentally overloaded.
+
+So should Aariya.
+
+Each task has a cost.
+
+GPU
+
+CPU
+
+Memory
+
+Time
+
+Network
+
+Reasoning Cost
+
+Scheduler balances them.
+
+Memory Importance
+
+Not every memory deserves forever.
+
+Importance
+
+Confidence
+
+Frequency
+
+Emotion
+
+Novelty
+
+Usefulness
+
+Decay naturally.
+
+Self Improvement
+
+Don't rewrite code.
+
+Instead improve:
+
+Prompt strategies
+
+Planning heuristics
+
+Capability rankings
+
+Memory retrieval
+
+Scheduling
+
+Attention weights
+
+Reasoning strategy selection
+
+This is much safer than autonomous code modification.
+
+Identity
+
+This is the part almost nobody designs.
+
+Aariya should have one stable identity.
+
+Not personality.
+
+Identity.
+
+It knows:
+
+Who am I?
+
+What can I do?
+
+What are my limitations?
+
+What is my mission?
+
+What values guide my actions?
+
+Without identity,
+
+every conversation starts from zero.
+
+Final Layer
+
+This is what I would call
+
+Cognitive Constitution
+
+These rules are never broken.
+
+1. Protect the user.
+
+2. Preserve truth over confidence.
+
+3. Admit uncertainty.
+
+4. Verify before acting.
+
+5. Learn from outcomes.
+
+6. Stay explainable.
+
+7. Keep memory organized.
+
+8. Respect permissions.
+
+9. Remain modular.
+
+10. Never sacrifice safety for speed.
+
+AARIYA Cognitive Framework (ACF)
+
+The framework is built around one core idea:
+
+Intelligence is a continuous cycle of perception, reasoning, action, and learning.
+
+Every cycle follows the same pattern.
+
+Observe
+   ↓
+Interpret
+   ↓
+Recall
+   ↓
+Reason
+   ↓
+Critique
+   ↓
+Plan
+   ↓
+Act
+   ↓
+Verify
+   ↓
+Reflect
+   ↓
+Learn
+
+This becomes the heartbeat of Aariya.
+
+The Four Cognitive Loops
+
+Instead of one giant loop, separate intelligence into four concurrent loops.
+
+Loop 1 — Reactive Loop (10–100 ms)
+
+Purpose:
+
+Voice responses
+Avatar animation
+Immediate safety
+Sensor updates
+
+Characteristics:
+
+Very fast
+No deep reasoning
+Low latency
+Loop 2 — Deliberative Loop (100 ms–5 s)
+
+Purpose:
+
+Conversations
+Planning
+Critical thinking
+Tool selection
+
+Characteristics:
+
+Uses memory
+Builds plans
+Produces explanations
+Loop 3 — Learning Loop (seconds to minutes)
+
+Purpose:
+
+Reflection
+Pattern discovery
+Memory consolidation
+Skill improvement
+
+Runs in the background without interrupting interaction.
+
+Loop 4 — Maintenance Loop (minutes to hours)
+
+Purpose:
+
+Cleanup
+Index rebuilding
+Health checks
+Backup
+Capability updates
+Performance optimization
+Cognitive Blackboard
+
+All loops share one structured workspace.
+
+Blackboard
+
+Current Goal
+
+Known Facts
+
+Open Questions
+
+Evidence
+
+Hypotheses
+
+Plans
+
+Risks
+
+Confidence
+
+Active Capabilities
+
+Agents collaborate through the blackboard instead of talking directly to each other.
+
+Decision Lifecycle
+
+Every significant decision should follow a standard lifecycle:
+
+Define the objective.
+Gather evidence.
+Retrieve relevant memories.
+Generate multiple candidate plans.
+Evaluate risks and benefits.
+Select the best plan.
+Execute.
+Verify the outcome.
+Record lessons learned.
+
+This consistency makes behavior predictable and explainable.
+
+Cognitive Quality Gates
+
+Before executing important actions, pass through quality checks:
+
+Is the objective clear?
+Is there enough evidence?
+Are there contradictions?
+Are there safer alternatives?
+Is confidence high enough?
+Does this violate any policies?
+
+If the answer to any critical check is "no," the Executive can request more information or ask the user for clarification.
+
+Unified Reasoning Strategies
+
+Rather than one reasoning style, maintain a library of strategies.
+
+Examples include:
+
+Deductive reasoning
+Inductive reasoning
+Abductive reasoning
+Causal reasoning
+Systems thinking
+Root cause analysis
+First-principles reasoning
+Decision matrix analysis
+
+The Strategy Selector chooses the most appropriate one for each task.
+
+Cognitive Performance Metrics
+
+Track metrics that matter to intelligence, not just system health.
+
+Examples:
+
+Goal completion rate
+Planning accuracy
+Memory retrieval relevance
+Average confidence
+User corrections
+Successful capability selection
+Recovery from failures
+Reflection effectiveness
+
+These metrics help guide future improvements.
+
+Cognitive Governance
+
+Define clear operating principles for the entire system:
+
+Prefer evidence over assumptions.
+Be transparent about uncertainty.
+Use the least privilege necessary.
+Explain significant decisions when appropriate.
+Learn from mistakes without changing core policies automatically.
+Keep long-term knowledge organized and traceable.
+
+AARIYA Neural Architecture Specification (ANAS)
+
+The entire system is built around 7 major planes.
+
+                        USER
+                          │
+                   Interaction Plane
+                          │
+                  Intelligence Plane
+                          │
+                  Cognitive Plane
+                          │
+                   Memory Plane
+                          │
+                 Capability Plane
+                          │
+                  Execution Plane
+                          │
+                  Infrastructure Plane
+
+Each plane has a single responsibility.
+
+Plane 1 — Interaction Plane
+
+This is how the outside world communicates with Aariya.
+
+Interfaces include:
+
+Chat
+Voice
+Avatar
+Mobile
+Desktop
+Web
+API
+AR/VR
+Robot Interface
+
+Rule:
+
+The Interaction Plane never performs reasoning.
+
+It only converts input into structured observations and renders responses.
+
+Plane 2 — Intelligence Plane
+
+This decides what Aariya should think about.
+
+Components:
+
+Executive Intelligence
+
+Attention Manager
+
+Goal Manager
+
+Strategy Selector
+
+Critical Thinking
+
+Reflection Manager
+
+Policy Advisor
+
+Rule:
+
+No hardware access.
+
+No API calls.
+
+Only decisions.
+
+Plane 3 — Cognitive Plane
+
+This transforms decisions into executable work.
+
+Contains:
+
+Planner
+
+Workflow Generator
+
+Task Graph Builder
+
+Reasoning Engine
+
+Execution Planner
+
+Output:
+
+Task Graph
+Plane 4 — Memory Plane
+
+Everything remembered lives here.
+
+Working
+
+Conversation
+
+Episodic
+
+Semantic
+
+Procedural
+
+Knowledge Graph
+
+Vector Store
+
+Archive
+
+Nothing writes directly to databases.
+
+Everything uses Memory APIs.
+
+Plane 5 — Capability Plane
+
+Everything that interacts with reality.
+
+Vision
+
+Voice
+
+Desktop
+
+Browser
+
+Robotics
+
+CAD
+
+Medical
+
+Finance
+
+IoT
+
+OSINT
+
+Coding
+
+Replaceable.
+
+Installable.
+
+Sandboxed.
+
+Plane 6 — Execution Plane
+
+Actually performs work.
+
+Scheduler
+
+Workers
+
+Queues
+
+Retry
+
+Timeout
+
+Monitoring
+
+Resource Manager
+
+No reasoning.
+
+Only execution.
+
+Plane 7 — Infrastructure Plane
+
+Shared services.
+
+Configuration
+
+Dependency Injection
+
+Logging
+
+Metrics
+
+Tracing
+
+Authentication
+
+Storage
+
+Networking
+
+Invisible to users.
+
+The Golden Rule
+
+Every request follows the same lifecycle:
+
+Observe
+    │
+Interpret
+    │
+Retrieve Memory
+    │
+Select Strategy
+    │
+Plan
+    │
+Critique
+    │
+Approve
+    │
+Execute
+    │
+Verify
+    │
+Reflect
+    │
+Learn
+
+This pipeline should never be bypassed for important actions.
+
+Aariya's Long-Term Mission
+
+Instead of defining success as "answering questions correctly," define it in terms of measurable objectives.
+
+Examples:
+
+Understand the user's intent accurately.
+Produce plans that are safe and effective.
+Use the minimum necessary capabilities.
+Learn reusable skills from experience.
+Keep long-term knowledge organized.
+Be transparent about uncertainty.
+Remain extensible without architectural rewrites.
+Engineering Milestones
+
+At this stage, I would stop designing and start building.
+
+The implementation roadmap would look like this:
+
+Milestone 1 — Kernel
+Runtime
+Event Bus
+Dependency Injection
+Scheduler
+Milestone 2 — Core Intelligence
+Planner
+Memory Fabric
+World Model
+Executive Intelligence
+Milestone 3 — Capability Framework
+SDK
+Capability Manager
+Plugin Loader
+Health Monitoring
+Milestone 4 — First Capabilities
+Voice
+Browser
+Desktop
+Vision
+Milestone 5 — Advanced Intelligence
+Critical Thinking Engine
+Reflection Engine
+Strategy Selector
+Knowledge Graph
+Milestone 6 — Platform
+Dashboard
+SDK Documentation
+Plugin Ecosystem
+Testing Framework
+
+AARIYA Blueprint 1.0
+
+Instead of "files," define the fundamental objects that exist in the system.
+
+Everything in Aariya is one of these objects.
+
+Agent
+Capability
+Tool
+Memory
+Goal
+Task
+Plan
+Observation
+Event
+Policy
+Model
+Skill
+Resource
+World Entity
+Knowledge Node
+Workflow
+Conversation
+
+Nothing else exists.
+
+Everything inherits from these.
+
+The Object Model
+User
+
+↓
+
+Observation
+
+↓
+
+Goal
+
+↓
+
+Plan
+
+↓
+
+Task
+
+↓
+
+Capability
+
+↓
+
+Tool
+
+↓
+
+Result
+
+↓
+
+Memory
+
+Everything follows this lifecycle.
+
+Universal Object Schema
+
+Every object shares common metadata.
+
+id: uuid
+
+type:
+
+version:
+
+created_at:
+
+updated_at:
+
+owner:
+
+source:
+
+confidence:
+
+importance:
+
+permissions:
+
+tags:
+
+status:
+
+Now every component understands every object.
+
+Everything Is a Graph
+
+Instead of storing disconnected data:
+
+Goal
+
+↓
+
+Task
+
+↓
+
+Capability
+
+↓
+
+Memory
+
+↓
+
+Conversation
+
+Represent everything as a graph.
+
+Goal
+ │
+owns
+ │
+Task
+ │
+uses
+ │
+Capability
+ │
+generated
+ │
+Memory
+
+Advantages:
+
+Better reasoning
+Easier search
+Explainability
+Provenance
+Relationship discovery
+Universal IDs
+
+Every object gets an immutable ID.
+
+goal-000245
+
+memory-394832
+
+task-284912
+
+agent-0002
+
+cap-vision
+
+tool-search
+
+event-948492
+
+No anonymous objects.
+
+Internal Language
+
+Rather than components inventing their own messages, define one internal language.
+
+Example:
+
+action: execute
+
+target: browser.search
+
+goal: goal-24
+
+priority: high
+
+timeout: 30
+
+requires:
+    internet
+
+Every subsystem speaks the same language.
+
+Digital Nervous System
+
+Instead of only an event bus, think in terms of a nervous system.
+
+Sensors
+
+↓
+
+Perception
+
+↓
+
+Attention
+
+↓
+
+Reasoning
+
+↓
+
+Planning
+
+↓
+
+Execution
+
+↓
+
+Memory
+
+↓
+
+Learning
+
+Each layer has a single responsibility.
+
+Cognitive DNA
+
+This is something I would add that isn't common in most AI architectures.
+
+Every AI instance has a Cognitive Profile.
+
+It defines:
+
+reasoning_depth:
+
+creativity:
+
+risk_tolerance:
+
+curiosity:
+
+initiative:
+
+explainability:
+
+reflection_frequency:
+
+planning_horizon:
+
+memory_decay:
+
+These are dynamic configuration values, not static behavior.
+
+That means different deployments can have different personalities and operating styles while sharing the same core architecture.
+
+Time Travel
+
+Every important state change is recorded.
+
+Instead of only storing the latest state:
+
+Version 1
+
+↓
+
+Version 2
+
+↓
+
+Version 3
+
+↓
+
+Version 4
+
+This allows:
+
+debugging
+rollback
+replay
+simulation
+auditing
+Simulation Engine
+
+Before expensive or risky actions:
+
+Plan
+
+↓
+
+Simulation
+
+↓
+
+Estimate
+
+↓
+
+Risk
+
+↓
+
+Success Probability
+
+↓
+
+Execute
+
+The simulation engine uses the World Model to predict outcomes where feasible, but it cannot guarantee real-world results.
+
+Memory as a Knowledge Ecosystem
+
+Instead of treating memory as storage:
+
+Experience
+
+↓
+
+Knowledge
+
+↓
+
+Skill
+
+↓
+
+Wisdom
+
+The Reflection Engine transforms experiences into reusable knowledge and skills over time.
+
+Adaptive Capability Selection
+
+Suppose Aariya has three OCR capabilities.
+
+Instead of always choosing one:
+
+Capability A
+
+Accuracy 99%
+
+Speed 2s
+
+------------
+
+Capability B
+
+Accuracy 96%
+
+Speed 200ms
+
+------------
+
+Capability C
+
+Offline
+
+The Capability Intelligence Layer selects the best fit for the current goal and constraints.
+
+Distributed Runtime (Future)
+
+One long-term enhancement I'd plan for is running Aariya across multiple devices.
+
+Laptop
+
+↓
+
+Phone
+
+↓
+
+Home Server
+
+↓
+
+Robot
+
+↓
+
+Smart Glasses
+
+Each device hosts the capabilities it's best suited for, while the Executive Intelligence coordinates them.
+
+This should be optional and designed around explicit user control and privacy.
+
+The Final Maturity Model
+Level 1
+
+Chatbot
+
+↓
+
+Level 2
+
+Assistant
+
+↓
+
+Level 3
+
+Companion
+
+↓
+
+Level 4
+
+Operator
+
+↓
+
+Level 5
+
+Agent Platform
+
+↓
+
+Level 6
+
+Cognitive Operating System
+
+
+AARIYA Development Roadmap (v1.0)
+
+Instead of coding randomly, we'll build Aariya in layers. Each phase must compile, run, and have automated tests before moving to the next.
+
+Phase 0 — Project Initialization (1 week)
+Goal
+
+Create the engineering foundation.
+
+Deliverables:
+
+Git repository
+Coding standards
+CI/CD pipeline
+Docker development environment
+Configuration management
+Logging framework
+Testing framework
+Documentation site
+
+Result:
+
+Aariya/
+├── core/
+├── capabilities/
+├── services/
+├── runtime/
+├── tests/
+└── docs/
+Phase 1 — AI Kernel (2–3 weeks)
+
+This is the heart of Aariya.
+
+Build:
+
+Runtime
+
+↓
+
+Scheduler
+
+↓
+
+Dependency Injection
+
+↓
+
+Event Bus
+
+↓
+
+Capability Manager
+
+↓
+
+Health Monitor
+
+After Phase 1:
+
+✔️ Aariya boots
+
+✔️ Loads capabilities
+
+✔️ Publishes events
+
+✔️ Can be extended
+
+No AI yet.
+
+Phase 2 — Capability SDK (2 weeks)
+
+Create a developer SDK.
+
+Every capability must implement:
+
+class Capability:
+
+    initialize()
+
+    configure()
+
+    execute()
+
+    shutdown()
+
+    health()
+
+    subscribe()
+
+    tools()
+
+After this:
+
+Adding a capability becomes:
+
+Drop folder
+
+↓
+
+Restart
+
+↓
+
+Works
+Phase 3 — Memory Fabric (3 weeks)
+
+Implement:
+
+Working Memory
+
+Conversation Memory
+
+Semantic Memory
+
+Procedural Memory
+
+Knowledge Graph
+
+Vector Store
+
+Archive
+
+APIs:
+
+remember()
+
+recall()
+
+search()
+
+forget()
+
+link()
+
+summarize()
+Phase 4 — World Model (2 weeks)
+
+Create a structured representation of:
+
+User
+
+Projects
+
+Desktop
+
+Browser
+
+Devices
+
+Calendar
+
+Files
+
+Robots
+
+Planner never talks directly to hardware.
+
+Phase 5 — Executive Intelligence (3 weeks)
+
+This is where Aariya starts thinking.
+
+Build:
+
+Goal Manager
+
+Attention Manager
+
+Executive Controller
+
+Strategy Selector
+
+Task Dispatcher
+Phase 6 — Planner (3 weeks)
+
+Planner creates executable task graphs.
+
+Example:
+
+Goal
+
+↓
+
+Tasks
+
+↓
+
+Dependencies
+
+↓
+
+Execution Plan
+Phase 7 — Critical Thinking Engine (4 weeks)
+
+Now implement what you asked for.
+
+Modules:
+
+Assumption Analyzer
+
+Evidence Evaluator
+
+Hypothesis Generator
+
+Counterargument Engine
+
+Risk Analyzer
+
+Confidence Estimator
+
+Decision Scorer
+
+Explainability
+
+Now Aariya starts questioning its own plans.
+
+Phase 8 — Reflection Engine (2 weeks)
+
+After every task:
+
+Expected
+
+↓
+
+Actual
+
+↓
+
+Difference
+
+↓
+
+Lesson
+
+↓
+
+Memory
+
+This is continuous learning without modifying source code.
+
+Phase 9 — Initial Capabilities (6–8 weeks)
+
+Build:
+
+Voice
+
+Browser
+
+Desktop
+
+Vision
+
+Coding
+
+These become your reference implementations for future capability developers.
+
+Phase 10 — Dashboard (3 weeks)
+
+Visualize:
+
+Runtime state
+Event stream
+Active goals
+Memory
+World model
+Capabilities
+Resource usage
+Planner decisions
+
+Without this, debugging a complex cognitive system becomes extremely difficult.
+
+Phase 11 — Plugin Ecosystem
+
+Publish:
+
+SDK
+Documentation
+Sample capability
+Templates
+Testing tools
+
+Now others can build capabilities.
+
+Phase 12 — Advanced Capabilities
+
+Add:
+
+Robotics
+Smart Home
+CAD
+Finance
+Medical
+OSINT
+
+No kernel changes required.
+
+What I'd Build First (The MVP)
+
+Don't try to build everything.
+
+Build this minimal stack first:
+
+Runtime
+    │
+Event Bus
+    │
+Capability Manager
+    │
+Memory
+    │
+Planner
+    │
+Critical Thinking
+    │
+Browser Capability
+
+That alone lets you demonstrate the architecture end-to-end.
+
+Technology Stack
+
+Based on your previous goals for Aariya (local-first, extensible, robotics-ready), I'd recommend:
+
+Layer	Recommended Technology
+Backend	Python 3.12+
+APIs	FastAPI
+Async	asyncio
+Event Bus	Redis Streams (distributed) or in-process pub/sub (MVP)
+Dependency Injection	dependency-injector
+Data Validation	Pydantic
+Memory Database	PostgreSQL + pgvector
+Knowledge Graph	Neo4j (or NetworkX for MVP)
+Task Queue	Celery or asyncio-based scheduler
+Dashboard	React + TypeScript
+Desktop App	Tauri or Electron
+Messaging	WebSockets
+Testing	pytest
+Packaging	Docker
+
+
+Cognitive Skill Tree
+
+Instead of hardcoding every ability, represent skills as a graph.
+
+Reasoning
+├── Logical Reasoning
+├── Mathematical Reasoning
+├── Critical Thinking
+├── Systems Thinking
+├── Scientific Reasoning
+└── Ethical Reasoning
+
+Communication
+├── Teaching
+├── Negotiation
+├── Storytelling
+└── Translation
+
+Development
+├── Python
+├── JavaScript
+├── C++
+└── SQL
+
+The Executive can determine which skills are needed for a task and identify gaps.
+
+2. Memory Confidence & Decay
+
+Every memory should include:
+
+confidence: 0.92
+importance: 0.81
+last_verified: 2026-07-15
+last_used: 2026-07-14
+decay_rate: slow
+
+This allows memories to become stale and be revalidated instead of being treated as permanently correct.
+
+3. Cognitive Workspace
+
+A dedicated workspace for active thinking.
+
+Contents:
+
+Current objective
+Relevant memories
+Evidence
+Open questions
+Partial plans
+Assumptions
+Risks
+Alternatives
+
+This workspace is temporary and cleared when a task finishes.
+
+4. Unified Tool Registry
+
+Instead of each capability exposing tools independently:
+
+Tool Registry
+
+search_web()
+
+ocr()
+
+translate()
+
+code_python()
+
+browser_open()
+
+desktop_click()
+
+robot_move()
+
+The planner queries the registry rather than individual capabilities.
+
+5. Execution Sandbox
+
+Before executing sensitive workflows:
+
+Task
+
+↓
+
+Sandbox
+
+↓
+
+Simulation
+
+↓
+
+Validation
+
+↓
+
+Real Execution
+
+Useful for desktop automation, robotics, and file operations.
+
+6. Explainability Layer
+
+Every major decision should answer:
+
+Why this plan?
+Which evidence was used?
+Which alternatives were rejected?
+How confident is the decision?
+What assumptions were made?
+
+This helps both debugging and user trust.
+
+7. Experience Replay
+
+Record important task executions:
+
+Observe
+
+↓
+
+Plan
+
+↓
+
+Execute
+
+↓
+
+Result
+
+↓
+
+Replay
+
+Useful for debugging, testing, and improving planners.
+
+8. Adaptive Planning Policies
+
+Rather than one planner behavior:
+
+Policies could include:
+
+Conservative
+Balanced
+Aggressive
+Exploratory
+Research
+Teaching
+
+The Executive chooses the policy based on context.
+
+9. Resource Budgeting
+
+Each task receives a budget:
+
+cpu: 20%
+gpu: 2 GB
+memory: 4 GB
+time: 15 seconds
+cost: medium
+
+The scheduler enforces these budgets to prevent one task from monopolizing resources.
+
+10. Capability Certification
+
+Before enabling a capability:
+
+Manifest validation
+Dependency validation
+Security checks
+Permission review
+Performance benchmark
+Integration tests
+
+This is especially valuable if third-party capabilities are supported.
+
+11. Mission System
+
+Instead of isolated goals:
+
+Mission
+   ↓
+Project
+   ↓
+Goal
+   ↓
+Objective
+   ↓
+Task
+   ↓
+Action
+
+This gives long-running work a consistent structure.
+
+12. Cognitive Timeline
+
+Maintain a chronological history:
+
+08:00 Boot
+
+08:02 User asked question
+
+08:03 Planner created task
+
+08:04 Browser searched
+
+08:05 Memory updated
+
+08:06 Reflection completed
+
+Excellent for diagnostics and auditing.
+
+13. Multi-Modal Fusion
+
+Combine information from different capabilities before reasoning.
+
+Example:
+
+Camera
+    │
+Microphone
+    │
+Browser
+    │
+Desktop
+    │
+Memory
+     ↓
+Fusion Layer
+     ↓
+Planner
+
+The planner receives a unified view instead of multiple disconnected inputs.
+
+14. Capability Marketplace
+
+Plan for signed capability packages.
+
+Each package includes:
+
+Manifest
+Version
+Dependencies
+Permissions
+Signature
+Documentation
+Tests
+
+This creates a healthier plugin ecosystem.
+
+15. Cognitive Benchmark Suite
+
+Don't measure only latency.
+
+Track:
+
+Planning quality
+Memory retrieval accuracy
+Tool selection success
+Goal completion
+Reflection quality
+User corrections
+Reliability
+
+This lets you evaluate improvements objectively.
+
+My "Aariya 2030" Vision
+
+If I were defining the long-term roadmap, it would look like this:
+
+Foundation
+Runtime
+Event Bus
+SDK
+Scheduler
+Intelligence
+Executive
+Planner
+Critical Thinking
+Reflection
+Memory
+Capabilities
+Voice
+Vision
+Browser
+Desktop
+Coding
+Platform
+Dashboard
+Plugin SDK
+Marketplace
+Benchmarks
+Ecosystem
+Robotics
+Smart Home
+Distributed runtime
+Third-party capabilities
+
+
+Overall Timeline
+Year 1
+
+Sprint 1  → AI Kernel
+Sprint 2  → Event System
+Sprint 3  → Memory
+Sprint 4  → Planner
+Sprint 5  → Critical Thinking
+Sprint 6  → Capabilities
+Sprint 7  → Dashboard
+Sprint 8  → Optimization
+
+↓
+
+Version 1.0
+
+↓
+
+Version 2.0
+
+Distributed Intelligence
+
+↓
+
+Version 3.0
+
+Developer Ecosystem
+Repository Structure
+
+I would split the project into repositories rather than one giant codebase.
+
+aariya-kernel/
+
+Contains
+
+Runtime
+Event Bus
+Scheduler
+Dependency Injection
+Capability Manager
+Configuration
+aariya-memory/
+
+Contains
+
+Working Memory
+Semantic Memory
+Knowledge Graph
+Vector Memory
+Reflection
+aariya-planner/
+
+Contains
+
+Planner
+Goal Manager
+Workflow Engine
+Task Graph
+Strategy Selector
+aariya-reasoning/
+
+Contains
+
+Critical Thinking
+Logic
+Creativity
+Reflection
+Explainability
+aariya-capabilities/
+
+Contains
+
+Browser
+Desktop
+Vision
+Voice
+Robotics
+Finance
+Medical
+CAD
+aariya-dashboard/
+
+Contains
+
+Runtime Dashboard
+Memory Viewer
+Event Viewer
+Planner Viewer
+Capability Monitor
+aariya-sdk/
+
+Contains
+
+Capability SDK
+Templates
+Documentation
+Testing Tools
+Development Method
+
+Every sprint follows exactly the same lifecycle.
+
+Architecture
+
+↓
+
+Specification
+
+↓
+
+Interfaces
+
+↓
+
+Implementation
+
+↓
+
+Unit Tests
+
+↓
+
+Integration Tests
+
+↓
+
+Documentation
+
+↓
+
+Review
+
+↓
+
+Release
+
+No skipping.
+
+Definition of Done (DoD)
+
+A subsystem is not complete until it has:
+
+Source code
+Unit tests
+Integration tests
+API documentation
+Architecture documentation
+Logging
+Metrics
+Health checks
+Configuration
+Example implementation
+
+This prevents "it works on my machine" problems.
+
+Sprint Structure
+
+Every sprint is two weeks.
+
+Week 1:
+
+Design
+Build
+Unit test
+
+Week 2:
+
+Integration
+Documentation
+Bug fixing
+Performance tuning
+Coding Standards
+
+I would establish these rules before writing code:
+
+Naming
+CapabilityManager
+MemoryService
+GoalPlanner
+
+Avoid abbreviations.
+
+Type Hints
+
+Use static typing throughout the codebase.
+
+Async
+
+All I/O should be asynchronous.
+
+Dependency Injection
+
+Never instantiate services directly.
+
+Logging
+
+Every significant action should be logged with context.
+
+Quality Gates
+
+Before merging any feature:
+
+All tests pass.
+No critical lint issues.
+Documentation updated.
+Performance targets met.
+No architectural rule violations.
+Performance Targets
+
+Define measurable goals early.
+
+Example targets:
+
+Component	Target
+Event Bus latency	< 5 ms
+Planner startup	< 200 ms
+Capability load	< 1 s
+Memory lookup	< 100 ms
+Voice response	< 500 ms
+
+These are engineering goals, not guarantees—they can be refined as the implementation matures.
+
+Risk Register
+
+Track major risks from the beginning.
+
+Examples:
+
+Risk	Mitigation
+Tight coupling	Capability contracts
+Memory growth	Summarization & archival
+Slow planning	Task graph optimization
+Plugin instability	SDK + certification
+Resource exhaustion	Scheduler & budgets
+Release Strategy
+Alpha
+Kernel
+Event Bus
+One capability
+Planner
+Beta
+Memory
+Dashboard
+Voice
+Browser
+Critical Thinking
+1.0
+Stable SDK
+Plugin system
+Documentation
+Tests
+2.0
+Robotics
+Distributed runtime
+Advanced learning
+Documentation Strategy
+
+Keep documentation versioned alongside the code.
+
+Suggested documents:
+
+/docs
+    /architecture
+    /api
+    /adr
+    /sdk
+    /tutorials
+    /deployment
+    /security
+The Single Most Important Next Step
+
+If I were running this project professionally, I would stop planning and begin implementation.
+
+Specifically, I would start with Sprint 1: AI Kernel.
+
+Sprint 1 Deliverables
+
+Build only these components:
+
+Kernel Runtime
+│
+├── Dependency Injection Container
+├── Event Bus
+├── Scheduler
+├── Capability Manager
+├── Configuration Loader
+├── Logging
+├── Health Monitor
+└── Boot Sequence
+
+Nothing else.
+
+No memory.
+
+No planner.
+
+No LLM.
+
+No avatar.
+
+No browser.
+
+No vision.
+
+Just a rock-solid kernel.
+
+Sprint 1 Architecture
+                main.py
+                   │
+                   ▼
+           Runtime Manager
+                   │
+    ┌──────────────┼──────────────┐
+    │              │              │
+Event Bus     Scheduler     DI Container
+    │              │              │
+    └──────────────┼──────────────┘
+                   │
+          Capability Manager
+                   │
+           Plugin Discovery
+                   │
+          Health Monitoring
+Milestone 1.1 – Runtime Manager
+
+The Runtime Manager is the operating system kernel.
+
+Responsibilities:
+
+Boot
+Shutdown
+Restart
+Load configuration
+Initialize services
+Maintain runtime state
+Report health
+
+Directory:
+
+runtime/
+    runtime.py
+    lifecycle.py
+    state.py
+Milestone 1.2 – Dependency Injection Container
+
+Nothing should create objects directly.
+
+Instead of:
+
+planner = Planner()
+
+Use:
+
+planner = container.resolve(Planner)
+
+Responsibilities:
+
+Singleton management
+Dependency resolution
+Service registration
+Test doubles isolated for unit testing
+Milestone 1.3 – Event Bus
+
+Every subsystem communicates through events.
+
+Example flow:
+
+Capability Loaded
+
+↓
+
+Event Bus
+
+↓
+
+Logger
+
+↓
+
+Dashboard
+
+↓
+
+Metrics
+
+Initial events:
+
+system.boot
+
+system.ready
+
+capability.loaded
+
+capability.failed
+
+health.changed
+
+runtime.shutdown
+Milestone 1.4 – Scheduler
+
+Initially, keep it simple.
+
+Support:
+
+Immediate tasks
+Delayed tasks
+Periodic tasks
+
+Later, it can evolve into a priority scheduler.
+
+Milestone 1.5 – Capability Manager
+
+At startup:
+
+Scan
+
+↓
+
+Read manifest
+
+↓
+
+Validate
+
+↓
+
+Register
+
+↓
+
+Initialize
+
+↓
+
+Start
+
+Capabilities are discovered automatically.
+
+Milestone 1.6 – Configuration
+
+Suggested layout:
+
+configs/
+
+development.yaml
+
+production.yaml
+
+robot.yaml
+
+server.yaml
+
+All paths configured via environment or config file.
+
+Milestone 1.7 – Logging
+
+Every event should be logged.
+
+Example:
+
+[INFO]
+
+Runtime started
+
+Timestamp
+
+Component
+
+Duration
+
+Metadata
+
+Later you'll thank yourself.
+
+Milestone 1.8 – Health System
+
+Every component reports:
+
+status: healthy
+
+latency: 5ms
+
+uptime: 120s
+
+version: 1.0.0
+
+Dashboard simply reads health information.
+
+Milestone 1.9 – Plugin Discovery
+
+Directory:
+
+capabilities/
+
+browser/
+
+voice/
+
+vision/
+
+Each contains:
+
+manifest.json
+
+capability.py
+
+Startup automatically loads them.
+
+Milestone 1.10 – Boot Sequence
+Boot
+
+↓
+
+Load Config
+
+↓
+
+Initialize Logger
+
+↓
+
+Initialize DI
+
+↓
+
+Initialize Event Bus
+
+↓
+
+Initialize Scheduler
+
+↓
+
+Discover Plugins
+
+↓
+
+Start Plugins
+
+↓
+
+Health Check
+
+↓
+
+READY
+Deliverables
+
+By the end of Sprint 1 you should have:
+
+Bootable kernel
+Dependency injection
+Event bus
+Scheduler
+Capability manager
+Plugin discovery
+Logging
+Health monitoring
+Configuration loader
+Unit tests for each component
+Integration test for the full boot sequence
+Suggested Technology Stack
+Component	Recommendation
+Language	Python 3.12+
+Web API	FastAPI
+Async	asyncio
+Validation	Pydantic
+Config	YAML
+Logging	structlog or Python logging
+Testing	pytest
+Packaging	Docker
+Linting	Ruff
+Formatting	Black
+Repository Structure
+aariya/
+
+├── kernel/
+│   ├── runtime/
+│   ├── scheduler/
+│   ├── events/
+│   ├── container/
+│   ├── capability_manager/
+│   ├── config/
+│   ├── health/
+│   └── logging/
+│
+├── capabilities/
+│
+├── services/
+│
+├── tests/
+│
+├── docs/
+│
+└── main.py
+One Change I Would Make
+
+After seeing the complete vision, I'd introduce one new architectural concept before writing any code:
+
+Aariya Interface Definition Language (AIDL)
+
+Instead of every subsystem inventing its own request and response formats, define a single interface specification.
+
+For example:
+
+request:
+  id: req-12345
+  goal: summarize_pdf
+  inputs:
+    file: notes.pdf
+
+context:
+  conversation: conv-42
+  user: user-1
+
+constraints:
+  timeout: 30s
+  offline_only: true
+
+Goal
+
+When you run
+
+python main.py
+
+You should see
+
+─────────────────────────────────────
+AARIYA KERNEL v0.1
+─────────────────────────────────────
+
+Loading Configuration complete
+
+Starting Runtime complete
+
+Initializing Event Bus complete
+
+Initializing Dependency Container complete
+
+Initializing Scheduler complete
+
+Discovering Capabilities complete
+
+Loading Browser complete
+
+Loading Voice complete
+
+Loading Vision complete
+
+Health Check passed
+
+Kernel Ready
+
+Listening for connections
+
+If you can achieve that, you've built the foundation.
+
+Step 1 — Configuration System
+configs/
+    development.yaml
+    production.yaml
+    server.yaml
+
+Responsible for
+
+Environment variables
+API Keys
+Model settings
+Memory paths
+Database settings
+Capability settings
+
+All values should be dynamically configurable.
+
+Step 2 — Dependency Injection
+
+Every object comes from the container.
+
+Container
+
+↓
+
+Runtime
+
+↓
+
+Scheduler
+
+↓
+
+EventBus
+
+↓
+
+Memory
+
+↓
+
+Planner
+
+Nothing directly creates another service.
+
+Step 3 — Runtime
+
+Responsible for
+
+Boot
+
+Initialize
+
+Run
+
+Shutdown
+
+Restart
+
+The Runtime owns the lifecycle.
+
+Step 4 — Event Bus
+
+Every subsystem communicates through events.
+
+Example
+
+Vision
+
+↓
+
+event.publish()
+
+↓
+
+Planner
+
+↓
+
+Memory
+
+↓
+
+Dashboard
+
+Never
+
+Vision
+
+↓
+
+Planner
+Step 5 — Scheduler
+
+Initial features
+
+Immediate Task
+
+Delayed Task
+
+Repeating Task
+
+Priority Queue
+
+Future versions can become distributed.
+
+Step 6 — Capability Loader
+
+The loader should automatically discover
+
+capabilities/
+
+browser/
+
+voice/
+
+vision/
+
+desktop/
+
+Every folder contains
+
+manifest.json
+
+capability.py
+
+No manual registration.
+
+Step 7 — Capability Lifecycle
+
+Every capability has the same lifecycle.
+
+Created
+
+↓
+
+Configured
+
+↓
+
+Initialized
+
+↓
+
+Running
+
+↓
+
+Paused
+
+↓
+
+Stopped
+
+↓
+
+Destroyed
+
+Every capability follows this state machine.
+
+Step 8 — Health Manager
+
+Every subsystem reports
+
+Healthy
+
+Busy
+
+Warning
+
+Error
+
+Offline
+
+Dashboard simply reads this.
+
+Step 9 — Logging
+
+Every action generates
+
+Timestamp
+
+Component
+
+Duration
+
+Result
+
+Metadata
+
+Never use print().
+
+Everything goes through Logger.
+
+Step 10 — Metrics
+
+Track
+
+CPU
+
+GPU
+
+Memory
+
+Latency
+
+Events/sec
+
+Capabilities
+
+Queue Length
+Step 11 — CLI
+
+Example
+
+aariya start
+
+aariya stop
+
+aariya restart
+
+aariya doctor
+
+aariya capabilities
+
+aariya status
+
+aariya logs
+
+This becomes invaluable for debugging.
+
+Step 12 — Tests
+
+Every module needs
+
+Unit Tests
+
+↓
+
+Integration Tests
+
+↓
+
+Performance Tests
+
+Before any new feature.
+
+Sprint Deliverable
+
+When Sprint 2 finishes
+
+Kernel
+
+✓
+
+Scheduler
+
+✓
+
+Events
+
+✓
+
+Logging
+
+✓
+
+Health
+
+✓
+
+Capability Loader
+
+✓
+
+CLI
+
+✓
+
+Configuration
+
+✓
+
+No AI yet.
+
+But you've built the operating system.
+
+Sprint 3 Preview
+
+Now the exciting part begins.
+
+Sprint 3 is where Aariya gets its first brain.
+
+We'll implement
+
+Working Memory
+
+↓
+
+Memory Manager
+
+↓
+
+Conversation Memory
+
+↓
+
+Knowledge Store
+
+↓
+
+Vector Memory
+
+↓
+
+Memory Retrieval
+
+At the end of Sprint 3, Aariya will be able to remember information across interactions.
+
+🚀 One Suggestion That Could Save Months of Work
+
+If I were leading this project, I would add one more repository before writing any code:
+
+aariya-protocol/
+
+This repository would define all shared contracts used across the platform:
+
+Event schemas
+Capability manifest schema
+Request/response models
+Memory object definitions
+Goal and task models
+Health status models
+Error codes
+
+Every other repository (aariya-kernel, aariya-memory, aariya-capabilities, etc.) would import these definitions instead of creating their own.
+
+Why this matters
+
+As the project grows, this prevents incompatible interfaces from appearing in different modules. It gives you a single source of truth for data contracts, makes testing easier, and allows future capabilities—even those written in different programming languages—to interoperate cleanly with the rest of Aariya.
+
+Phase 1 — Build the Foundation
+
+The order matters.
+
+1. aariya-protocol
+2. aariya-kernel
+3. aariya-sdk
+4. aariya-memory
+5. aariya-planner
+6. aariya-reasoning
+7. first capability
+
+Nothing else.
+
+Repository 1
+aariya-protocol
+
+This is the heart of the entire ecosystem.
+
+It contains ZERO business logic.
+
+Only contracts.
+
+protocol/
+
+    events/
+
+    requests/
+
+    responses/
+
+    memory/
+
+    planner/
+
+    capabilities/
+
+    health/
+
+    errors/
+
+    schemas/
+
+Everything imports from here.
+
+Repository 2
+aariya-kernel
+
+Contains
+
+Runtime
+
+Scheduler
+
+Event Bus
+
+Dependency Injection
+
+Configuration
+
+Logging
+
+Health
+
+Capability Loader
+
+No AI.
+
+Repository 3
+aariya-sdk
+
+Every capability developer uses this.
+
+Contains
+
+Capability Base Class
+
+Tool Base Class
+
+Manifest Parser
+
+Health API
+
+Permission API
+
+Testing Utilities
+Repository 4
+aariya-memory
+
+Contains
+
+Working Memory
+
+Conversation Memory
+
+Semantic Memory
+
+Vector Memory
+
+Knowledge Graph
+
+Reflection Storage
+Repository 5
+aariya-planner
+
+Contains
+
+Goal Manager
+
+Planner
+
+Workflow
+
+Task Graph
+
+Execution Plan
+Repository 6
+aariya-reasoning
+
+Contains
+
+Critical Thinking
+
+Logic
+
+Strategy Selection
+
+Reflection
+
+Confidence
+
+Explainability
+Repository 7
+aariya-capabilities-browser
+
+Only one capability.
+
+Don't build ten.
+
+Build one.
+
+It teaches the architecture.
+
+Coding Rules
+
+Before writing a single line.
+
+I would freeze these.
+
+Rule 1
+
+Never create objects directly.
+
+Always use Dependency Injection.
+
+Rule 2
+
+Never call another subsystem directly.
+
+Always use the Event Bus.
+
+Rule 3
+
+Every feature needs tests.
+
+Rule 4
+
+Every public API needs documentation.
+
+Rule 5
+
+Every capability is replaceable.
+
+Rule 6
+
+Every long-running task is asynchronous.
+
+Rule 7
+
+Every important action produces an event.
+
+Rule 8
+
+Every decision can be explained.
+
+Rule 9
+
+Every memory has confidence.
+
+Rule 10
+
+No subsystem owns another subsystem.
+
+Everything communicates through contracts.
+
+Version 1 Roadmap
+Kernel
+
+↓
+
+SDK
+
+↓
+
+Memory
+
+↓
+
+Planner
+
+↓
+
+Reasoning
+
+↓
+
+Browser
+
+↓
+
+Voice
+
+↓
+
+Vision
+
+↓
+
+Desktop
+
+↓
+
+Dashboard
+
+Nothing more.
+
+Version 2
+Robotics
+
+Smart Home
+
+CAD
+
+Finance
+
+Medical
+
+OSINT
+Version 3
+Marketplace
+
+Cloud Cluster
+
+Distributed Runtime
+
+Multi-device
+
+Third-party Developers
+Version 4
+Adaptive Learning
+
+Research Mode
+
+Multi-Agent Teams
+
+Advanced Simulation
+The One Thing I Would Add Before Coding
+
+If this were a professional project, I would create one final repository that becomes the brain of the engineering process itself.
+
+aariya-specifications
+aariya-specifications/
+
+├── ADR/
+├── RFC/
+├── API/
+├── UML/
+├── Sequence_Diagrams/
+├── State_Machines/
+├── Data_Models/
+├── Security/
+├── Performance/
+└── Roadmap/
+
+This repository is not code.
+
+It is the official specification.
+
+Think of it like:
+
+Linux Kernel Documentation
+Kubernetes Enhancement Proposals (KEPs)
+Python Enhancement Proposals (PEPs)
+Rust RFCs
+
+Every architectural change starts here.
+
+No one changes the kernel until the specification is approved.
+
+🎯 My Recommendation
+
+At this point, I would stop producing design documents and start producing a real codebase.
+
+Instead of saying "next" and generating more concepts, we would work like an engineering team:
+
+Stage 1
+Build aariya-protocol
+Stage 2
+Build aariya-kernel
+Stage 3
+Build aariya-sdk
+Stage 4
+Write tests
+Stage 5
+Build Memory
+Stage 6
+Build Planner
+Stage 7
+Build Critical Thinking
+Stage 8
+Build the first Browser capability
+
+Repository 1: aariya-protocol
+
+Purpose: Aariya's universal language.
+
+Think of it as:
+
+ROS 2 → Message Definitions
+Kubernetes → API Objects
+OpenAPI → API Contracts
+Protocol Buffers → Schemas
+
+No business logic.
+No AI.
+No planner.
+
+Only data contracts.
+
+Directory Structure
+aariya-protocol/
+│
+├── pyproject.toml
+├── README.md
+├── LICENSE
+│
+├── protocol/
+│   ├── __init__.py
+│   │
+│   ├── common/
+│   │   ├── ids.py
+│   │   ├── metadata.py
+│   │   ├── enums.py
+│   │   ├── permissions.py
+│   │   └── status.py
+│   │
+│   ├── events/
+│   │   ├── base_event.py
+│   │   ├── runtime_events.py
+│   │   ├── capability_events.py
+│   │   ├── memory_events.py
+│   │   ├── planner_events.py
+│   │   └── reasoning_events.py
+│   │
+│   ├── requests/
+│   │
+│   ├── responses/
+│   │
+│   ├── goals/
+│   │
+│   ├── tasks/
+│   │
+│   ├── memory/
+│   │
+│   ├── capabilities/
+│   │
+│   ├── health/
+│   │
+│   ├── reasoning/
+│   │
+│   └── world/
+│
+└── tests/
+Rule 1
+
+Every object inherits from one base model.
+
+BaseObject
+
+Everything.
+
+Memory.
+
+Events.
+
+Goals.
+
+Tasks.
+
+Capabilities.
+
+Health.
+
+Requests.
+
+Responses.
+
+BaseObject
+
+Every object automatically gets
+
+id:
+
+type:
+
+version:
+
+created_at:
+
+updated_at:
+
+source:
+
+confidence:
+
+importance:
+
+tags:
+
+metadata:
+
+No exceptions.
+
+Event Model
+
+Every event looks identical.
+
+event_id:
+
+event_type:
+
+timestamp:
+
+source:
+
+target:
+
+priority:
+
+payload:
+
+correlation_id:
+
+Every subsystem understands every event.
+
+Goal Model
+goal_id:
+
+name:
+
+priority:
+
+deadline:
+
+status:
+
+parent_goal:
+
+owner:
+
+confidence:
+
+reason:
+
+Planner only works with Goal objects.
+
+Task Model
+task_id:
+
+goal_id:
+
+dependencies:
+
+required_capabilities:
+
+estimated_cost:
+
+estimated_time:
+
+priority:
+
+Planner produces Task objects.
+
+Capability Manifest
+
+Every capability ships with
+
+name:
+
+version:
+
+description:
+
+author:
+
+permissions:
+
+events:
+
+tools:
+
+dependencies:
+
+health_endpoint:
+
+This is how the Kernel loads capabilities.
+
+Memory Object
+
+Everything stored in memory follows
+
+memory_id:
+
+type:
+
+text:
+
+embedding:
+
+confidence:
+
+importance:
+
+source:
+
+created_at:
+
+expires_at:
+
+linked_objects:
+
+Every memory looks identical.
+
+World Entity
+
+Represent everything in the world.
+
+entity_id:
+
+entity_type:
+
+properties:
+
+relationships:
+
+state:
+
+confidence:
+
+People.
+
+Files.
+
+Projects.
+
+Devices.
+
+Folders.
+
+Robots.
+
+Everything.
+
+Health Model
+
+Every subsystem reports
+
+component:
+
+status:
+
+uptime:
+
+latency:
+
+version:
+
+last_error:
+
+metrics:
+
+Dashboard reads this directly.
+
+Request Model
+
+Every request entering Aariya
+
+request_id:
+
+user:
+
+goal:
+
+context:
+
+constraints:
+
+attachments:
+
+timestamp:
+
+Whether it comes from:
+
+Voice
+Chat
+API
+Robot
+Mobile
+
+It becomes the same object.
+
+Response Model
+
+Every subsystem returns
+
+status:
+
+confidence:
+
+result:
+
+warnings:
+
+metrics:
+
+reasoning_reference:
+
+Now every component speaks the same language.
+
+Error Model
+
+Instead of random exceptions
+
+error_code:
+
+severity:
+
+component:
+
+message:
+
+recoverable:
+
+recommendation:
+Permission Model
+
+Every capability requests permissions.
+
+Example
+
+Desktop
+
+Read Screen
+
+Move Mouse
+
+Keyboard Input
+
+Clipboard
+
+Browser
+
+Internet
+
+Downloads
+
+Cookies
+
+Voice
+
+Microphone
+
+Nothing gets unrestricted access.
+
+Versioning
+
+Every protocol object includes
+
+schema_version:
+
+api_version:
+
+Future-proofing starts now.
+
+Serialization
+
+Every object supports
+
+JSON
+MessagePack
+YAML
+
+This makes future networking and distributed execution much easier.
+
+Validation
+
+Every protocol object validates itself.
+
+Invalid data never reaches the kernel.
+
+Documentation
+
+Every object has:
+
+UML diagram
+JSON schema
+Python model
+Example payload
+Version history
+Testing
+
+Every protocol model needs:
+
+Serialization tests
+Validation tests
+Backward compatibility tests
+Schema migration tests
+
+Directory Structure
+aariya-protocol/
+│
+├── pyproject.toml
+├── README.md
+├── LICENSE
+│
+├── protocol/
+│   ├── __init__.py
+│   │
+│   ├── common/
+│   │   ├── ids.py
+│   │   ├── metadata.py
+│   │   ├── enums.py
+│   │   ├── permissions.py
+│   │   └── status.py
+│   │
+│   ├── events/
+│   │   ├── base_event.py
+│   │   ├── runtime_events.py
+│   │   ├── capability_events.py
+│   │   ├── memory_events.py
+│   │   ├── planner_events.py
+│   │   └── reasoning_events.py
+│   │
+│   ├── requests/
+│   │
+│   ├── responses/
+│   │
+│   ├── goals/
+│   │
+│   ├── tasks/
+│   │
+│   ├── memory/
+│   │
+│   ├── capabilities/
+│   │
+│   ├── health/
+│   │
+│   ├── reasoning/
+│   │
+│   └── world/
+│
+└── tests/
+Rule 1
+
+Every object inherits from one base model.
+
+BaseObject
+
+Everything.
+
+Memory.
+
+Events.
+
+Goals.
+
+Tasks.
+
+Capabilities.
+
+Health.
+
+Requests.
+
+Responses.
+
+BaseObject
+
+Every object automatically gets
+
+id:
+
+type:
+
+version:
+
+created_at:
+
+updated_at:
+
+source:
+
+confidence:
+
+importance:
+
+tags:
+
+metadata:
+
+No exceptions.
+
+Event Model
+
+Every event looks identical.
+
+event_id:
+
+event_type:
+
+timestamp:
+
+source:
+
+target:
+
+priority:
+
+payload:
+
+correlation_id:
+
+Every subsystem understands every event.
+
+Goal Model
+goal_id:
+
+name:
+
+priority:
+
+deadline:
+
+status:
+
+parent_goal:
+
+owner:
+
+confidence:
+
+reason:
+
+Planner only works with Goal objects.
+
+Task Model
+task_id:
+
+goal_id:
+
+dependencies:
+
+required_capabilities:
+
+estimated_cost:
+
+estimated_time:
+
+priority:
+
+Planner produces Task objects.
+
+Capability Manifest
+
+Every capability ships with
+
+name:
+
+version:
+
+description:
+
+author:
+
+permissions:
+
+events:
+
+tools:
+
+dependencies:
+
+health_endpoint:
+
+This is how the Kernel loads capabilities.
+
+Memory Object
+
+Everything stored in memory follows
+
+memory_id:
+
+type:
+
+text:
+
+embedding:
+
+confidence:
+
+importance:
+
+source:
+
+created_at:
+
+expires_at:
+
+linked_objects:
+
+Every memory looks identical.
+
+World Entity
+
+Represent everything in the world.
+
+entity_id:
+
+entity_type:
+
+properties:
+
+relationships:
+
+state:
+
+confidence:
+
+People.
+
+Files.
+
+Projects.
+
+Devices.
+
+Folders.
+
+Robots.
+
+Everything.
+
+Health Model
+
+Every subsystem reports
+
+component:
+
+status:
+
+uptime:
+
+latency:
+
+version:
+
+last_error:
+
+metrics:
+
+Dashboard reads this directly.
+
+Request Model
+
+Every request entering Aariya
+
+request_id:
+
+user:
+
+goal:
+
+context:
+
+constraints:
+
+attachments:
+
+timestamp:
+
+Whether it comes from:
+
+Voice
+Chat
+API
+Robot
+Mobile
+
+It becomes the same object.
+
+Response Model
+
+Every subsystem returns
+
+status:
+
+confidence:
+
+result:
+
+warnings:
+
+metrics:
+
+reasoning_reference:
+
+Now every component speaks the same language.
+
+Error Model
+
+Instead of random exceptions
+
+error_code:
+
+severity:
+
+component:
+
+message:
+
+recoverable:
+
+recommendation:
+Permission Model
+
+Every capability requests permissions.
+
+Example
+
+Desktop
+
+Read Screen
+
+Move Mouse
+
+Keyboard Input
+
+Clipboard
+
+Browser
+
+Internet
+
+Downloads
+
+Cookies
+
+Voice
+
+Microphone
+
+Nothing gets unrestricted access.
+
+Versioning
+
+Every protocol object includes
+
+schema_version:
+
+api_version:
+
+Future-proofing starts now.
+
+Serialization
+
+Every object supports
+
+JSON
+MessagePack
+YAML
+
+This makes future networking and distributed execution much easier.
+
+Validation
+
+Every protocol object validates itself.
+
+Invalid data never reaches the kernel.
+
+Documentation
+
+Every object has:
+
+UML diagram
+JSON schema
+Python model
+Example payload
+Version history
+Testing
+
+Every protocol model needs:
+
+Serialization tests
+Validation tests
+Backward compatibility tests
+Schema migration tests
+Milestone Complete
+
+When aariya-protocol is finished, every other repository can safely depend on it.
+
+Repository 2 — aariya-kernel
+
+This is the heart of Aariya.
+
+Think of it as combining the roles of:
+
+Linux Kernel
+ROS 2 Runtime
+Kubernetes Control Plane
+Unreal Engine Core
+VS Code Extension Host
+
+Everything depends on it.
+
+The kernel itself knows nothing about AI.
+
+🎯 Primary Responsibilities
+
+The kernel is responsible for only seven things:
+
+1. Runtime Lifecycle
+2. Event Bus
+3. Dependency Injection
+4. Scheduler
+5. Capability Manager
+6. Configuration
+7. Health Monitoring
+
+That's it.
+
+No LLM.
+
+No memory.
+
+No planner.
+
+No reasoning.
+
+Final Kernel Architecture
+aariya-kernel/
+│
+├── runtime/
+│
+├── events/
+│
+├── scheduler/
+│
+├── container/
+│
+├── capabilities/
+│
+├── health/
+│
+├── config/
+│
+├── logging/
+│
+├── metrics/
+│
+├── security/
+│
+├── bootstrap/
+│
+├── lifecycle/
+│
+├── diagnostics/
+│
+└── tests/
+Runtime Lifecycle
+
+The runtime owns the entire system.
+
+Boot
+    │
+Initialize
+    │
+Load Config
+    │
+Create Container
+    │
+Initialize Event Bus
+    │
+Initialize Scheduler
+    │
+Load Capabilities
+    │
+Health Check
+    │
+READY
+
+Shutdown happens in reverse order.
+
+Kernel State Machine
+
+The kernel should always be in one of these states:
+
+CREATED
+    │
+BOOTING
+    │
+INITIALIZING
+    │
+RUNNING
+    │
+PAUSED
+    │
+DEGRADED
+    │
+STOPPING
+    │
+STOPPED
+    │
+FAILED
+
+Every subsystem follows a similar lifecycle.
+
+Event Bus
+
+The Event Bus is the central nervous system.
+
+Instead of:
+
+Planner → Browser
+
+Everything becomes:
+
+Planner
+     │
+     ▼
+ Event Bus
+     │
+     ▼
+ Browser
+
+Features:
+
+Publish/Subscribe
+Event priorities
+Event replay
+Dead-letter queue
+Correlation IDs
+Event tracing
+Dependency Injection Container
+
+The container owns every service.
+
+Container
+
+├── Runtime
+
+├── EventBus
+
+├── Scheduler
+
+├── Logger
+
+├── Config
+
+├── Metrics
+
+├── CapabilityManager
+
+Nothing is created manually.
+
+Scheduler
+
+The scheduler controls execution.
+
+Task types:
+
+Immediate
+
+Delayed
+
+Repeating
+
+Background
+
+High Priority
+
+Real-Time
+
+Future support:
+
+Distributed execution
+GPU queues
+Agent pools
+Capability Manager
+
+Responsibilities:
+
+Discover
+
+Validate
+
+Load
+
+Initialize
+
+Start
+
+Pause
+
+Resume
+
+Stop
+
+Unload
+
+Upgrade
+
+Each capability is isolated from the kernel.
+
+Security Layer
+
+Every capability gets a permission profile.
+
+Example:
+
+Browser:
+  internet: true
+  filesystem: false
+  microphone: false
+
+Voice:
+  microphone: true
+  internet: false
+
+The kernel enforces permissions before actions execute.
+
+Diagnostics
+
+Built-in diagnostics should answer questions like:
+
+Why did a capability fail?
+Which event caused an error?
+What was running at the time?
+Which dependencies were unavailable?
+
+This greatly simplifies debugging.
+
+Metrics
+
+Collect runtime metrics continuously.
+
+Examples:
+
+Boot time
+Event throughput
+Queue depth
+Scheduler latency
+Capability load time
+Memory usage
+CPU/GPU utilization
+
+These metrics are useful for tuning, not just monitoring.
+
+Logging
+
+Every log entry should include structured information such as:
+
+Timestamp
+Level
+Component
+Event ID
+Correlation ID
+Message
+Metadata
+
+This allows tracing a request across the entire system.
+
+Bootstrap Sequence
+
+The bootstrap process should be deterministic.
+
+Read Configuration
+        ↓
+Initialize Logger
+        ↓
+Create DI Container
+        ↓
+Initialize Event Bus
+        ↓
+Initialize Scheduler
+        ↓
+Initialize Metrics
+        ↓
+Initialize Security
+        ↓
+Discover Capabilities
+        ↓
+Run Health Checks
+        ↓
+System Ready
+Testing Strategy
+
+For the kernel:
+
+Unit tests for every module.
+Integration tests for the full boot process.
+Stress tests for the Event Bus.
+Failure injection tests (e.g., simulate a failed capability).
+Performance benchmarks.
+Engineering Standards
+
+I'd enforce these standards from day one:
+
+100% type hints on public APIs.
+No circular dependencies.
+No global mutable state.
+Async I/O for blocking operations.
+Structured logging.
+Clear interface boundaries.
+Versioned contracts via aariya-protocol.

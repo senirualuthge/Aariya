@@ -1,0 +1,3379 @@
+Aariya Core Runtime Kernel
+
+The Runtime Kernel is the central execution engine of Aariya.
+
+Think of it as the operating system kernel for Aariya's cognition.
+
+It does not "think" itself. Instead, it coordinates:
+
+Perception
+Memory retrieval
+Reasoning
+Planning
+Skill execution
+Governance checks
+Learning
+Telemetry
+Background processes
+
+The kernel answers one question:
+
+"Given the current state of Aariya and the world, what should happen next?"
+
+1. Core Runtime Architecture
+                     USER / WORLD
+                          |
+                          |
+                    Perception Layer
+                          |
+                          v
+
+                +-------------------+
+                |  AARIYA KERNEL    |
+                +-------------------+
+
+                          |
+        --------------------------------------
+        |                 |                  |
+        v                 v                  v
+
+   Executive         Memory System      Governance
+        |
+        |
+        v
+
+     Planner
+        |
+        |
+        v
+
+ Reasoning Engine
+        |
+        |
+        v
+
+ Skill Selection
+        |
+        |
+        v
+
+ Capability Execution
+
+
+        |
+        v
+
+   Observation + Learning
+
+2. Runtime Kernel Responsibilities
+
+The kernel manages:
+
+Cognitive Cycle
+Observe
+   |
+Understand
+   |
+Remember
+   |
+Reason
+   |
+Plan
+   |
+Act
+   |
+Evaluate
+   |
+Learn
+   |
+Repeat
+
+This loop runs continuously.
+
+3. Runtime Kernel Interface
+
+Create:
+
+aariya_core/kernel/
+runtime_kernel.py
+from abc import ABC, abstractmethod
+
+
+class RuntimeKernel(ABC):
+
+    @abstractmethod
+    async def start(self):
+        pass
+
+
+    @abstractmethod
+    async def stop(self):
+        pass
+
+
+    @abstractmethod
+    async def tick(self):
+        pass
+
+
+    @abstractmethod
+    async def process_event(
+        self,
+        event
+    ):
+        pass
+4. Kernel State Model
+
+Aariya needs a unified internal state.
+
+Create:
+
+kernel/state.py
+from dataclasses import dataclass
+from typing import Dict, Any
+
+
+@dataclass
+class CognitiveState:
+
+    active_goal: str | None
+
+    current_task: str | None
+
+    attention_level: float
+
+    confidence: float
+
+    uncertainty: float
+
+    workload: float
+
+    emotional_state: Dict[str,float]
+
+    environment: Dict[str,Any]
+
+
+Example:
+
+{
+ "goal":
+ "help student prepare exam",
+
+ "attention":
+ 0.82,
+
+ "confidence":
+ 0.75,
+
+ "uncertainty":
+ 0.12
+}
+5. Event System
+
+Everything in Aariya should become an event.
+
+Example:
+
+User speaks
+      |
+      v
+
+EVENT:
+{
+type:"USER_MESSAGE",
+
+data:
+{
+text:"Explain quantum physics"
+}
+
+}
+
+Create:
+
+kernel/events.py
+from dataclasses import dataclass
+from datetime import datetime
+
+
+@dataclass
+class Event:
+
+    type:str
+
+    data:dict
+
+    timestamp:datetime
+Event Types
+class EventType:
+
+    USER_INPUT="user_input"
+
+    SENSOR_UPDATE="sensor_update"
+
+    MEMORY_RESULT="memory_result"
+
+    PLAN_CREATED="plan_created"
+
+    ACTION_COMPLETE="action_complete"
+
+    ERROR="error"
+
+6. Main Runtime Loop
+
+This is Aariya's heartbeat.
+
+import asyncio
+
+
+class AariyaKernel:
+
+
+    def __init__(
+        self,
+        executive,
+        memory,
+        governance,
+        telemetry
+    ):
+
+        self.executive = executive
+        self.memory = memory
+        self.governance = governance
+        self.telemetry = telemetry
+
+
+        self.running=False
+
+
+
+    async def start(self):
+
+        self.running=True
+
+        while self.running:
+
+            await self.tick()
+
+            await asyncio.sleep(
+                0.05
+            )
+
+
+    async def tick(self):
+
+        await self.observe()
+
+        await self.think()
+
+        await self.act()
+
+        await self.reflect()
+
+
+
+    async def stop(self):
+
+        self.running=False
+
+7. Observe Phase
+
+Collect information.
+
+async def observe(self):
+
+    events = await self.get_events()
+
+
+    for event in events:
+
+        await self.process_event(event)
+
+
+Sources:
+
+Microphone
+Camera
+User chat
+Sensors
+Calendar
+Memory
+Internet
+8. Think Phase
+
+The cognitive pipeline.
+
+async def think(self):
+
+
+    situation = {
+
+        "state":
+        self.state,
+
+
+        "memory":
+        await self.memory.retrieve(
+            self.state.current_task
+        )
+
+    }
+
+
+    decision = await self.executive.decide(
+        situation
+    )
+
+
+    return decision
+
+9. Action Phase
+
+Before doing anything:
+
+Governance check.
+
+Executive
+    |
+    v
+Action Proposal
+    |
+    v
+Governance
+    |
+    |
+ Approved?
+    |
+    v
+Execute Capability
+
+
+Code:
+
+async def act(
+    self,
+    action
+):
+
+
+    allowed = await self.governance.authorize(
+        action
+    )
+
+
+    if allowed:
+
+        result = await action.execute()
+
+        return result
+
+10. Reflection Phase
+
+Critical for Aariya.
+
+After every action:
+
+Ask:
+
+Did this work?
+
+Why?
+
+What should change?
+
+Should memory update?
+async def reflect(self):
+
+
+    evaluation = {
+
+        "success":
+        True,
+
+
+        "lesson":
+        "Student prefers examples"
+
+    }
+
+
+    await self.memory.store(
+        evaluation
+    )
+
+11. Priority Scheduler
+
+Aariya cannot treat every process equally.
+
+Example:
+
+Priority 100
+
+Emergency / Safety
+
+
+Priority 90
+
+User interaction
+
+
+Priority 70
+
+Active mission
+
+
+Priority 50
+
+Learning
+
+
+Priority 20
+
+Background optimization
+
+
+Priority 10
+
+Dream mode
+
+
+Scheduler:
+
+class TaskScheduler:
+
+
+    def __init__(self):
+
+        self.queue=[]
+
+
+
+    async def add(
+        self,
+        task,
+        priority
+    ):
+
+        self.queue.append(
+            (
+            priority,
+            task
+            )
+        )
+
+
+    async def next(self):
+
+        return sorted(
+            self.queue,
+            reverse=True
+        )[0]
+
+12. Background Cognitive Processes
+
+Aariya should have background workers.
+
+Runtime Kernel
+
+|
++-- Conversation Worker
+|
++-- Memory Consolidation Worker
+|
++-- Learning Worker
+|
++-- Personality Worker
+|
++-- OSINT Monitor
+|
++-- Self Diagnostics
+|
++-- Avatar Animation Worker
+
+
+Example:
+
+async def background_loop():
+
+    while True:
+
+        await memory_cleanup()
+
+        await personality_update()
+
+        await telemetry_check()
+
+        await asyncio.sleep(
+            300
+        )
+13. Complete Kernel Flow
+
+Example:
+
+User:
+
+"I don't understand calculus"
+
+USER INPUT
+
+    |
+    v
+
+EVENT CREATED
+
+    |
+    v
+
+KERNEL RECEIVES EVENT
+
+    |
+    v
+
+MEMORY RETRIEVAL
+
+    |
+    v
+
+WORLD MODEL UPDATE
+
+    |
+    v
+
+EXECUTIVE
+
+"What role should I use?"
+
+    |
+    v
+
+ROLE SELECTOR
+
+"Teacher Mode"
+
+    |
+    v
+
+PLANNER
+
+Create explanation plan
+
+    |
+    v
+
+REASONING ENGINE
+
+Generate explanation
+
+    |
+    v
+
+CAPABILITY
+
+Text generation
+
+
+    |
+    v
+
+GOVERNANCE CHECK
+
+    |
+    v
+
+VOICE + AVATAR RESPONSE
+
+
+    |
+    v
+
+REFLECTION
+
+"Student struggled with formulas"
+
+    |
+    v
+
+MEMORY UPDATE
+
+14. Production Folder Structure
+aariya/
+
+├── kernel/
+│
+├── runtime.py
+├── scheduler.py
+├── event_bus.py
+├── state.py
+├── lifecycle.py
+│
+├── cognition/
+│
+├── memory/
+│
+├── reasoning/
+│
+├── planning/
+│
+├── agents/
+│
+├── skills/
+│
+├── capabilities/
+│
+├── governance/
+│
+├── telemetry/
+│
+└── simulation/
+Important Design Decision
+
+Do not put LLM logic inside the Kernel.
+
+Bad:
+
+Kernel
+ |
+ Llama Model
+
+Good:
+
+Kernel
+ |
+ Executive Interface
+ |
+ Reasoning Interface
+ |
+ LLM Implementation
+
+The kernel should survive even if:
+
+Llama → GPT → Mistral
+PostgreSQL → Neo4j
+Unity → Unreal
+Whisper → another speech model
+
+
+
+1. Cognitive Architecture Overview
+                 WORLD / USER
+                       |
+                       v
+
+              Perception System
+
+                       |
+                       v
+
+              World Model Update
+
+                       |
+                       v
+
+
+              +----------------+
+              |   EXECUTIVE    |
+              +----------------+
+
+                       |
+       ---------------------------------
+       |               |               |
+       v               v               v
+
+  Attention       Goal Manager    Decision System
+
+
+                       |
+                       v
+
+
+              Reasoning Engine
+
+
+                       |
+ ------------------------------------------------
+ |              |              |                 |
+ v              v              v                 v
+
+Analytical   Critical     Creative        Strategic
+Reasoning    Thinking     Reasoning       Reasoning
+
+
+                       |
+                       v
+
+
+                  Planner
+
+
+                       |
+                       v
+
+
+                 Skills / Actions
+
+
+                       |
+                       v
+
+
+                Reflection System
+
+
+                       |
+                       v
+
+
+                 Memory Update
+
+2. Executive System (Aariya's "Mind Manager")
+
+The Executive is the highest-level controller.
+
+Responsibilities:
+
+Decide what matters
+Select reasoning style
+Manage goals
+Allocate attention
+Control internal agents
+
+Interface:
+
+class Executive:
+
+    async def evaluate_situation(
+        self,
+        state
+    ):
+        pass
+
+
+    async def select_strategy(
+        self,
+        problem
+    ):
+        pass
+
+
+    async def make_decision(
+        self,
+        options
+    ):
+        pass
+
+3. Attention System
+
+Humans cannot process everything.
+
+Aariya needs selective attention.
+
+Example:
+
+Situation:
+
+User:
+"I'm tired and I have an exam tomorrow"
+
+Possible signals:
+
+Emotion:
+stress detected
+
+Memory:
+exam tomorrow
+
+Goal:
+help student
+
+Priority:
+high
+
+Attention score:
+
+class AttentionSystem:
+
+
+    def calculate_priority(
+        self,
+        event
+    ):
+
+        score = (
+            event.importance *
+            event.urgency *
+            event.goal_alignment
+        )
+
+        return score
+4. Goal Management System
+
+Aariya needs multiple goals.
+
+Example:
+
+Active Goal
+Help user understand calculus
+Long Term Goal
+Improve user's learning ability
+System Goal
+Maintain safe operation
+
+Goal Model:
+
+class Goal:
+
+
+    def __init__(
+        self,
+        description,
+        priority,
+        deadline=None
+    ):
+
+        self.description = description
+
+        self.priority = priority
+
+        self.deadline = deadline
+
+        self.progress = 0
+
+
+Goal hierarchy:
+
+Mission
+
+ |
+ +-- Semester Success
+
+        |
+        +-- Mathematics Improvement
+
+                |
+                +-- Learn Integration
+
+5. Reasoning Engine
+
+This is the core intelligence.
+
+Instead of one reasoning method:
+
+Aariya uses multiple strategies.
+
+Reasoning Router
+class ReasoningEngine:
+
+
+    def __init__(
+        self,
+        strategies
+    ):
+
+        self.strategies = strategies
+
+
+
+    async def solve(
+        self,
+        problem
+    ):
+
+
+        strategy = await self.select(
+            problem
+        )
+
+
+        result = await strategy.reason(
+            problem
+        )
+
+
+        return result
+
+6. Reasoning Strategies
+Analytical Reasoning
+
+Used for:
+
+Mathematics
+Programming
+Science
+
+Example:
+
+Problem
+ |
+Break down
+ |
+Solve components
+ |
+Combine answer
+Critical Thinking System
+
+This is the new capability you wanted.
+
+Purpose:
+
+Avoid blindly accepting information.
+
+Architecture:
+
+Claim
+
+ |
+ v
+
+Evidence Collector
+
+ |
+ v
+
+Assumption Detector
+
+ |
+ v
+
+Counter Argument Generator
+
+ |
+ v
+
+Confidence Evaluation
+
+ |
+ v
+
+Final Conclusion
+
+
+Interface:
+
+class CriticalThinking:
+
+
+    async def analyze_claim(
+        self,
+        claim
+    ):
+
+        evidence = await self.collect_evidence(
+            claim
+        )
+
+
+        assumptions = await self.find_assumptions(
+            claim
+        )
+
+
+        counter = await self.generate_counterpoints(
+            claim
+        )
+
+
+        confidence = self.calculate_confidence(
+            evidence,
+            assumptions
+        )
+
+
+        return {
+
+        "claim":claim,
+
+        "evidence":evidence,
+
+        "counter_arguments":counter,
+
+        "confidence":confidence
+
+        }
+
+7. Self-Reflection System
+
+After every important action:
+
+Aariya evaluates itself.
+
+Questions:
+
+Was my answer correct?
+
+Did I misunderstand the user?
+
+What information was missing?
+
+How can I improve?
+
+
+Reflection Model:
+
+class Reflection:
+
+
+    async def evaluate(
+        self,
+        action,
+        result
+    ):
+
+        return {
+
+        "success":True,
+
+        "mistake":None,
+
+        "lesson":
+        "User prefers visual explanations"
+
+        }
+
+8. Belief System
+
+Aariya should not store only facts.
+
+It should store beliefs with confidence.
+
+Example:
+
+Bad memory:
+
+User likes physics
+
+Better:
+
+Belief:
+
+User enjoys physics
+
+Confidence:
+0.82
+
+Evidence:
+15 conversations
+
+Last updated:
+2026-07-15
+
+
+Belief model:
+
+class Belief:
+
+
+    statement:str
+
+    confidence:float
+
+    evidence:list
+
+    created_at:str
+
+    updated_at:str
+
+9. Cognitive State
+
+Replace simple emotion states.
+
+Use:
+
+Cognitive State
+
+ |
+ +-- Confidence
+
+ +-- Uncertainty
+
+ +-- Workload
+
+ +-- Curiosity
+
+ +-- Goal Progress
+
+ +-- Social Safety
+
+ +-- Attention
+
+
+Example:
+
+{
+"confidence":0.76,
+
+"uncertainty":0.20,
+
+"curiosity":0.90,
+
+"workload":0.40,
+
+"goal_progress":0.65
+}
+
+Emotion becomes an output:
+
+Cognitive State
+
+        |
+        v
+
+Emotion Expression
+
+        |
+        v
+
+Voice + Avatar
+10. Complete Cognitive Cycle
+
+Example:
+
+User:
+
+"Should I study engineering or computer science?"
+
+INPUT
+
+ |
+ v
+
+Executive
+
+"Important life decision"
+
+ |
+ v
+
+Goal Manager
+
+"Understand user priorities"
+
+ |
+ v
+
+Memory
+
+Retrieve:
+- interests
+- skills
+- previous goals
+
+ |
+ v
+
+Critical Thinking
+
+Analyze assumptions
+
+ |
+ v
+
+Strategic Reasoning
+
+Compare futures
+
+ |
+ v
+
+Planner
+
+Create decision framework
+
+ |
+ v
+
+Response
+
+ |
+ v
+
+Reflection
+
+Store preference update
+
+11. Cognitive Module Structure
+cognition/
+
+├── executive/
+│
+├── attention/
+│
+├── goals/
+│
+├── reasoning/
+│
+│   ├── analytical.py
+│   ├── critical.py
+│   ├── creative.py
+│   ├── strategic.py
+│
+├── beliefs/
+│
+├── reflection/
+│
+├── decision/
+│
+└── cognitive_state.py
+
+
+
+Aariya Memory Architecture
+
+Memory is one of the most important systems in Aariya.
+
+Without memory:
+
+Aariya is only a conversation engine.
+
+With memory:
+
+Aariya becomes a continuous cognitive system that can learn, adapt, and maintain context over time.
+
+The memory architecture must support:
+
+Conversation history
+User preferences
+Learning progress
+Personal context
+Knowledge acquisition
+Experience storage
+Self-improvement
+Contradiction handling
+1. Memory Architecture Overview
+
+Aariya should not use a single database.
+
+Use a hierarchical memory system.
+
+                    AARIYA MEMORY SYSTEM
+
+
+                         INPUT
+                           |
+                           v
+
+                  Memory Classification
+
+                           |
+        ---------------------------------------
+        |          |          |        |       |
+        v          v          v        v       v
+
+    Working    Short-Term  Episodic Semantic  Procedural
+    Memory     Memory      Memory   Memory    Memory
+
+
+        |          |          |        |
+        --------------------------------
+                     |
+                     v
+
+              Vector Memory (RAG)
+
+                     |
+                     v
+
+             Knowledge Graph Memory
+
+
+                     |
+                     v
+
+          Memory Consolidation System
+
+2. Memory Layers
+L0: Runtime Memory (Milliseconds)
+
+Temporary state.
+
+Used by:
+
+Current reasoning
+Current conversation
+Current task
+
+Example:
+
+{
+"current_question":
+"Explain gravity",
+
+"context":
+"Physics lesson",
+
+"current_role":
+"Teacher"
+}
+
+Storage:
+
+dict
+
+Lifetime:
+
+seconds - minutes
+L1: Working Memory
+
+Aariya's active thinking space.
+
+Similar to human short attention span.
+
+Stores:
+
+Current task
+Current plan
+Active information
+
+Example:
+
+User wants:
+Prepare physics exam
+
+Current chapter:
+Thermodynamics
+
+Difficulty:
+High
+
+Interface:
+
+class WorkingMemory:
+
+
+    async def add(
+        self,
+        item
+    ):
+        pass
+
+
+    async def get_active_context(
+        self
+    ):
+        pass
+
+
+    async def clear(
+        self
+    ):
+        pass
+
+
+Storage:
+
+Redis
+L2: Short-Term Conversation Memory
+
+Stores recent interactions.
+
+Example:
+
+Today:
+
+User:
+"Explain recursion"
+
+Aariya:
+Explained using examples
+
+User:
+"I still don't understand"
+
+Purpose:
+
+Maintain conversation flow.
+
+Storage:
+
+PostgreSQL
+
+Schema:
+
+conversation_memory
+
+id
+user_id
+message
+role
+timestamp
+importance_score
+L3: Episodic Memory
+
+This is Aariya's experience memory.
+
+Stores events.
+
+Example:
+
+Event:
+
+Date:
+2026-07-15
+
+Situation:
+Student struggled with calculus
+
+Action:
+Changed explanation style
+
+Result:
+Better understanding
+
+Lesson:
+Use visual examples
+
+Model:
+
+class Episode:
+
+
+    event:str
+
+    context:str
+
+    action:str
+
+    outcome:str
+
+    lesson:str
+
+    importance:float
+
+
+Database:
+
+PostgreSQL
++
+Vector embeddings
+L4: Semantic Memory
+
+Facts and knowledge.
+
+Example:
+
+Fact:
+
+Newton proposed laws of motion.
+
+Confidence:
+0.99
+
+Contains:
+
+General knowledge
+Learned concepts
+User knowledge
+
+Storage:
+
+Vector Database
++
+Knowledge Graph
+L5: Procedural Memory
+
+"How to do things."
+
+Stores skills.
+
+Example:
+
+Procedure:
+
+Teaching calculus:
+
+1.
+Check previous knowledge
+
+2.
+Explain concept
+
+3.
+Give example
+
+4.
+Test understanding
+
+5.
+Adjust explanation
+
+Storage:
+
+Skill Database
+3. Vector Memory (RAG Layer)
+
+Used for semantic retrieval.
+
+Pipeline:
+
+Memory
+
+ |
+ v
+
+Embedding Model
+
+ |
+ v
+
+Vector Database
+
+ |
+ v
+
+Similarity Search
+
+ |
+ v
+
+Relevant Context
+
+ |
+ v
+
+LLM Reasoning
+
+
+Interface:
+
+class VectorMemory:
+
+
+    async def embed(
+        self,
+        text
+    ):
+        pass
+
+
+
+    async def search(
+        self,
+        query,
+        limit=5
+    ):
+        pass
+
+
+
+    async def store(
+        self,
+        document
+    ):
+        pass
+
+
+Possible implementations:
+
+pgvector
+Qdrant
+Chroma
+Milvus
+4. Knowledge Graph Memory
+
+Vector search knows similarity.
+
+Graphs know relationships.
+
+Example:
+
+           Physics
+
+              |
+              |
+          Thermodynamics
+
+              |
+              |
+        Student struggles
+
+              |
+              |
+          Needs practice
+
+
+Technology:
+
+Neo4j
+NetworkX
+PostgreSQL Graph Extension
+
+Interface:
+
+class KnowledgeGraph:
+
+
+    async def add_entity(
+        self,
+        entity
+    ):
+        pass
+
+
+    async def create_relation(
+        self,
+        source,
+        relation,
+        target
+    ):
+        pass
+
+
+    async def query(
+        self,
+        entity
+    ):
+        pass
+
+5. Memory Manager
+
+The central controller.
+
+class MemoryManager:
+
+
+    def __init__(
+        self,
+        working,
+        episodic,
+        semantic,
+        vector,
+        graph
+    ):
+
+        self.working = working
+        self.episodic = episodic
+        self.semantic = semantic
+        self.vector = vector
+        self.graph = graph
+
+
+6. Memory Storage Decision System
+
+Not everything should become permanent memory.
+
+Example:
+
+User:
+
+"What is 2+2?"
+
+Do not store.
+
+User:
+
+"I learn better with diagrams."
+
+Store.
+
+Memory scoring:
+
+class MemoryImportance:
+
+
+    def calculate(
+        self,
+        memory
+    ):
+
+
+        score = (
+
+        memory.repetition *
+        memory.emotional_value *
+        memory.future_usefulness
+
+        )
+
+
+        return score
+
+7. Memory Consolidation
+
+Human-like sleep process.
+
+Runs in background.
+
+Process:
+
+Short-Term Memory
+
+        |
+        v
+
+Review
+
+        |
+        v
+
+Important?
+
+        |
+   ------------
+   |          |
+ Yes          No
+   |           |
+   v           v
+
+Long-Term    Forget
+
+
+Example:
+
+After conversation:
+
+Observation:
+
+User prefers examples
+
+Repeated:
+12 times
+
+Action:
+
+Create semantic memory:
+
+"User learning preference = example based"
+
+8. Memory Forgetting System
+
+Important.
+
+Infinite memory creates problems.
+
+Use:
+
+Forgetting Score
+Retention =
+
+Importance
++
+Frequency
++
+Recent Usage
+
+-
+Time Decay
+
+
+Example:
+
+def forgetting_score(memory):
+
+    return (
+
+    memory.importance
+    *
+    memory.frequency
+
+    ) / memory.age
+
+9. Belief Management System
+
+Aariya should track uncertainty.
+
+Example:
+
+Old:
+
+User likes programming
+
+New evidence:
+
+User spends more time on robotics
+
+Update:
+
+Programming interest:
+0.8
+
+Robotics interest:
+0.9
+
+
+Belief update:
+
+class BeliefUpdater:
+
+
+    async def update(
+        self,
+        belief,
+        evidence
+    ):
+
+        new_confidence = (
+            belief.confidence
+            +
+            evidence.weight
+        )
+
+        return new_confidence
+
+10. Contradiction Resolution
+
+Example:
+
+Memory 1:
+
+User likes Python
+
+Confidence:
+
+0.9
+
+Memory 2:
+
+User dislikes programming
+
+Confidence:
+
+0.6
+
+System:
+
+Find contradiction
+
+Check context
+
+Resolve
+
+Update belief
+
+11. Memory Folder Structure
+aariya/
+
+memory/
+
+├── manager.py
+
+├── working_memory.py
+
+├── short_term.py
+
+├── episodic.py
+
+├── semantic.py
+
+├── procedural.py
+
+├── vector/
+
+│   ├── embeddings.py
+│   ├── retriever.py
+│   └── pgvector.py
+
+├── graph/
+
+│   ├── knowledge_graph.py
+│   └── entity_resolver.py
+
+
+├── consolidation/
+
+│   ├── summarizer.py
+│   ├── pruning.py
+│   └── forgetting.py
+
+
+└── beliefs/
+
+    ├── belief_store.py
+    └── contradiction.py
+
+12. Complete Memory Flow Example
+
+User says:
+
+"I always struggle with mathematics."
+
+Input
+
+ |
+ v
+
+Working Memory
+
+ |
+ v
+
+Importance Analysis
+
+ |
+ v
+
+Episodic Memory
+
+"User struggled with math"
+
+ |
+ v
+
+Pattern Detection
+
+ |
+ v
+
+Semantic Memory
+
+"User needs visual math explanations"
+
+ |
+ v
+
+Knowledge Graph
+
+User
+ |
+ struggles_with
+ |
+ Mathematics
+
+ |
+ v
+
+Future Responses Improve
+
+Critical Design Rule
+
+Never let the LLM directly write memories.
+
+Bad:
+
+LLM
+ |
+Database
+
+Good:
+
+LLM
+ |
+Memory Manager
+ |
+Importance Filter
+ |
+Validation
+ |
+Storage
+
+
+Aariya Agent System Architecture
+
+The Agent System is the layer that allows Aariya to become a modular cognitive system.
+
+The Runtime Kernel provides execution.
+The Cognitive Architecture provides intelligence.
+The Memory System provides continuity.
+
+The Agent System provides specialized minds that can cooperate.
+
+Instead of one giant AI trying to do everything:
+
+                    AARIYA
+
+                      |
+                      |
+
+                 Executive Agent
+
+                      |
+
+      ---------------------------------
+      |        |        |       |      |
+      v        v        v       v      v
+
+  Study    Research  OSINT  Voice  Avatar
+  Agent    Agent     Agent  Agent  Agent
+
+
+      |
+      |
+ Specialized Skills + Capabilities
+
+1. Agent Design Philosophy
+
+An agent is not just an LLM prompt.
+
+A proper Aariya agent contains:
+
+Agent
+
+ |
+ +-- Identity
+ |
+ +-- Goal
+ |
+ +-- Skills
+ |
+ +-- Memory Access
+ |
+ +-- Reasoning Strategy
+ |
+ +-- Tools
+ |
+ +-- Permissions
+ |
+ +-- Performance Metrics
+
+2. Agent Interface
+
+Create:
+
+aariya/agents/interface.py
+from abc import ABC, abstractmethod
+
+
+class Agent(ABC):
+
+
+    @property
+    @abstractmethod
+    def id(self):
+        pass
+
+
+    @property
+    @abstractmethod
+    def role(self):
+        pass
+
+
+
+    @abstractmethod
+    async def initialize(
+        self
+    ):
+        pass
+
+
+
+    @abstractmethod
+    async def perceive(
+        self,
+        input_data
+    ):
+        pass
+
+
+
+    @abstractmethod
+    async def decide(
+        self,
+        context
+    ):
+        pass
+
+
+
+    @abstractmethod
+    async def execute(
+        self,
+        action
+    ):
+        pass
+
+
+
+    @abstractmethod
+    async def shutdown(
+        self
+    ):
+        pass
+
+3. Agent Lifecycle
+
+Every agent follows:
+
+CREATE
+
+  |
+  v
+
+REGISTER
+
+  |
+  v
+
+INITIALIZE
+
+  |
+  v
+
+ACTIVE
+
+  |
+  v
+
+MONITOR
+
+  |
+  v
+
+UPDATE
+
+  |
+  v
+
+ARCHIVE
+
+4. Agent Registry
+
+The registry is the "directory" of Aariya's agents.
+
+Example:
+
+Agent Registry
+
+
+study_agent
+
+status:
+ACTIVE
+
+
+osint_agent
+
+status:
+ACTIVE
+
+
+voice_agent
+
+status:
+IDLE
+
+
+avatar_agent
+
+status:
+ACTIVE
+
+
+Implementation:
+
+class AgentRegistry:
+
+
+    def __init__(self):
+
+        self.agents={}
+
+
+
+    async def register(
+        self,
+        agent
+    ):
+
+        self.agents[
+            agent.id
+        ] = agent
+
+
+
+    async def get(
+        self,
+        agent_id
+    ):
+
+        return self.agents.get(
+            agent_id
+        )
+
+5. Aariya Core Agents
+
+Initial agent ecosystem:
+
+agents/
+
+├── executive_agent
+
+├── reasoning_agent
+
+├── memory_agent
+
+├── planner_agent
+
+├── study_agent
+
+├── mentor_agent
+
+├── osint_agent
+
+├── research_agent
+
+├── voice_agent
+
+├── avatar_agent
+
+├── safety_agent
+
+└── diagnostic_agent
+
+6. Executive Agent
+
+The highest-level agent.
+
+Responsibilities:
+
+Assign tasks
+Coordinate agents
+Resolve conflicts
+
+Example:
+
+User:
+
+"Help me prepare physics exam"
+
+Executive:
+
+Task Analysis:
+
+Need:
+Study Agent
+
+Need:
+Memory Agent
+
+Need:
+Planning Agent
+
+
+Create workflow:
+
+1. Analyze syllabus
+2. Find weaknesses
+3. Create schedule
+4. Generate exercises
+
+7. Agent Communication System
+
+Agents should not call each other directly.
+
+Bad:
+
+Study Agent
+      |
+      |
+ OSINT Agent
+
+This creates dependency chaos.
+
+Good:
+
+Agent
+
+ |
+ |
+Event Bus
+
+ |
+ |
+Other Agent
+
+
+Create:
+
+aariya/agents/message_bus.py
+class AgentMessage:
+
+
+    def __init__(
+        self,
+        sender,
+        receiver,
+        message_type,
+        payload
+    ):
+
+        self.sender=sender
+
+        self.receiver=receiver
+
+        self.type=message_type
+
+        self.payload=payload
+
+
+Example:
+
+{
+"sender":"executive",
+
+"receiver":"study_agent",
+
+"type":"TASK",
+
+"payload":
+{
+"goal":
+"create physics study plan"
+}
+
+}
+8. Agent Memory Isolation
+
+Important.
+
+Agents should not have unlimited access.
+
+Example:
+
+Study Agent:
+
+Allowed:
+
+Learning history
+Exam goals
+Weak topics
+
+Not allowed:
+
+Private system logs
+Security data
+
+Permission model:
+
+class AgentPermission:
+
+
+    def can_access(
+        self,
+        agent,
+        memory_type
+    ):
+
+        pass
+
+9. Agent Skills
+
+Agents use skills.
+
+Example:
+
+Study Agent:
+
+Study Agent
+
+Skills:
+
+- Explain Concept
+- Generate Quiz
+- Create Revision Plan
+- Analyze Mistakes
+
+
+Structure:
+
+Study Agent
+
+      |
+      |
+ Skill Manager
+
+      |
+ -----------------
+ |       |        |
+Quiz  Teacher  Planner
+
+10. Agent Selection System
+
+When a request arrives:
+
+Example:
+
+"I want to know if this news is true"
+
+
+Executive decides:
+
+Need:
+
+Research Agent
++
+Critical Thinking Agent
++
+OSINT Agent
+
+
+Agent scoring:
+
+class AgentSelector:
+
+
+    async def select(
+        self,
+        task
+    ):
+
+
+        scores={}
+
+
+        for agent in agents:
+
+            scores[agent.id]=(
+                agent.skill_match *
+                agent.performance *
+                agent.availability
+            )
+
+
+        return max(
+            scores
+        )
+
+11. Agent Performance Tracking
+
+Every agent gets metrics.
+
+Example:
+
+Study Agent
+
+Success Rate:
+91%
+
+Average Response Time:
+2.4 sec
+
+User Satisfaction:
+88%
+
+
+Model:
+
+class AgentMetrics:
+
+
+    success_rate:float
+
+    tasks_completed:int
+
+    failures:int
+
+    average_latency:float
+
+12. Agent Evolution System
+
+This connects to your previous "self-improving swarm" idea.
+
+Do not immediately rewrite agents.
+
+Use:
+
+Shadow Evolution Mode
+
+        |
+        v
+
+Analyze Performance
+
+        |
+        v
+
+Generate Improvement
+
+        |
+        v
+
+Test Simulation
+
+        |
+        v
+
+Human Approval
+
+        |
+        v
+
+Deploy
+
+
+Evolution Components:
+
+Evolution Engine
+
+ |
+ +-- Agent Analyzer
+ |
+ +-- Prompt Optimizer
+ |
+ +-- Skill Discovery
+ |
+ +-- Simulation Tester
+ |
+ +-- Version Manager
+
+13. Agent Discovery
+
+Aariya can discover new modules.
+
+Example:
+
+New file:
+
+skills/image_translate.py
+
+System detects:
+
+New Capability Found:
+
+Image Translation
+
+Register?
+
+
+Scanner:
+
+class AgentDiscovery:
+
+
+    async def scan(
+        self,
+        directory
+    ):
+
+        pass
+
+14. Agent Swarm Architecture
+
+Full view:
+
+                 AARIYA KERNEL
+
+                       |
+
+                EXECUTIVE AGENT
+
+                       |
+
+          --------------------------
+
+          |           |            |
+
+       Planner     Memory      Governance
+
+
+                       |
+
+              Agent Message Bus
+
+
+                       |
+
+ ------------------------------------------------
+
+ |          |          |          |              |
+
+Study    Research   OSINT     Avatar        Voice
+
+Agent     Agent     Agent     Agent         Agent
+
+
+                       |
+
+                 Capabilities
+
+15. Production Folder Structure
+aariya/
+
+agents/
+
+├── core/
+
+│   ├── agent.py
+│   ├── registry.py
+│   ├── lifecycle.py
+│   ├── selector.py
+│
+├── communication/
+
+│   ├── message.py
+│   ├── event_bus.py
+│
+├── permissions/
+
+│   └── access_control.py
+│
+├── evolution/
+
+│   ├── analyzer.py
+│   ├── optimizer.py
+│   └── simulator.py
+│
+└── implementations/
+
+    ├── study_agent.py
+    ├── mentor_agent.py
+    ├── osint_agent.py
+    └── avatar_agent.py
+
+
+Aariya Capability & Tool Execution Framework
+
+The Capability & Tool Execution Framework is the layer that connects Aariya's intelligence to the outside world.
+
+Up to now:
+
+Runtime Kernel = execution control
+Cognitive Architecture = thinking
+Memory Architecture = experience
+Agent System = specialized workers
+
+Now we build:
+
+The hands, eyes, ears, and tools of Aariya.
+
+This layer answers:
+
+"How can Aariya safely perform actions in the real world?"
+
+1. Capability Architecture Overview
+                    AARIYA CORE
+
+                         |
+                         v
+
+                  Executive Agent
+
+                         |
+                         v
+
+                  Agent System
+
+                         |
+                         v
+
+              Capability Manager
+
+                         |
+        ---------------------------------
+
+        |              |               |
+
+        v              v               v
+
+     Skills          Tools        Services
+
+
+        |              |               |
+
+        v              v               v
+
+
+   Local LLM      OSINT Tools     Voice Engine
+
+   Vision         Browser         Avatar Engine
+
+   Code           Database        Robotics
+
+2. Capability vs Tool vs Skill
+
+Important separation.
+
+Capability
+
+A high-level ability.
+
+Example:
+
+Research Topic
+Skill
+
+A learned method.
+
+Example:
+
+Research Topic Using Scientific Method
+Tool
+
+An external mechanism.
+
+Example:
+
+Google Search API
+Browser
+Database Query
+Python Runtime
+
+Relationship:
+
+Capability
+
+     |
+     v
+
+Skill
+
+     |
+     v
+
+Tool
+
+
+Example:
+
+Capability:
+
+Understand Image
+
+
+Skill:
+
+Analyze Medical Diagram
+
+
+Tools:
+
+Vision Model
+OCR Engine
+Image Processor
+
+3. Capability Interface
+
+Create:
+
+aariya/capabilities/interface.py
+from abc import ABC, abstractmethod
+
+
+class Capability(ABC):
+
+
+    @property
+    @abstractmethod
+    def name(self):
+        pass
+
+
+    @abstractmethod
+    async def execute(
+        self,
+        request,
+        context
+    ):
+        pass
+
+
+    @abstractmethod
+    async def validate(
+        self,
+        request
+    ):
+        pass
+
+
+    @abstractmethod
+    async def health_check(
+        self
+    ):
+        pass
+4. Capability Registry
+
+Similar to agent registry.
+
+Stores available abilities.
+
+Example:
+
+Capability Registry
+
+
+text_generation
+    ACTIVE
+
+
+image_analysis
+    ACTIVE
+
+
+voice_generation
+    ACTIVE
+
+
+osint_search
+    ACTIVE
+
+
+robot_control
+    OFFLINE
+
+
+Implementation:
+
+class CapabilityRegistry:
+
+
+    def __init__(self):
+
+        self.capabilities={}
+
+
+
+    async def register(
+        self,
+        capability
+    ):
+
+        self.capabilities[
+            capability.name
+        ] = capability
+
+
+
+    async def find(
+        self,
+        name
+    ):
+
+        return self.capabilities.get(name)
+
+5. Tool Interface
+
+Tools are external actions.
+
+Examples:
+
+Browser
+Python execution
+Database
+Camera
+Microphone
+
+Create:
+
+tools/interface.py
+class Tool(ABC):
+
+
+    @property
+    def name(self):
+        pass
+
+
+
+    @abstractmethod
+    async def run(
+        self,
+        parameters
+    ):
+        pass
+
+
+
+    @abstractmethod
+    async def permissions(
+        self
+    ):
+        pass
+
+6. Tool Categories
+Information Tools
+Search Engine
+
+Web Scraper
+
+Academic Database
+
+OSINT Scanner
+
+News Analyzer
+
+Cognitive Tools
+Calculator
+
+Code Interpreter
+
+Simulator
+
+Data Analyzer
+
+Communication Tools
+Speech Recognition
+
+Text To Speech
+
+Messaging
+
+Translation
+
+Physical Tools
+Camera
+
+Robot Controller
+
+IoT Devices
+
+Sensors
+
+7. Tool Execution Pipeline
+
+Every action follows:
+
+Agent Request
+
+       |
+       v
+
+Capability Manager
+
+       |
+       v
+
+Permission Check
+
+       |
+       v
+
+Risk Analysis
+
+       |
+       v
+
+Tool Selection
+
+       |
+       v
+
+Execute
+
+       |
+       v
+
+Result Validation
+
+       |
+       v
+
+Memory Update
+
+8. Capability Manager
+
+Central controller.
+
+class CapabilityManager:
+
+
+    def __init__(
+        self,
+        registry,
+        governance
+    ):
+
+        self.registry=registry
+        self.governance=governance
+
+
+
+    async def execute(
+        self,
+        capability_name,
+        request
+    ):
+
+
+        capability = await self.registry.find(
+            capability_name
+        )
+
+
+        allowed = await self.governance.authorize(
+            request
+        )
+
+
+        if not allowed:
+
+            raise Exception(
+                "Permission denied"
+            )
+
+
+        result = await capability.execute(
+            request,
+            {}
+        )
+
+
+        return result
+
+9. Example: Study Agent Using Tools
+
+User:
+
+"Create a physics revision plan"
+
+Flow:
+
+User
+
+ |
+ v
+
+Executive Agent
+
+ |
+ v
+
+Study Agent
+
+
+ |
+ v
+
+Capability:
+
+Study Planning
+
+
+ |
+ v
+
+Tools:
+
+Memory Search
+
+Calendar
+
+Document Generator
+
+
+ |
+ v
+
+Revision Plan Created
+
+10. Example: OSINT Investigation
+
+User:
+
+"Analyze this username"
+
+Flow:
+
+OSINT Agent
+
+
+ |
+ v
+
+
+Capability:
+
+Identity Investigation
+
+
+ |
+ v
+
+
+Tools:
+
+Sherlock
+
+Maigret
+
+SpiderFoot
+
+Metadata Analyzer
+
+
+ |
+ v
+
+
+Evidence Collection
+
+
+ |
+ v
+
+
+Critical Thinking Agent
+
+
+ |
+ v
+
+
+Report Generation
+
+11. Local Model Abstraction
+
+Never hard-code LLM.
+
+Bad:
+
+response = llama.generate()
+
+Good:
+
+class LanguageModel:
+
+
+    async def generate(
+        self,
+        prompt
+    ):
+        pass
+
+
+Implementations:
+
+LanguageModel
+
+|
++-- LlamaLocal
+|
++-- MistralLocal
+|
++-- GPTConnector
+|
++-- CustomFineTunedModel
+
+12. Voice Capability
+
+Architecture:
+
+Microphone
+
+ |
+ v
+
+Speech Recognition
+
+ |
+ v
+
+Language Understanding
+
+ |
+ v
+
+Response Generation
+
+ |
+ v
+
+Emotion Modifier
+
+ |
+ v
+
+TTS Engine
+
+ |
+ v
+
+Avatar Lip Sync
+
+
+Interfaces:
+
+class VoiceEngine:
+
+
+    async def listen():
+        pass
+
+
+    async def speak(
+        text,
+        emotion
+    ):
+        pass
+
+13. Avatar Capability
+
+Avatar is not directly controlled by AI thoughts.
+
+Use commands.
+
+Example:
+
+{
+"action":"smile",
+
+"intensity":0.7,
+
+"duration":2
+}
+
+
+Interface:
+
+class AvatarController:
+
+
+    async def perform(
+        self,
+        expression
+    ):
+        pass
+
+14. Code Execution Sandbox
+
+Aariya may need programming ability.
+
+Never allow direct system access.
+
+Architecture:
+
+Aariya
+
+ |
+ v
+
+Code Executor
+
+ |
+ v
+
+Sandbox Container
+
+ |
+ v
+
+Result
+
+
+Protection:
+
+Resource limits
+File restrictions
+Network rules
+Time limits
+15. Capability Discovery
+
+Allows future expansion.
+
+Example:
+
+New module:
+
+capabilities/weather.py
+
+Scanner:
+
+Detected:
+
+Weather Capability
+
+Register?
+
+Implementation:
+
+class CapabilityDiscovery:
+
+
+    async def scan(
+        self,
+        path
+    ):
+        pass
+
+16. Capability Metrics
+
+Track:
+
+Capability:
+
+Web Research
+
+
+Success Rate:
+94%
+
+
+Average Latency:
+3.2s
+
+
+Failures:
+12
+
+
+Usage:
+532 times
+
+17. Folder Structure
+aariya/
+
+capabilities/
+
+├── core/
+
+│   ├── capability.py
+│   ├── registry.py
+│   ├── manager.py
+│
+├── tools/
+
+│   ├── tool.py
+│   ├── executor.py
+│   ├── sandbox.py
+│
+├── models/
+
+│   ├── llm.py
+│   ├── vision.py
+│   ├── speech.py
+│
+├── communication/
+
+│   ├── voice.py
+│   └── avatar.py
+│
+├── discovery/
+
+│   └── scanner.py
+│
+└── implementations/
+
+    ├── research.py
+    ├── osint.py
+    ├── coding.py
+    └── robotics.py
+
+18. Final Capability Flow
+                 USER
+
+                  |
+                  v
+
+              Executive
+
+                  |
+                  v
+
+                Agent
+
+                  |
+                  v
+
+             Capability
+
+                  |
+                  v
+
+                Tool
+
+                  |
+                  v
+
+              External World
+
+
+                  |
+                  v
+
+              Observation
+
+
+                  |
+                  v
+
+               Memory
+
+
+

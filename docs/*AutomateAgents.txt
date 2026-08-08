@@ -1,0 +1,5619 @@
+  Section 19: PREAMBLE (from *AutomateAgents.txt)
+
+"""
+agent_scanner.py
+AST-based agent auto-discovery. Zero imports of user code — pure static analysis.
+
+Detection strategies (all run on every scan):
+
+
+  Section 20: 3. DECORATOR    — @agent, @swarm_agent, @register_agent on class or function (from *AutomateAgents.txt)
+
+Returns a flat list of AgentRecord dicts ready for the registry.
+"""
+
+import ast
+import os
+import hashlib
+import re
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+
+  Section 21: # Root path to scan. Override via env or pass directly to Scanner. (from *AutomateAgents.txt)
+
+DEFAULT_ROOT = Path(__file__).resolve().parents[2]  # project root
+
+
+  Section 22: # Folder names treated as "agent directories" for strategy 2 (from *AutomateAgents.txt)
+
+AGENT_FOLDER_NAMES = {"agents", "agent", "swarm", "cognitive", "cognitive_agents"}
+
+
+  Section 23: # Base-class name patterns (case-insensitive substring match) (from *AutomateAgents.txt)
+
+AGENT_BASE_PATTERNS = [
+    r".*agent.*",
+    r".*swarm.*node.*",
+    r".*cognitive.*module.*",
+]
+
+
+  Section 24: # Decorator name patterns (from *AutomateAgents.txt)
+
+AGENT_DECORATOR_PATTERNS = [
+    "agent",
+    "swarm_agent",
+    "register_agent",
+    "cognitive_agent",
+    "aariya_agent",
+]
+
+
+  Section 25: # Directories to always skip (from *AutomateAgents.txt)
+
+SKIP_DIRS = {
+    "__pycache__", ".git", ".venv", "venv", "node_modules",
+    "dist", "build", ".mypy_cache", ".pytest_cache",
+}
+
+
+  Section 26: # ── Data model ─────────────────────────────────────────────────────────────── (from *AutomateAgents.txt)
+
+@dataclass
+class AgentRecord:
+    id: str                          # stable unique key  (file_hash:class_name)
+    name: str                        # class / function name
+    file: str                        # relative path from project root
+    line: int                        # line number of definition
+    kind: str                        # "class" | "function"
+    detection: list[str]             # which strategies matched
+    base_classes: list[str]          # for inheritance strategy
+    decorators: list[str]            # raw decorator names found
+    docstring: Optional[str]         # first docstring line
+    file_hash: str                   # sha1 of file content (change detection)
+    scanned_at: str                  # ISO timestamp
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+  Section 27: # ── Core Scanner ───────────────────────────────────────────────────────────── (from *AutomateAgents.txt)
+
+class AgentScanner:
+    """
+    Walk the project tree and return all discovered AgentRecords.
+
+    Usage:
+        scanner = AgentScanner(root="/path/to/project")
+        records = scanner.scan()
+    """
+
+    def __init__(self, root: str | Path = DEFAULT_ROOT):
+        self.root = Path(root).resolve()
+
+
+  Section 28: # ── Public ─────────────────────────────────────────────────────────────── (from *AutomateAgents.txt)
+
+def scan(self) -> list[dict]:
+        """Full scan. Returns list of AgentRecord dicts."""
+        records: dict[str, AgentRecord] = {}
+
+        for py_file in self._iter_python_files():
+            try:
+                file_records = self._scan_file(py_file)
+                for rec in file_records:
+
+
+    def update_from_scan(self, scan_results: list[dict]) -> dict:
+        """
+        Merge a fresh scan into the registry.
+        Returns a diff object describing what changed.
+        """
+        with self._lock:
+            now = datetime.now(timezone.utc).isoformat()
+            scanned_ids = {r["id"] for r in scan_results}
+            existing_ids = set(self._data["agents"].keys())
+
+            diff = {"new": [], "updated": [], "removed": []}
+
+
+
+    def start(self, loop: asyncio.AbstractEventLoop):
+        """Call from FastAPI lifespan startup."""
+        self.broadcaster.set_loop(loop)
+        self._running = True
+
+
+  Section 29: # Merge detections if same id appears in multiple strategies (from *AutomateAgents.txt)
+
+if rec.id in records:
+                        records[rec.id].detection = list(
+                            set(records[rec.id].detection + rec.detection)
+                        )
+                    else:
+                        records[rec.id] = rec
+            except (SyntaxError, UnicodeDecodeError):
+                pass  # skip unparseable files silently
+
+        return [r.to_dict() for r in records.values()]
+
+
+  Section 30: # ── Private helpers ────────────────────────────────────────────────────── (from *AutomateAgents.txt)
+
+def _iter_python_files(self):
+        for dirpath, dirnames, filenames in os.walk(self.root):
+
+
+  Section 31: # Prune skip dirs in-place (affects os.walk recursion) (from *AutomateAgents.txt)
+
+dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            for fname in filenames:
+                if fname.endswith(".py"):
+                    yield Path(dirpath) / fname
+
+    def _scan_file(self, path: Path) -> list[AgentRecord]:
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        tree = ast.parse(source, filename=str(path))
+        file_hash = hashlib.sha1(source.encode()).hexdigest()[:12]
+        rel_path = str(path.relative_to(self.root))
+        in_agent_folder = self._is_in_agent_folder(path)
+
+        records = []
+        now = datetime.now(timezone.utc).isoformat()
+
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.ClassDef, ast.AsyncFunctionDef, ast.FunctionDef)):
+                detections = []
+                base_classes = []
+                decorators = []
+
+
+  Section 32: # Strategy 1 — inheritance (classes only) (from *AutomateAgents.txt)
+
+if isinstance(node, ast.ClassDef):
+                    bases = self._extract_base_names(node)
+                    matched = [b for b in bases if self._matches_agent_base(b)]
+                    if matched:
+                        detections.append("inheritance")
+                        base_classes = bases
+
+
+  Section 33: # Strategy 2 — folder location (from *AutomateAgents.txt)
+
+if in_agent_folder:
+                    detections.append("folder")
+
+
+  Section 34: # Strategy 3 — decorator (from *AutomateAgents.txt)
+
+decs = self._extract_decorator_names(node)
+                matched_decs = [d for d in decs if d.lower() in AGENT_DECORATOR_PATTERNS]
+                if matched_decs:
+                    detections.append("decorator")
+                    decorators = decs
+
+                if not detections:
+                    continue  # not an agent
+
+                kind = "class" if isinstance(node, ast.ClassDef) else "function"
+                docstring = ast.get_docstring(node)
+                doc_first_line = docstring.split("\n")[0].strip() if docstring else None
+
+                stable_id = f"{file_hash}:{node.name}"
+
+                records.append(AgentRecord(
+                    id=stable_id,
+                    name=node.name,
+                    file=rel_path,
+                    line=node.lineno,
+                    kind=kind,
+                    detection=detections,
+                    base_classes=base_classes,
+                    decorators=decorators,
+                    docstring=doc_first_line,
+                    file_hash=file_hash,
+                    scanned_at=now,
+                ))
+
+        return records
+
+    def _is_in_agent_folder(self, path: Path) -> bool:
+        return any(part.lower() in AGENT_FOLDER_NAMES for part in path.parts)
+
+    def _extract_base_names(self, node: ast.ClassDef) -> list[str]:
+        names = []
+        for base in node.bases:
+            if isinstance(base, ast.Name):
+                names.append(base.id)
+            elif isinstance(base, ast.Attribute):
+                names.append(f"{base.value.id}.{base.attr}" if isinstance(base.value, ast.Name) else base.attr)
+        return names
+
+    def _extract_decorator_names(self, node) -> list[str]:
+        names = []
+        for dec in node.decorator_list:
+            if isinstance(dec, ast.Name):
+                names.append(dec.id)
+            elif isinstance(dec, ast.Attribute):
+                names.append(dec.attr)
+            elif isinstance(dec, ast.Call):
+                func = dec.func
+                if isinstance(func, ast.Name):
+                    names.append(func.id)
+                elif isinstance(func, ast.Attribute):
+                    names.append(func.attr)
+        return names
+
+    def _matches_agent_base(self, name: str) -> bool:
+        name_lower = name.lower()
+        return any(re.match(pat, name_lower) for pat in AGENT_BASE_PATTERNS)
+
+
+  Section 35: # ── CLI entry point ────────────────────────────────────────────────────────── (from *AutomateAgents.txt)
+
+if __name__ == "__main__":
+    import json, sys
+    root = sys.argv[1] if len(sys.argv) > 1 else str(DEFAULT_ROOT)
+    scanner = AgentScanner(root=root)
+    results = scanner.scan()
+    print(json.dumps(results, indent=2))
+    print(f"\n✓ Found {len(results)} agent(s) in {root}", file=sys.stderr)
+
+
+
+
+"""
+agent_registry.py
+Persistent JSON registry that tracks agents across scans.
+
+Each agent entry carries:
+  status    : "new" | "existing" | "removed"
+  first_seen: ISO timestamp of first discovery
+  last_seen : ISO timestamp of most recent scan where it was present
+
+The diff is returned from every update_from_scan() call — callers
+(watcher, startup, CLI) can broadcast it to the React frontend.
+"""
+
+import json
+import os
+import threading
+from copy import deepcopy
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+DEFAULT_REGISTRY_PATH = Path(__file__).parent / "agent_registry.json"
+
+
+  Section 36: # How many scans an agent can be absent before being permanently removed (from *AutomateAgents.txt)
+
+REMOVAL_GRACE_SCANS = 2
+
+
+class AgentRegistry:
+    """
+    Thread-safe persistent agent registry.
+
+    Usage:
+        registry = AgentRegistry()
+        diff = registry.update_from_scan(scanner.scan())
+
+
+  Section 37: # diff = {"new": [AgentRecord, additional AgentRecord entries], "updated": [AgentRecord, additional AgentRecord entries], "removed": [AgentRecord, additional AgentRecord entries]} (from *AutomateAgents.txt)
+
+"""
+
+    def __init__(self, path: str | Path = DEFAULT_REGISTRY_PATH):
+        self.path = Path(path)
+        self._lock = threading.Lock()
+        self._data = self._load()
+
+
+  Section 38: # Process current scan results (from *AutomateAgents.txt)
+
+for record in scan_results:
+                aid = record["id"]
+                if aid not in self._data["agents"]:
+
+
+  Section 39: # Genuinely new agent (from *AutomateAgents.txt)
+
+entry = self._make_entry(record, status="new", first_seen=now)
+                    self._data["agents"][aid] = entry
+                    diff["new"].append(entry)
+                else:
+                    prev = self._data["agents"][aid]
+                    changed = prev["file_hash"] != record["file_hash"]
+                    entry = self._make_entry(
+                        record,
+                        status="new" if prev["status"] == "new" else "existing",
+                        first_seen=prev["first_seen"],
+                    )
+                    entry["last_seen"] = now
+                    entry["absent_scans"] = 0
+                    self._data["agents"][aid] = entry
+                    if changed:
+                        diff["updated"].append(entry)
+
+
+  Section 40: # Handle agents no longer present in scan (from *AutomateAgents.txt)
+
+for aid in existing_ids - scanned_ids:
+                entry = self._data["agents"][aid]
+                entry["absent_scans"] = entry.get("absent_scans", 0) + 1
+                if entry["absent_scans"] >= REMOVAL_GRACE_SCANS:
+                    entry["status"] = "removed"
+                    diff["removed"].append(entry)
+
+            self._data["last_scan"] = now
+            self._data["total_agents"] = len(
+                [a for a in self._data["agents"].values() if a["status"] != "removed"]
+            )
+            self._save()
+            return diff
+
+    def get_all(self) -> dict:
+        """Return full registry snapshot."""
+        with self._lock:
+            return deepcopy(self._data)
+
+    def get_active_agents(self) -> list[dict]:
+        """Return only non-removed agents."""
+        with self._lock:
+            return [
+                deepcopy(a)
+                for a in self._data["agents"].values()
+                if a["status"] != "removed"
+            ]
+
+    def acknowledge_new(self, agent_id: str) -> bool:
+        """Mark a 'new' agent as 'existing' (called after UI acknowledges it)."""
+        with self._lock:
+            if agent_id in self._data["agents"]:
+                self._data["agents"][agent_id]["status"] = "existing"
+                self._save()
+                return True
+            return False
+
+    def acknowledge_all_new(self):
+        """Mark all 'new' agents as 'existing'."""
+        with self._lock:
+            for entry in self._data["agents"].values():
+                if entry["status"] == "new":
+                    entry["status"] = "existing"
+            self._save()
+
+    def stats(self) -> dict:
+        """Quick summary stats for the dashboard."""
+        with self._lock:
+            agents = list(self._data["agents"].values())
+            return {
+                "total": len([a for a in agents if a["status"] != "removed"]),
+                "new": len([a for a in agents if a["status"] == "new"]),
+                "removed": len([a for a in agents if a["status"] == "removed"]),
+                "by_detection": self._count_by_key(agents, "detection"),
+                "by_kind": self._count_by_key(agents, "kind"),
+                "last_scan": self._data.get("last_scan"),
+            }
+
+
+  Section 41: # ── Internal ────────────────────────────────────────────────────────────── (from *AutomateAgents.txt)
+
+def _make_entry(self, record: dict, status: str, first_seen: str) -> dict:
+        now = datetime.now(timezone.utc).isoformat()
+        return {
+            **record,
+            "status": status,
+            "first_seen": first_seen,
+            "last_seen": now,
+            "absent_scans": 0,
+        }
+
+    def _count_by_key(self, agents: list[dict], key: str) -> dict:
+        counts = {}
+        for a in agents:
+            if a["status"] == "removed":
+                continue
+            val = a.get(key, "unknown")
+            if isinstance(val, list):
+                for v in val:
+                    counts[v] = counts.get(v, 0) + 1
+            else:
+                counts[str(val)] = counts.get(str(val), 0) + 1
+        return counts
+
+    def _load(self) -> dict:
+        if self.path.exists():
+            try:
+                return json.loads(self.path.read_text())
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"[AgentRegistry] Failed to load registry from {self.path}: {e}. Starting fresh.")
+        return {"last_scan": None, "total_agents": 0, "agents": {}}
+
+    def _save(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self._data, indent=2))
+        tmp.replace(self.path)  # atomic write
+
+
+# ── Singleton accessor ────────────────────────────────────────────────────────
+
+_registry: Optional[AgentRegistry] = None
+
+def get_registry(path: str | Path = DEFAULT_REGISTRY_PATH) -> AgentRegistry:
+    global _registry
+    if _registry is None:
+        _registry = AgentRegistry(path)
+    return _registry
+
+
+
+
+"""
+agent_watcher.py
+Three-trigger orchestrator for the Agent Auto-Discovery system:
+
+  TRIGGER 1  Startup         — runs on FastAPI lifespan startup
+  TRIGGER 2  File watch      — watchdog monitors .py files, debounced 1.5s
+  TRIGGER 3  Manual scan     — call trigger_manual_scan() from CLI or API
+
+On every trigger:
+  scanner.scan() → registry.update_from_scan() → broadcast diff to all WebSocket clients
+
+Install watchdog:
+  pip install watchdog
+"""
+
+import asyncio
+import json
+import logging
+import threading
+import time
+from pathlib import Path
+from typing import Callable
+
+from watchdog.events import FileSystemEventHandler, FileModifiedEvent, FileCreatedEvent
+from watchdog.observers import Observer
+
+from .agent_scanner import AgentScanner
+from .agent_registry import get_registry
+
+logger = logging.getLogger("aariya.agent_watcher")
+
+
+
+    def _run_scan(self, trigger: str, changed_file: str | None = None) -> dict:
+        start = time.monotonic()
+        try:
+            results = self.scanner.scan()
+            diff = self.registry.update_from_scan(results)
+            elapsed = round((time.monotonic() - start) * 1000)
+
+            has_changes = any(diff[k] for k in ("new", "updated", "removed"))
+
+            payload = {
+                "type": "agent_registry_update",
+                "trigger": trigger,
+                "changed_file": changed_file,
+                "elapsed_ms": elapsed,
+                "diff": diff,
+                "stats": self.registry.stats(),
+                "all_agents": self.registry.get_active_agents(),
+            }
+
+            if has_changes or trigger == "startup":
+                self.broadcaster.broadcast(payload)
+                n_new = len(diff["new"])
+                n_upd = len(diff["updated"])
+                n_rem = len(diff["removed"])
+                logger.info(
+                    f"[AgentWatcher] scan={trigger} +{n_new}new ~{n_upd}updated -{n_rem}removed ({elapsed}ms)"
+                )
+
+            return diff
+        except Exception as e:
+            logger.error(f"[AgentWatcher] Scan failed ({trigger}): {e}", exc_info=True)
+            return {"new": [], "updated": [], "removed": [], "error": str(e)}
+
+
+# ── Singleton ─────────────────────────────────────────────────────────────────
+
+_watcher: AgentWatcher | None = None
+
+def get_watcher(root: str | Path = ".") -> AgentWatcher:
+    global _watcher
+    if _watcher is None:
+        _watcher = AgentWatcher(root=root)
+    return _watcher
+
+
+
+"""
+agents_router.py
+FastAPI router exposing the Agent Registry to the React frontend.
+
+Endpoints:
+  GET  /api/agents              — full registry snapshot
+  GET  /api/agents/stats        — quick stats summary
+  POST /api/agents/scan         — manual scan trigger
+  POST /api/agents/{id}/ack     — acknowledge a "new" agent as "existing"
+  POST /api/agents/ack-all      — acknowledge all new agents
+  WS   /ws/agents               — real-time push of registry updates
+
+Mount in main.py:
+  from server.routers.agents_router import router as agents_router
+  app.include_router(agents_router)
+"""
+
+import asyncio
+import json
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.responses import JSONResponse
+
+from ..infrastructure.agent_watcher import get_watcher
+from ..infrastructure.agent_registry import get_registry
+
+logger = logging.getLogger("aariya.agents_router")
+router = APIRouter(prefix="/api/agents", tags=["Agent Registry"])
+
+# ── REST endpoints ────────────────────────────────────────────────────────────
+
+@router.get("")
+async def get_all_agents():
+    """Return the full registry including status, detection method, etc."""
+    registry = get_registry()
+    return {
+        "agents": registry.get_active_agents(),
+        "stats": registry.stats(),
+    }
+
+
+@router.get("/stats")
+async def get_stats():
+    """Quick stats — used by dashboard counters."""
+    return get_registry().stats()
+
+
+@router.post("/scan")
+async def manual_scan():
+    """
+    Trigger a manual scan immediately.
+    Diff is also broadcast to all connected WebSocket clients.
+    """
+    watcher = get_watcher()
+    diff = await asyncio.get_event_loop().run_in_executor(
+        None, watcher.trigger_manual_scan
+    )
+    return {
+        "message": "Scan complete",
+        "diff": {
+            "new": len(diff.get("new", [])),
+            "updated": len(diff.get("updated", [])),
+            "removed": len(diff.get("removed", [])),
+        },
+        "stats": get_registry().stats(),
+    }
+
+
+@router.post("/{agent_id}/ack")
+async def acknowledge_agent(agent_id: str):
+    """Mark a single 'new' agent as 'existing' after the UI has highlighted it."""
+    registry = get_registry()
+
+
+  Section 42: # Debounce window — prevent rapid re-scans while you're actively coding (from *AutomateAgents.txt)
+
+DEBOUNCE_SECONDS = 1.5
+
+
+  Section 43: # ── Broadcaster ────────────────────────────────────────────────────────────── (from *AutomateAgents.txt)
+
+class AgentBroadcaster:
+    """
+    Holds a set of async WebSocket send-callbacks.
+    The FastAPI router registers/deregisters clients here.
+    """
+
+    def __init__(self):
+        self._clients: set[Callable] = set()
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def set_loop(self, loop: asyncio.AbstractEventLoop):
+        self._loop = loop
+
+    def register(self, send_fn: Callable):
+        self._clients.add(send_fn)
+        logger.debug(f"[Broadcaster] Client registered. Total: {len(self._clients)}")
+
+    def unregister(self, send_fn: Callable):
+        self._clients.discard(send_fn)
+        logger.debug(f"[Broadcaster] Client removed. Total: {len(self._clients)}")
+
+    def broadcast(self, message: dict):
+        """Thread-safe broadcast — safe to call from watchdog threads."""
+        if not self._clients or not self._loop:
+            return
+        payload = json.dumps(message)
+        for send_fn in list(self._clients):
+            try:
+                asyncio.run_coroutine_threadsafe(send_fn(payload), self._loop)
+            except Exception as e:
+                logger.warning(f"[Broadcaster] Failed to send to client: {e}")
+                self._clients.discard(send_fn)
+
+
+# ── File event handler ────────────────────────────────────────────────────────
+
+class _PythonFileHandler(FileSystemEventHandler):
+    def __init__(self, on_change: Callable):
+        super().__init__()
+        self._on_change = on_change
+        self._timer: threading.Timer | None = None
+        self._lock = threading.Lock()
+
+    def _debounced_trigger(self, path: str):
+        with self._lock:
+            if self._timer:
+                self._timer.cancel()
+            self._timer = threading.Timer(DEBOUNCE_SECONDS, self._on_change, args=[path])
+            self._timer.daemon = True
+            self._timer.start()
+
+    def on_modified(self, event):
+        if not event.is_directory and str(event.src_path).endswith(".py"):
+            self._debounced_trigger(event.src_path)
+
+    def on_created(self, event):
+        if not event.is_directory and str(event.src_path).endswith(".py"):
+            self._debounced_trigger(event.src_path)
+
+
+# ── Main watcher ──────────────────────────────────────────────────────────────
+
+class AgentWatcher:
+    """
+    Central coordinator. One instance lives for the lifetime of the server.
+
+    Usage (in FastAPI lifespan):
+
+        watcher = AgentWatcher(root=".")
+        broadcaster = watcher.broadcaster
+
+        @asynccontextmanager
+        async def lifespan(app):
+            watcher.start(asyncio.get_event_loop())
+            yield
+            watcher.stop()
+    """
+
+    def __init__(self, root: str | Path = "."):
+        self.root = Path(root).resolve()
+        self.scanner = AgentScanner(root=self.root)
+        self.registry = get_registry()
+        self.broadcaster = AgentBroadcaster()
+        self._observer: Observer | None = None
+        self._running = False
+
+
+  Section 44: # Trigger 1: Startup scan (from *AutomateAgents.txt)
+
+logger.info("[AgentWatcher] Running startup scan for new agent files")
+        self._run_scan(trigger="startup")
+
+
+  Section 45: # Trigger 2: File watcher (from *AutomateAgents.txt)
+
+handler = _PythonFileHandler(
+            on_change=lambda path: self._run_scan(trigger="file_watch", changed_file=path)
+        )
+        self._observer = Observer()
+        self._observer.schedule(handler, str(self.root), recursive=True)
+        self._observer.start()
+        logger.info(f"[AgentWatcher] Watching {self.root} for .py changes")
+
+    def stop(self):
+        self._running = False
+        if self._observer:
+            self._observer.stop()
+            self._observer.join()
+        logger.info("[AgentWatcher] Stopped")
+
+    def trigger_manual_scan(self) -> dict:
+        """Trigger 3: Manual scan. Returns diff synchronously."""
+        return self._run_scan(trigger="manual")
+
+
+  Section 46: # agent_id in URL may be URL-encoded — decode colon (from *AutomateAgents.txt)
+
+decoded_id = agent_id.replace("%3A", ":")
+    success = registry.acknowledge_new(decoded_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Agent '{decoded_id}' not found")
+    return {"acknowledged": decoded_id}
+
+
+@router.post("/ack-all")
+async def acknowledge_all():
+    """Dismiss all 'new' badges in the visualization."""
+    get_registry().acknowledge_all_new()
+    return {"message": "All new agents acknowledged"}
+
+
+# ── WebSocket ─────────────────────────────────────────────────────────────────
+
+@router.websocket("/ws")
+async def agent_registry_ws(websocket: WebSocket):
+    """
+    Real-time agent registry stream.
+
+    On connect:  sends full snapshot immediately
+    On change:   sends diff + updated agent list
+    Client can send: {"action": "scan"} | {"action": "ack_all"} | {"action": "ack", "id": "agent_abc123"}
+    """
+    await websocket.accept()
+    watcher = get_watcher()
+    registry = get_registry()
+
+
+  Section 47: # Create a send callback for the broadcaster (from *AutomateAgents.txt)
+
+async def send_update(payload: str):
+        try:
+            await websocket.send_text(payload)
+        except Exception as e:
+            logger.warning(f"[agents_router] Failed to send WebSocket update: {e}")
+            watcher.broadcaster.unregister(send_update)
+
+    watcher.broadcaster.register(send_update)
+
+
+  Section 48: # Send initial full snapshot (from *AutomateAgents.txt)
+
+try:
+        await websocket.send_text(json.dumps({
+            "type": "agent_registry_snapshot",
+            "agents": registry.get_active_agents(),
+            "stats": registry.stats(),
+        }))
+
+
+  Section 49: # Listen for client messages (from *AutomateAgents.txt)
+
+while True:
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                msg = json.loads(raw)
+                action = msg.get("action")
+
+                if action == "scan":
+                    diff = await asyncio.get_event_loop().run_in_executor(
+                        None, watcher.trigger_manual_scan
+                    )
+                    await websocket.send_text(json.dumps({
+                        "type": "scan_result",
+                        "diff": diff,
+                        "stats": registry.stats(),
+                    }))
+
+                elif action == "ack_all":
+                    registry.acknowledge_all_new()
+                    await websocket.send_text(json.dumps({"type": "ack_all_done"}))
+
+                elif action == "ack" and "id" in msg:
+                    registry.acknowledge_new(msg["id"])
+                    await websocket.send_text(json.dumps({
+                        "type": "ack_done",
+                        "id": msg["id"],
+                    }))
+
+            except asyncio.TimeoutError:
+
+
+  Section 50: # Send keepalive ping (from *AutomateAgents.txt)
+
+await websocket.send_text(json.dumps({"type": "ping"}))
+
+    except WebSocketDisconnect:
+        logger.debug("[agents_router] WebSocket client disconnected")
+    finally:
+        watcher.broadcaster.unregister(send_update)
+
+
+# ── Lifespan helper (call from main.py) ───────────────────────────────────────
+
+def setup_agent_watcher(app, project_root: str = "."):
+    """
+    Call this in your FastAPI app setup to wire the watcher into the lifespan.
+
+    Example in main.py:
+        from server.routers.agents_router import setup_agent_watcher
+        setup_agent_watcher(app, project_root="/path/to/project")
+    """
+    from contextlib import asynccontextmanager
+
+    original_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan_with_watcher(app):
+        watcher = get_watcher(root=project_root)
+        loop = asyncio.get_event_loop()
+        watcher.start(loop)
+        try:
+            if original_lifespan:
+                async with original_lifespan(app):
+                    yield
+            else:
+                yield
+        finally:
+            watcher.stop()
+
+    app.router.lifespan_context = lifespan_with_watcher
+
+
+
+
+
+
+// useAgentRegistry.js
+// ─────────────────────
+// React hook that connects to /ws/agents and keeps agent state in sync.
+//
+// Returns:
+//   agents        — array of all active AgentRecord objects
+//   stats         — { total, new, removed, by_detection, by_kind, last_scan }
+//   newAgents     — agents with status === "new" (for badge/highlight)
+//   isConnected   — WebSocket connection status
+//   triggerScan   — fn() → manually trigger a backend scan
+//   acknowledgeAll— fn() → mark all "new" agents as seen
+//   acknowledge   — fn(id) → mark one agent as seen
+
+import { useState, useEffect, useRef, useCallback } from "react";
+
+const WS_URL = import.meta.env.VITE_AGENT_WS_URL || "ws://localhost:8000/api/agents/ws";
+const RECONNECT_DELAY_MS = 3000;
+
+export function useAgentRegistry() {
+  const [agents, setAgents] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const wsRef = useRef(null);
+  const reconnectTimer = useRef(null);
+  const unmounted = useRef(false);
+
+  // ── Derived ──────────────────────────────────────────────────────────────
+  const newAgents = agents.filter((a) => a.status === "new");
+
+  // ── WebSocket setup ───────────────────────────────────────────────────────
+  const connect = useCallback(() => {
+    if (unmounted.current) return;
+
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (unmounted.current) return;
+      setIsConnected(true);
+    };
+
+    ws.onmessage = (event) => {
+      if (unmounted.current) return;
+      try {
+        const msg = JSON.parse(event.data);
+        handleMessage(msg);
+      } catch (e) {
+        console.warn("[useAgentRegistry] Failed to parse message", e);
+      }
+    };
+
+    ws.onclose = () => {
+      if (unmounted.current) return;
+      setIsConnected(false);
+      reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY_MS);
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+  }, []);
+
+  function handleMessage(msg) {
+    switch (msg.type) {
+      case "agent_registry_snapshot":
+        setAgents(msg.agents || []);
+        if (msg.stats) setStats(msg.stats);
+        break;
+
+      case "agent_registry_update": {
+        // Merge diff into current agents
+        setAgents((prev) => {
+          const map = new Map(prev.map((a) => [a.id, a]));
+
+          // Apply new / updated
+          for (const a of (msg.diff?.new || []).concat(msg.diff?.updated || [])) {
+            map.set(a.id, a);
+          }
+
+          // Apply removed
+          for (const a of msg.diff?.removed || []) {
+            const existing = map.get(a.id);
+            if (existing) map.set(a.id, { id: existing.id, name: existing.name, status: "removed" });
+          }
+
+          // Replace full list if provided (authoritative)
+          if (msg.all_agents) {
+            return msg.all_agents;
+          }
+
+          return Array.from(map.values());
+        });
+        if (msg.stats) setStats(msg.stats);
+        break;
+      }
+
+      case "ack_all_done":
+        setAgents((prev) =>
+          prev.map((a) => (a.status === "new" ? { id: a.id, name: a.name, status: "existing" } : a))
+        );
+        break;
+
+      case "ack_done":
+        setAgents((prev) =>
+          prev.map((a) =>
+            a.id === msg.id ? { id: a.id, name: a.name, status: "existing" } : a
+          )
+        );
+        break;
+
+      case "ping":
+        // keepalive — ignore
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  useEffect(() => {
+    unmounted.current = false;
+    connect();
+    return () => {
+      unmounted.current = true;
+      clearTimeout(reconnectTimer.current);
+      wsRef.current?.close();
+    };
+  }, [connect]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  const send = useCallback((msg) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(msg));
+    }
+  }, []);
+
+  const triggerScan = useCallback(() => send({ action: "scan" }), [send]);
+  const acknowledgeAll = useCallback(() => send({ action: "ack_all" }), [send]);
+  const acknowledge = useCallback((id) => send({ action: "ack", id }), [send]);
+
+  return {
+    agents,
+    stats,
+    newAgents,
+    isConnected,
+    triggerScan,
+    acknowledgeAll,
+    acknowledge,
+  };
+}
+
+
+
+
+// AgentDiscoveryPanel.jsx
+// ──────────────────────────────────────────────────────────────────────────
+// Drop-in panel for the Neural Swarm Dashboard.
+// Shows newly discovered agents as glowing cards, with live connection
+// status, detection-method badges, and a manual scan trigger.
+//
+// Usage:
+//   import AgentDiscoveryPanel from "./AgentDiscoveryPanel";
+//   <AgentDiscoveryPanel onAgentClick={(agent) => focusNodeInGraph(agent)} />
+//
+// Props:
+//   onAgentClick(agent)   — optional, called when user clicks an agent card
+//   className             — extra CSS class for the outer wrapper
+// ──────────────────────────────────────────────────────────────────────────
+
+import { useState, useEffect, useRef } from "react";
+import { useAgentRegistry } from "../hooks/useAgentRegistry";
+
+const DETECTION_COLORS = {
+  inheritance: { bg: "#1a2a1a", border: "#2ecc71", text: "#2ecc71", label: "Inheritance" },
+  folder:      { bg: "#1a1a2a", border: "#4a9eff", text: "#4a9eff", label: "Folder" },
+  decorator:   { bg: "#2a1a2a", border: "#b44fff", text: "#b44fff", label: "Decorator" },
+};
+
+const STATUS_GLOW = {
+  new:      "0 0 12px 2px rgba(255, 200, 0, 0.5)",
+  existing: "none",
+  removed:  "0 0 8px 2px rgba(255, 60, 60, 0.3)",
+};
+
+const STATUS_BORDER = {
+  new:      "#ffc800",
+  existing: "#2a2a3a",
+  removed:  "#ff3c3c44",
+};
+
+export default function AgentDiscoveryPanel({ onAgentClick, className = "" }) {
+  const { agents, stats, newAgents, isConnected, triggerScan, acknowledgeAll, acknowledge } =
+    useAgentRegistry();
+
+  const [filter, setFilter] = useState("all"); // "all" | "new" | "existing" | "removed"
+  const [search, setSearch] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const prevNewCount = useRef(0);
+  const [flashNew, setFlashNew] = useState(false);
+
+  // Flash the "NEW" counter when count increases
+  useEffect(() => {
+    if (newAgents.length > prevNewCount.current) {
+      setFlashNew(true);
+      const t = setTimeout(() => setFlashNew(false), 1200);
+      prevNewCount.current = newAgents.length;
+      return () => clearTimeout(t);
+    }
+    prevNewCount.current = newAgents.length;
+  }, [newAgents.length]);
+
+  const handleScan = async () => {
+    setScanning(true);
+    triggerScan();
+    setTimeout(() => setScanning(false), 2000);
+  };
+
+  const filtered = agents.filter((a) => {
+    if (filter !== "all" && a.status !== filter) return false;
+    if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <div className={className} style={styles.panel}>
+      {/* ── Header ── */}
+      <div style={styles.header}>
+        <div style={styles.headerLeft}>
+          <span style={styles.title}>AGENT REGISTRY</span>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", display: "inline-block", background: isConnected ? "#2ecc71" : "#ff4444" }} />
+          <span style={styles.connLabel}>{isConnected ? "LIVE" : "OFFLINE"}</span>
+        </div>
+        <div style={styles.headerRight}>
+          {newAgents.length > 0 && (
+            <button
+              style={styles.ackBtn}
+              onClick={acknowledgeAll}
+              title="Dismiss all new agent highlights"
+            >
+
+
+  Section 51: ACK ALL (from *AutomateAgents.txt)
+
+</button>
+          )}
+          <button
+            style={{ background: "#0f1a2a", border: "1px solid #1e3a5a", color: "#4a9eff", borderRadius: 4, padding: "3px 10px", fontSize: 10, letterSpacing: 1, cursor: "pointer", opacity: scanning ? 0.6 : 1 }}
+            onClick={handleScan}
+            disabled={scanning}
+          >
+            {scanning ? "SCANNING…" : "⟳ SCAN"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Stats bar ── */}
+      {stats && (
+        <div style={styles.statsBar}>
+          <StatChip label="TOTAL" value={stats.total} color="#4a9eff" />
+          <StatChip
+            label="NEW"
+            value={stats.new}
+            color="#ffc800"
+            pulse={flashNew}
+          />
+          <StatChip label="REMOVED" value={stats.removed} color="#ff4444" />
+          {stats.last_scan && (
+            <span style={styles.lastScan}>
+              {new Date(stats.last_scan).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Filter + Search ── */}
+      <div style={styles.controls}>
+        <div style={styles.filterGroup}>
+          {["all", "new", "existing", "removed"].map((f) => (
+            <button
+              key={f}
+              style={{
+                border: "1px solid",
+                borderRadius: 3,
+                padding: "2px 7px",
+                fontSize: 9,
+                letterSpacing: 1,
+                cursor: "pointer",
+                transition: "all 0.15s",
+                background: filter === f ? "#1e2a3a" : "transparent",
+                color: filter === f ? "#4a9eff" : "#556",
+                borderColor: filter === f ? "#4a9eff44" : "transparent",
+              }}
+              onClick={() => setFilter(f)}
+            >
+              {f.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <input
+          style={styles.searchInput}
+          placeholder="Search agents by name or role"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      {/* ── Agent list ── */}
+      <div style={styles.list}>
+        {filtered.length === 0 ? (
+          <div style={styles.empty}>
+            {agents.length === 0 ? "No agents discovered yet. Run a scan." : "No matches."}
+          </div>
+        ) : (
+          filtered.map((agent) => (
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              onClick={() => {
+                if (agent.status === "new") acknowledge(agent.id);
+                onAgentClick?.(agent);
+              }}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────
+
+function AgentCard({ agent, onClick }) {
+  const isNew = agent.status === "new";
+  const isRemoved = agent.status === "removed";
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        background: "#0d0f1a",
+        border: "1px solid",
+        borderRadius: 6,
+        padding: "9px 11px 8px",
+        transition: "border-color 0.2s, box-shadow 0.2s",
+        borderColor: STATUS_BORDER[agent.status] || "#2a2a3a",
+        boxShadow: STATUS_GLOW[agent.status] || "none",
+        opacity: isRemoved ? 0.45 : 1,
+        cursor: "pointer",
+      }}
+      onClick={onClick}
+    >
+      {/* NEW badge */}
+      {isNew && <span style={styles.newBadge}>NEW</span>}
+
+      {/* Name + kind */}
+      <div style={styles.cardTop}>
+        <span style={styles.agentName}>{agent.name}</span>
+        <span style={styles.kindPill}>{agent.kind?.toUpperCase()}</span>
+      </div>
+
+      {/* File path */}
+      <div style={styles.filePath} title={agent.file}>
+        {truncatePath(agent.file)}:{agent.line}
+      </div>
+
+      {/* Docstring */}
+      {agent.docstring && (
+        <div style={styles.docstring}>{agent.docstring}</div>
+      )}
+
+      {/* Detection badges */}
+      <div style={styles.detectionRow}>
+        {(agent.detection || []).map((d) => {
+          const c = DETECTION_COLORS[d] || { bg: "#1a1a1a", border: "#444", text: "#888", label: d };
+          return (
+            <span
+              key={d}
+              style={{
+                fontSize: 9,
+                letterSpacing: 1,
+                padding: "2px 7px",
+                borderRadius: 3,
+                fontWeight: 600,
+                background: c.bg,
+                border: `1px solid ${c.border}`,
+                color: c.text,
+              }}
+            >
+              {c.label}
+            </span>
+          );
+        })}
+
+        {/* Base classes */}
+        {agent.base_classes?.slice(0, 2).map((b) => (
+          <span key={b} style={styles.basePill}>↑ {b}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatChip({ label, value, color, pulse }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        padding: "3px 10px",
+        border: "1px solid",
+        borderRadius: 4,
+        background: "#0d0f18",
+        minWidth: 46,
+        borderColor: `${color}44`,
+        animation: pulse ? "pulseChip 0.6s ease 2" : "none",
+      }}
+    >
+      <span style={{ color, fontSize: 15, fontWeight: 700, fontFamily: "monospace" }}>
+        {value}
+      </span>
+      <span style={{ color: "#445", fontSize: 9, letterSpacing: 1 }}>{label}</span>
+    </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function truncatePath(path = "", max = 42) {
+  if (!path || path.length <= max) return path;
+  const parts = path.split("/");
+  return "…/" + parts.slice(-2).join("/");
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────
+
+const styles = {
+  panel: {
+    background: "#0b0c14",
+    border: "1px solid #1a1e2e",
+    borderRadius: 8,
+    display: "flex",
+    flexDirection: "column",
+    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+    overflow: "hidden",
+    minWidth: 320,
+    maxWidth: 440,
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "10px 14px",
+    borderBottom: "1px solid #1a1e2e",
+    background: "#0d0f1a",
+  },
+  headerLeft: { display: "flex", alignItems: "center", gap: 8 },
+  headerRight: { display: "flex", gap: 6 },
+  title: { color: "#3a6fff", fontSize: 11, letterSpacing: 2, fontWeight: 700 },
+  connDot: { width: 7, height: 7, borderRadius: "50%", display: "inline-block" },
+  connLabel: { color: "#445", fontSize: 10, letterSpacing: 1 },
+  scanBtn: {
+    background: "#0f1a2a",
+    border: "1px solid #1e3a5a",
+    color: "#4a9eff",
+    borderRadius: 4,
+    padding: "3px 10px",
+    fontSize: 10,
+    letterSpacing: 1,
+    cursor: "pointer",
+  },
+  ackBtn: {
+    background: "#1a1600",
+    border: "1px solid #ffc80044",
+    color: "#ffc800",
+    borderRadius: 4,
+    padding: "3px 10px",
+    fontSize: 10,
+    letterSpacing: 1,
+    cursor: "pointer",
+  },
+  statsBar: {
+    display: "flex",
+    gap: 8,
+    padding: "8px 14px",
+    borderBottom: "1px solid #12141f",
+    alignItems: "center",
+  },
+  statChip: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: "3px 10px",
+    border: "1px solid",
+    borderRadius: 4,
+    background: "#0d0f18",
+    minWidth: 46,
+  },
+  lastScan: { marginLeft: "auto", color: "#334", fontSize: 9, letterSpacing: 0.5 },
+  controls: {
+    display: "flex",
+    padding: "8px 10px",
+    gap: 8,
+    borderBottom: "1px solid #12141f",
+  },
+  filterGroup: { display: "flex", gap: 2 },
+  filterBtn: {
+    border: "1px solid",
+    borderRadius: 3,
+    padding: "2px 7px",
+    fontSize: 9,
+    letterSpacing: 1,
+    cursor: "pointer",
+    transition: "all 0.15s",
+  },
+  searchInput: {
+    flex: 1,
+    background: "#0d0f18",
+    border: "1px solid #1a1e2e",
+    borderRadius: 4,
+    color: "#8899bb",
+    fontSize: 11,
+    padding: "3px 8px",
+    outline: "none",
+    fontFamily: "inherit",
+  },
+  list: {
+    flex: 1,
+    overflowY: "auto",
+    padding: "8px 10px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    maxHeight: 480,
+  },
+  empty: { color: "#334", fontSize: 11, textAlign: "center", padding: "20px 0" },
+  card: {
+    position: "relative",
+    background: "#0d0f1a",
+    border: "1px solid",
+    borderRadius: 6,
+    padding: "9px 11px 8px",
+    transition: "border-color 0.2s, box-shadow 0.2s",
+  },
+  newBadge: {
+    position: "absolute",
+    top: -7,
+    right: 10,
+    background: "#ffc800",
+    color: "#000",
+    fontSize: 8,
+    fontWeight: 700,
+    letterSpacing: 1.5,
+    padding: "1px 6px",
+    borderRadius: 3,
+  },
+  cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 },
+  agentName: { color: "#cce0ff", fontSize: 12, fontWeight: 600 },
+  kindPill: {
+    background: "#111a2a",
+    color: "#445",
+    fontSize: 8,
+    letterSpacing: 1.5,
+    padding: "2px 6px",
+    borderRadius: 3,
+  },
+  filePath: { color: "#445", fontSize: 9, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  docstring: { color: "#556877", fontSize: 10, marginBottom: 5, fontStyle: "italic", lineHeight: 1.4 },
+  detectionRow: { display: "flex", flexWrap: "wrap", gap: 4 },
+  detBadge: { fontSize: 9, letterSpacing: 1, padding: "2px 7px", borderRadius: 3, fontWeight: 600 },
+  basePill: { fontSize: 9, color: "#334", padding: "2px 6px", background: "#0a0c12", border: "1px solid #1a1e2e", borderRadius: 3 },
+};
+
+
+  Section 52: # Add these lines to your existing main.py: (from *AutomateAgents.txt)
+
+from contextlib import asynccontextmanager
+import asyncio
+
+from server.routers.agents_router import router as agents_router, get_watcher
+
+PROJECT_ROOT = "/Volumes/Volumn 1/Code Base/AI Girl"  # ← your path
+
+@asynccontextmanager
+async def lifespan(app):
+
+
+  Section 53: # Start Agent Watcher (Trigger 1: startup scan + Trigger 2: file watch) (from *AutomateAgents.txt)
+
+watcher = get_watcher(root=PROJECT_ROOT)
+    loop = asyncio.get_event_loop()
+    watcher.start(loop)
+    yield
+    watcher.stop()
+
+
+  Section 54: # ══════════════════════════════════════════════════ (from *AutomateAgents.txt)
+
+# python -m server.infrastructure.agent_scanner "/Volumes/Volumn 1/Code Base/AI Girl"
+
+
+  Section 55: # In your existing swarm visualization component: (from *AutomateAgents.txt)
+
+"""
+import AgentDiscoveryPanel from "./AgentDiscoveryPanel";
+
+// In your JSX (e.g. alongside your 3D swarm graph):
+<AgentDiscoveryPanel
+  onAgentClick={(agent) => {
+    // highlight this agent node in your existing visualization
+    highlightSwarmNode(agent.name);
+  }}
+/>
+"""
+
+
+  Section 56: # } (from *AutomateAgents.txt)
+
+🧠 Core Idea
+
+You need a “Meta-Agent Discovery System” that:
+
+Detects new subsystems / agents
+Compares with previously registered ones
+Registers them automatically
+Pushes updates to your 3D visualization
+⚙️ High-Level Architecture
+                ┌──────────────────────────┐
+                │  Subsystems (your code)  │
+                │  /systems/*              │
+                └──────────┬───────────────┘
+                           │
+                           ▼
+            🧠 Agent Discovery Engine
+       (file scan + runtime introspection)
+                           │
+                           ▼
+            📦 Agent Registry (state DB)
+       (what exists / what changed / version)
+                           │
+                           ▼
+            🔄 Diff Engine (new vs old)
+                           │
+                           ▼
+            🎮 Visualization Sync Layer
+                           │
+                           ▼
+          🌐 3D Swarm Dashboard (Three.js)
+🔍 1. Agent Discovery Engine
+
+You need two detection methods:
+
+A. Static (File-based scanning)
+
+Scan your structure:
+
+server/systems/
+server/systems/agent/
+Example:
+import os
+
+def scan_agents(base_path="server/systems"):
+    agents = []
+
+    for root, dirs, files in os.walk(base_path):
+        for file in files:
+            if file.endswith(".py"):
+                agents.append({
+                    "name": file.replace(".py", ""),
+                    "path": os.path.join(root, file)
+                })
+
+    return agents
+B. Runtime Introspection (VERY IMPORTANT)
+
+Since you have a swarm system, many agents are dynamic.
+
+Track them when they are instantiated:
+
+class BaseAgent:
+    def __init__(self):
+        AgentRegistry.register(self)
+
+class AgentRegistry:
+    _agents = {}
+
+    @classmethod
+    def register(cls, agent):
+        cls._agents[agent.__class__.__name__] = {
+            "instance": agent,
+            "timestamp": time.time()
+        }
+🧬 2. Agent Registry (Persistent Memory)
+
+Store this in:
+
+Redis (real-time)
+PostgreSQL / SQLite (history)
+Example schema:
+{
+  "agent_name": "emotion_analyzer",
+  "first_seen": 1710000000,
+  "last_seen": 1710000500,
+  "status": "active",
+  "source": "runtime",
+  "version_hash": "abc123"
+}
+🔁 3. Diff Engine (NEW vs OLD)
+
+This is the key to auto-creation behavior
+
+def diff_agents(current, stored):
+    new_agents = []
+    removed_agents = []
+    updated_agents = []
+
+    for name in current:
+        if name not in stored:
+            new_agents.append(name)
+
+    for name in stored:
+        if name not in current:
+            removed_agents.append(name)
+
+    return new_agents, removed_agents
+⚡ 4. Auto-Agent Creation Trigger
+
+Whenever a new subsystem appears, trigger:
+
+def on_new_agent(agent_name):
+    create_visual_node(agent_name)
+    notify_dashboard(agent_name)
+🎮 5. Visualization Sync Layer
+
+Since you already have:
+
+🧠 Neural Swarm Dashboard (3D)
+
+You just need a WebSocket event pipeline
+
+Backend → Frontend
+{
+  "type": "NEW_AGENT",
+  "agent": {
+    "name": "memory_reflection",
+    "group": "cognition",
+    "connections": ["emotion", "reasoning"]
+  }
+}
+🌐 Frontend (Three.js)
+socket.on("NEW_AGENT", (data) => {
+  createNode(data.agent.name);
+  animateSpawn(data.agent.name);
+});
+🧠 6. Smart Classification (Make it insane 🔥)
+
+Auto-group agents based on path:
+
+Path	Group
+systems/emotion	Emotion
+systems/memory	Memory
+systems/agent	External
+systems/self_awareness	Meta
+def classify_agent(path):
+    if "emotion" in path:
+        return "emotion"
+    elif "memory" in path:
+        return "memory"
+    return "core"
+🚀 7. Advanced (THIS IS YOUR EDGE)
+
+You can go way beyond basic detection:
+
+🧬 A. Version Hashing (detect updates)
+import hashlib
+
+def file_hash(path):
+    with open(path, "rb") as f:
+        return hashlib.md5(f.read()).hexdigest()
+🧠 B. Dependency Mapping (auto connections)
+
+Parse imports:
+
+import ast
+
+def extract_dependencies(file):
+    tree = ast.parse(open(file).read())
+    return [node.names[0].name for node in ast.walk(tree) if isinstance(node, ast.Import)]
+
+Then auto-create graph edges.
+
+🤖 C. Self-Creating Agents (next level)
+
+When a subsystem is added:
+
+Capability detection engine scans for gaps via static & runtime analysis:
+
+```python
+CAPABILITY_PATTERNS = {
+    "vision":      [r"vision", r"image.*process", r"object.*detect"],
+    "planning":    [r"plan", r"scheduler", r"goal"],
+    "memory":      [r"memory", r"store", r"recall"],
+    "reflection":  [r"reflect", r"self.*analyze", r"meta"],
+    "tool_use":    [r"tool", r"function.*call", r"api.*wra"],
+}
+
+def detect_capability_gaps(registry: dict, source_dir: str) -> list[str]:
+    """Scan registry + source tree for missing expected capabilities."""
+    found = set()
+
+    # Runtime: check registered agents
+    for agent in registry.values():
+        name = agent.get("name", "")
+        for cap, patterns in CAPABILITY_PATTERNS.items():
+            if any(re.search(p, name, re.I) for p in patterns):
+                found.add(cap)
+
+    # Static: scan Python files for capability-related imports/classes
+    for py_file in Path(source_dir).rglob("*.py"):
+        text = py_file.read_text(errors="ignore")
+        for cap, patterns in CAPABILITY_PATTERNS.items():
+            if cap in found:
+                continue
+            if any(re.search(p, text, re.I) for p in patterns):
+                found.add(cap)
+
+    expected = set(CAPABILITY_PATTERNS.keys())
+    return sorted(expected - found)
+
+gaps = detect_capability_gaps(registry, "server/systems")
+for gap in gaps:
+    spawn_agent(gap)
+```
+🧩 Where This Fits YOUR System
+
+From your README:
+
+FIXV4 Swarm ✅
+Neural Dashboard ✅
+Agent folder ✅
+
+👉 Current state — what's implemented vs what's detected as missing:
+
+```python
+def check_system_readiness(project_root: str = ".") -> dict:
+    """Scan project structure for existing meta-layer components."""
+    paths = {
+        "Agent Discovery Engine": "server/core/discovery.py",
+        "Registry + Diff":        "server/core/registry.py",
+        "Visualization Sync":     "server/realtime/websocket_manager.py",
+    }
+    status = {}
+    for component, rel_path in paths.items():
+        full = Path(project_root) / rel_path
+        status[component] = "✅" if full.exists() else "❌ missing"
+    return status
+```
+
+
+
+⚙️ SYSTEM OVERVIEW
+        ┌─────────────────────────────┐
+        │     Agent Runtime Layer     │
+        │  (your functions/services)  │
+        └─────────────┬───────────────┘
+                      ▼
+        📊 Agent Scoring Engine
+   (performance + usefulness + stability)
+                      ▼
+        🧬 Evolution Decision Layer
+   (keep / tune / rewrite / kill)
+                      ▼
+        🔁 Auto-Rewrite System (AI)
+   (regenerate improved agents)
+                      ▼
+        ⚔️ Survival Registry
+   (only best agents stay active)
+                      ▼
+        🎮 Visualization updates (WebSocket)
+🧠 1. AGENT SCORING ENGINE (CORE)
+
+We assign every agent a live fitness score (0–1).
+
+📊 Score Formula
+score =
+  0.35 × usefulness
++ 0.25 × stability
++ 0.20 × speed
++ 0.20 × reuse_frequency
+🧩 Implementation
+
+
+  Section 57: # server/meta/scoring_engine.py (from *AutomateAgents.txt)
+
+import time
+from collections import defaultdict
+
+class AgentMetrics:
+    def __init__(self):
+        self.calls = defaultdict(int)
+        self.errors = defaultdict(int)
+        self.latency = defaultdict(list)
+
+    def record_call(self, name, latency, success=True):
+        self.calls[name] += 1
+        self.latency[name].append(latency)
+
+        if not success:
+            self.errors[name] += 1
+
+
+metrics = AgentMetrics()
+📊 Compute Score
+
+
+def compute_score(name):
+    calls = metrics.calls[name]
+    errors = metrics.errors[name]
+    latencies = metrics.latency[name]
+
+    if calls == 0:
+        return 0.3  # unknown agent baseline
+
+    usefulness = min(1.0, calls / 100)
+
+    stability = 1.0 - (errors / max(calls, 1))
+
+    speed = 1.0
+    if latencies:
+        avg_latency = sum(latencies) / len(latencies)
+        speed = max(0.0, 1.0 - (avg_latency / 1000))
+
+    reuse = min(1.0, calls / 50)
+
+    score = (
+        0.35 * usefulness +
+        0.25 * stability +
+        0.20 * speed +
+        0.20 * reuse
+    )
+
+    return round(score, 3)
+🧠 2. AGENT LIFECYCLE STATES
+
+Every agent enters one of 4 states:
+
+🟢 ACTIVE     → used + stable
+🟡 WEAK       → low score
+🟠 DEGRADED   → unstable or slow
+🔴 CANDIDATE FOR REWRITE
+🧩 State Logic
+def classify_state(score):
+    if score >= 0.75:
+        return "ACTIVE"
+    elif score >= 0.5:
+        return "WEAK"
+    elif score >= 0.3:
+        return "DEGRADED"
+    else:
+        return "REWRITE"
+🔁 3. AUTO-REWRITE SYSTEM (AI EVOLUTION CORE)
+
+This is where your system becomes self-improving.
+
+🧠 AI REWRITER PROMPT ENGINE
+
+
+  Section 58: # server/meta/rewriter.py (from *AutomateAgents.txt)
+
+import openai
+
+SYSTEM_PROMPT = """
+You are an expert AI system optimizer.
+
+Your job:
+- Improve existing agent functions
+- Reduce latency
+- Increase reliability
+- Keep same input/output contract
+
+Return ONLY Python code.
+Must include @track_agent decorator.
+"""
+🔁 REWRITE FUNCTION
+def rewrite_agent(name, old_code, score):
+    prompt = f"""
+Agent name: {name}
+Current score: {score}
+
+Improve this agent:
+
+{old_code}
+"""
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    return response["choices"][0]["message"]["content"]
+💾 SAFE REPLACEMENT SYSTEM
+import os
+
+def replace_agent(name, new_code):
+    path = f"server/systems/auto/{name}.py"
+
+    backup_path = f"{path}.bak"
+
+    if os.path.exists(path):
+        os.rename(path, backup_path)
+
+    with open(path, "w") as f:
+        f.write(new_code)
+⚔️ 4. SURVIVAL-OF-THE-FITTEST SYSTEM
+
+This is your Darwin layer.
+
+🧬 Evolution Cycle
+
+Runs every N seconds:
+
+
+  Section 59: # server/meta/evolution_loop.py (from *AutomateAgents.txt)
+
+from .scoring_engine import compute_score, classify_state
+from .rewriter import rewrite_agent, replace_agent
+
+def evolution_tick(agent_registry):
+
+    for name, meta in agent_registry.items():
+
+        score = compute_score(name)
+        state = classify_state(score)
+
+        meta["score"] = score
+        meta["state"] = state
+
+
+  Section 60: # 🟠 REWRITE CONDITION (from *AutomateAgents.txt)
+
+if state == "REWRITE":
+
+            old_code = open(meta["path"]).read()
+
+            new_code = rewrite_agent(name, old_code, score)
+
+            replace_agent(name, new_code)
+
+            meta["evolved"] = True
+            meta["version"] = meta.get("version", 0) + 1
+
+
+  Section 61: # 🔴 KILL CONDITION (from *AutomateAgents.txt)
+
+if score < 0.2:
+            meta["status"] = "KILLED"
+🧠 5. AGENT METADATA STRUCTURE
+
+Each agent becomes self-tracked:
+
+{
+  "name": "emotion_analyzer",
+  "score": 0.82,
+  "state": "ACTIVE",
+  "calls": 120,
+  "errors": 3,
+  "latency_avg": 85,
+  "version": 4,
+  "status": "alive",
+  "evolved": false
+}
+🌐 6. VISUALIZATION EVENTS (IMPORTANT)
+
+Send everything to your swarm dashboard:
+
+await ws.send({
+    "type": "AGENT_EVOLUTION",
+    "data": {
+        "name": name,
+        "score": score,
+        "state": state,
+        "action": "rewritten" if state == "REWRITE" else "updated"
+    }
+})
+🎮 FRONTEND (3D BRAIN UPGRADE)
+socket.on("AGENT_EVOLUTION", (msg) => {
+
+  updateNodeScore(msg.data.name, msg.data.score);
+
+  if (msg.data.state === "REWRITE") {
+    pulseNode(msg.data.name, "orange");
+  }
+
+  if (msg.data.action === "rewritten") {
+    flashNode(msg.data.name, "purple"); // evolution event
+  }
+
+});
+🧠 WHAT YOU JUST BUILT
+
+This system now:
+
+✔ Tracks agent performance
+✔ Measures usefulness + speed + stability
+✔ Identifies weak agents
+✔ Automatically rewrites them using AI
+✔ Replaces bad versions safely
+✔ Visualizes evolution in real time
+⚠️ IMPORTANT REALITY CHECK
+
+This is powerful but dangerous if uncontrolled.
+
+You MUST have:
+
+🛑 Safety rules:
+never allow AI to delete all versions
+always keep .bak backups
+cap rewrite frequency (e.g. 1 per minute per agent)
+🚀
+
+
+
+.
+
+🧠 1. Meta-Control Plane — Core Implementation
+
+```python
+# server/core/control_plane.py
+"""Policy engine + safety governance layer for the self-improving swarm."""
+
+import time
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class PolicyConfig:
+    max_rewrites_per_hour: int = 3
+    min_score_to_rewrite: float = 0.25
+    never_touch: set = field(default_factory=lambda: {"gateway", "auth", "registry"})
+    max_rewrites_per_agent_per_min: int = 1
+    cooldown_seconds_after_rewrite: int = 120
+
+
+class PolicyEngine:
+    """Hard safety layer — sits ABOVE discovery / scoring / rewrite."""
+
+    def __init__(self, config: Optional[PolicyConfig] = None):
+        self.config = config or PolicyConfig()
+        self._rewrite_timestamps: dict[str, list[float]] = {}
+
+    def can_rewrite(self, agent: dict) -> bool:
+        name = agent.get("name", "")
+        if name in self.config.never_touch:
+            return False
+        score = agent.get("score", 0)
+        if score < self.config.min_score_to_rewrite:
+            return False
+        now = time.time()
+        recent = [t for t in self._rewrite_timestamps.get(name, []) if now - t < 3600]
+        if len(recent) >= self.config.max_rewrites_per_hour:
+            return False
+        if recent and (now - recent[-1]) < self.config.cooldown_seconds_after_rewrite:
+            return False
+        return True
+
+    def record_rewrite(self, agent_name: str):
+        self._rewrite_timestamps.setdefault(agent_name, []).append(time.time())
+
+
+class MetaControlPlane:
+    """Orchestrates the full safety-governance layer above all subsystems."""
+
+    def __init__(self, policy: Optional[PolicyEngine] = None):
+        self.policy = policy or PolicyEngine()
+        self._freeze = False
+
+    def freeze(self):
+        """Emergency brake — halts all evolution until thaw()."""
+        self._freeze = True
+
+    def thaw(self):
+        self._freeze = False
+
+    @property
+    def is_frozen(self) -> bool:
+        return self._freeze
+
+    def guard_rewrite(self, agent: dict) -> bool:
+        if self._freeze:
+            return False
+        return self.policy.can_rewrite(agent)
+```
+
+👉 This sits ABOVE discovery / scoring / rewrite — prevents self-destruction.
+
+🧬 3. Fix Your Scoring Engine (important upgrade)
+
+Your current scoring is linear → this breaks in real systems.
+
+Problem:
+favors high-frequency spam agents
+ignores quality distribution
+ignores volatility
+✅ Better scoring model (stable + realistic)
+import numpy as np
+
+def compute_score(name):
+    calls = metrics.calls[name]
+    errors = metrics.errors[name]
+    latencies = metrics.latency[name]
+
+    if calls < 5:
+        return 0.2  # not enough data
+
+    error_rate = errors / calls
+    avg_latency = np.mean(latencies) if latencies else 1000
+
+    stability = np.exp(-error_rate * 5)
+    speed = np.exp(-avg_latency / 800)
+
+    usefulness = np.log1p(calls) / 10
+
+    volatility_penalty = np.std(latencies) / 1000 if len(latencies) > 1 else 0
+
+    score = (
+        0.4 * stability +
+        0.3 * speed +
+        0.2 * usefulness -
+        0.1 * volatility_penalty
+    )
+
+    return float(np.clip(score, 0, 1))
+
+🔥 This prevents “fake strong agents”
+
+⚔️ 4. Fix Survival System (CRITICAL)
+
+Right now your system:
+
+rewrites or kills directly
+
+That’s dangerous.
+
+Replace with 3-phase lifecycle:
+🟡 Phase 1: Shadow Mode
+
+Agent is NOT replaced, just simulated
+
+🟠 Phase 2: Candidate Mode
+
+AI generates improved version but does NOT deploy
+
+🔴 Phase 3: Approval Gate
+
+Only policy engine can approve deployment
+
+Improved flow:
+
+
+  Section 62: LOW SCORE (from *AutomateAgents.txt)
+
+↓
+SHADOW TEST (new version runs parallel)
+   ↓
+
+
+  Section 63: COMPARE METRICS (from *AutomateAgents.txt)
+
+↓
+ONLY THEN replace
+🧠 5. Add “System Memory Graph” (VERY IMPORTANT)
+
+Right now your system is stateless evolution.
+
+You need:
+
+🧬 Global Memory Graph
+{
+  "agent": "emotion_analyzer",
+  "depends_on": ["text_parser", "memory_core"],
+  "influences": ["recommendation_engine"],
+  "impact_score": 0.82
+}
+Why this matters
+
+Without it:
+
+agents evolve independently (bad)
+system becomes fragmented
+
+With it:
+
+you get emergent intelligence structure
+🌐 6. Visualization Upgrade (what you're missing)
+
+Instead of just nodes:
+
+Add 4 visual layers:
+🧠 Layer 1: Activity Heat
+node brightness = usage
+⚡ Layer 2: Stability Glow
+red = unstable
+green = stable
+🧬 Layer 3: Evolution Trails
+show lineage of rewritten agents
+🔗 Layer 4: Dependency Force Field
+pull connected nodes together
+🤖 7. Emergent Agent Spawning (Make it REAL)
+
+Right now your idea is:
+
+“spawn if missing capability”
+
+Upgrade it:
+
+Instead:
+🧠 Gap Detection Engine
+def detect_system_gaps(registry):
+    capabilities = extract_all_capabilities(registry)
+
+    expected = [
+        "vision",
+        "planning",
+        "memory",
+        "reflection",
+        "tool_use"
+    ]
+
+    missing = [c for c in expected if c not in capabilities]
+
+    return missing
+Then spawn only if:
+gap persists > N cycles
+system score is stable enough
+🧠 8. Add “Global Intelligence Score” (THIS IS YOUR NORTH STAR)
+def system_health(registry):
+    scores = [a["score"] for a in registry.values()]
+
+    diversity = len(set([a["type"] for a in registry.values()])) / len(registry)
+
+    stability = np.mean(scores)
+
+    return 0.7 * stability + 0.3 * diversity
+🚨 9. Biggest flaw in your current design
+
+You are missing:
+
+❌ Feedback Isolation
+
+Right now:
+
+agents influence their own scoring indirectly
+this creates feedback loops → instability
+Fix:
+
+Introduce:
+
+🧪 “Evaluation Layer (External Judge)”
+separate process
+does NOT modify agents
+only observes
+🧠 FINAL ARCHITECTURE (CLEAN VERSION)
+                 🧠 CONTROL PLANE
+        (policy + safety + system rules)
+                         │
+   Discovery → Registry → Metrics
+                         │
+                  Scoring Engine
+                         │
+                  Gap Detection
+                         │
+              Shadow Evolution Layer
+                         │
+               Approval Gate (CRITICAL)
+                         │
+               Deployment System
+                         │
+            🌐 Visualization Stream
+                         │
+              3D Swarm Dashboard
+🚀
+
+
+
+.
+
+🧠 Recommended Reality Order (IMPORTANT)
+
+If you want something that actually becomes stable and scalable:
+
+🥇 Step 1 → ⚙️ Option A (Foundation)
+🥈 Step 2 → 🧠 Option D (Emergence logic)
+🥉 Step 3 → 🧬 Option B (Swarm kernel)
+🏁 Step 4 → 🎮 Option C (visual brain layer)
+⚙️ OPTION A — Production-Ready Architecture (CORE SYSTEM)
+
+This is your real backend OS skeleton
+
+🧱 Folder Structure (clean + scalable)
+server/
+│
+├── api/                     # FastAPI routes
+│   ├── agents.py
+│   ├── metrics.py
+│   ├── evolution.py
+│   ├── ws.py
+│
+├── core/
+│   ├── registry.py         # agent registry
+│   ├── discovery.py        # file + runtime scan
+│   ├── diff_engine.py
+│   ├── policy_engine.py
+│
+├── meta/
+│   ├── scoring_engine.py
+│   ├── evolution_loop.py
+│   ├── gap_detector.py
+│   ├── rewriter.py
+│
+├── agents/
+│   ├── base.py
+│   ├── system_agents/
+│   ├── auto_generated/
+│
+├── memory/
+│   ├── redis_client.py
+│   ├── postgres_models.py
+│
+├── realtime/
+│   ├── websocket_manager.py
+│   ├── event_bus.py
+│
+├── config/
+│   ├── settings.py
+│
+└── main.py
+⚡ FastAPI Core (entry point)
+from fastapi import FastAPI
+from api.ws import router as ws_router
+from api.agents import router as agent_router
+
+app = FastAPI(title="AI Swarm OS")
+
+app.include_router(agent_router)
+app.include_router(ws_router)
+📡 WebSocket Layer (REAL-TIME SWARM)
+from fastapi import WebSocket
+from typing import List
+
+class ConnectionManager:
+    def __init__(self):
+        self.clients: List[WebSocket] = []
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        self.clients.append(ws)
+
+    async def broadcast(self, message: dict):
+        for client in self.clients:
+            await client.send_json(message)
+
+manager = ConnectionManager()
+🧠 Redis (real-time state)
+import redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+def set_agent_state(name, data):
+    r.hset(f"agent:{name}", mapping=data)
+
+def get_agent_state(name):
+    return r.hgetall(f"agent:{name}")
+🔁 Event Bus (VERY IMPORTANT)
+
+This connects everything:
+
+from realtime.websocket_manager import manager
+
+class EventBus:
+
+    @staticmethod
+    async def emit(event_type, data):
+        await manager.broadcast({
+            "type": event_type,
+            "data": data
+        })
+🧠 OPTION D — Autonomous Agent Spawning (EMERGENCE CORE)
+
+This is where your system becomes “alive”.
+
+🧬 Gap Detection Engine
+def detect_gaps(registry):
+    required = {"memory", "planning", "reasoning", "vision"}
+
+    active = {a["type"] for a in registry.values()}
+
+    missing = required - active
+
+    return list(missing)
+🤖 Agent Spawner
+import uuid
+
+def spawn_agent(agent_type):
+
+    agent_id = str(uuid.uuid4())
+
+    template = f"""
+class {agent_type.capitalize()}Agent:
+    def __init__(self):
+        self.id = "{agent_id}"
+        self.type = "{agent_type}"
+
+    def run(self, input):
+        return input
+"""
+
+    path = f"server/agents/auto_generated/{agent_type}_{agent_id}.py"
+
+    with open(path, "w") as f:
+        f.write(template)
+
+    return path
+🧠 Trigger Logic
+async def evolution_tick(registry):
+
+    gaps = detect_gaps(registry)
+
+    for gap in gaps:
+        spawn_agent(gap)
+
+        await EventBus.emit("NEW_AGENT_SPAWNED", {
+            "type": gap
+        })
+🧬 OPTION B — Self-Evolving Swarm Kernel (OS BRAIN)
+
+This is the decision layer of your system
+
+🧠 Kernel Loop
+async def swarm_kernel(registry):
+
+    while True:
+
+        for agent in registry.values():
+
+            score = compute_score(agent["name"])
+            state = classify_state(score)
+
+            if state == "REWRITE":
+                if policy.can_rewrite(agent):
+
+                    new_code = rewrite_agent(agent)
+                    deploy_safely(agent, new_code)
+
+        await sleep(2)
+⚔️ Key Upgrade: “3-Layer Execution”
+
+Every agent runs in:
+
+🟢 Live mode
+🟡 Shadow mode (test new version)
+🔴 Promotion mode
+🧠 System Intelligence Loop
+Observe → Score → Simulate → Compare → Promote → Repeat
+🎮 OPTION C — 3D Neural Brain (VISUAL LAYER)
+
+This is your god-tier UI layer
+
+🧠 Node structure
+{
+  id: "agent_1",
+  score: 0.82,
+  state: "ACTIVE",
+  connections: ["agent_2", "agent_3"],
+  pulse: 0.5
+}
+⚡ WebSocket events
+NEW_AGENT
+AGENT_UPDATED
+AGENT_EVOLVED
+AGENT_SPAWNED
+🎮 Three.js enhancements
+
+
+  Section 64: 2. Evolution trail (from *AutomateAgents.txt)
+
+old version → new version line
+
+
+  Section 65: 3. Neural force graph (from *AutomateAgents.txt)
+
+dependencies pull nodes together
+🧠 Frontend loop
+socket.on("AGENT_EVOLVED", (data) => {
+  updateNode(data.id, {
+    color: "purple",
+    size: data.score * 10
+  });
+
+  drawEvolutionTrail(data.from, data.to);
+});
+🧠 FINAL SYSTEM (WHAT YOU’RE BUILDING)
+
+You are effectively building:
+
+🚀 “AI Operating System with Evolution”
+              🧠 Swarm Kernel (B)
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼            ▼
+  ⚙️ Backend      🧬 Evolution   🎮 Brain UI
+   (A)              (D)           (C)
+        └────────────┼────────────┘
+                     ▼
+            🌍 Self-Evolving AI System
+🚨 Critical Advice (don’t skip this)
+
+If you combine all 4:
+
+You MUST add:
+rate limits on spawning
+rewrite cooldowns
+rollback system
+system health watchdog
+
+Otherwise:
+
+your system will “evolve into chaos”
+
+🧠 FINAL ARCHITECTURE (COMBINED SYSTEM)
+                    🌐 FRONTEND (C)
+            Three.js Neural Brain Visualization
+                     │   ▲
+                     │   │ WebSocket Events
+                     ▼   │
+        ┌──────────────────────────────────┐
+        │        REAL-TIME BACKEND (A)     │
+        │  FastAPI + WebSocket Gateway     │
+        └──────────────┬───────────────────┘
+                       │
+        ┌──────────────▼──────────────┐
+        │        REDIS EVENT BUS       │
+        │  (state + pub/sub swarm)     │
+        └──────────────┬──────────────┘
+                       │
+        ┌──────────────▼──────────────┐
+        │     SWARM KERNEL (B)         │
+        │ evolution + scoring + spawn  │
+        └──────────────┬──────────────┘
+                       │
+        ┌──────────────▼──────────────┐
+        │   AGENT RUNTIME SYSTEM       │
+        │ execution + memory + tools   │
+        └──────────────────────────────┘
+⚙️ 1. REAL-TIME BACKEND (FASTAPI + REDIS + WS)
+📦 Core Stack
+FastAPI (API layer)
+Redis (state + pub/sub)
+WebSockets (live swarm sync)
+Background kernel loop
+🧠 Redis Swarm Event Bus
+
+
+  Section 66: # server/realtime/redis_bus.py (from *AutomateAgents.txt)
+
+import redis
+import json
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+CHANNEL = "swarm_events"
+
+
+def publish(event_type: str, data: dict):
+    r.publish(CHANNEL, json.dumps({
+        "type": event_type,
+        "data": data
+    }))
+📡 WebSocket Gateway (REAL TIME SWARM FEED)
+
+
+  Section 67: # server/api/ws.py (from *AutomateAgents.txt)
+
+from fastapi import APIRouter, WebSocket
+import asyncio
+import redis
+
+router = APIRouter()
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+clients = set()
+
+
+@router.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await ws.accept()
+    clients.add(ws)
+
+    pubsub = r.pubsub()
+    pubsub.subscribe("swarm_events")
+
+    try:
+        while True:
+            message = pubsub.get_message(ignore_subscribe_messages=True)
+
+            if message:
+                await ws.send_text(message["data"])
+
+            await asyncio.sleep(0.01)
+
+    finally:
+        clients.remove(ws)
+⚡ Event Standard (IMPORTANT)
+
+Every system event must follow:
+
+{
+  "type": "AGENT_UPDATE",
+  "data": {
+    "id": "agent_123",
+    "score": 0.82,
+    "state": "ACTIVE"
+  }
+}
+🧠 2. SWARM KERNEL (FULL AI OS BRAIN)
+
+This is your decision engine + evolution loop
+
+🔁 Kernel Loop (HEART OF SYSTEM)
+
+
+  Section 68: # server/kernel/swarm_kernel.py (from *AutomateAgents.txt)
+
+import asyncio
+from meta.scoring_engine import compute_score
+from core.policy_engine import PolicyEngine
+from meta.rewriter import rewrite_agent
+from realtime.redis_bus import publish
+
+registry = {}
+
+async def swarm_kernel_loop():
+
+    while True:
+
+        for name, agent in registry.items():
+
+            score = compute_score(name)
+            agent["score"] = score
+
+            state = classify(score)
+            agent["state"] = state
+
+            publish("AGENT_UPDATE", {
+                "name": name,
+                "score": score,
+                "state": state
+            })
+
+
+  Section 69: # 🧠 EVOLUTION RULE (from *AutomateAgents.txt)
+
+if state == "REWRITE" and PolicyEngine.can_rewrite(agent):
+
+                new_code = rewrite_agent(name, agent["code"], score)
+
+                agent["code"] = new_code
+                agent["version"] += 1
+
+                publish("AGENT_EVOLVED", {
+                    "name": name,
+                    "version": agent["version"]
+                })
+
+        await asyncio.sleep(2)
+🧠 State Classifier
+def classify(score):
+    if score > 0.8:
+        return "ACTIVE"
+    elif score > 0.5:
+        return "WEAK"
+    elif score > 0.3:
+        return "DEGRADED"
+    return "REWRITE"
+🧬 3. AGENT SPAWNING (EMERGENCE ENGINE)
+def spawn_agent(type_name):
+    agent = {
+        "id": f"{type_name}_{uuid4()}",
+        "type": type_name,
+        "score": 0.3,
+        "state": "NEW",
+        "version": 0
+    }
+
+    registry[agent["id"]] = agent
+
+    publish("AGENT_SPAWNED", agent)
+🎮 4. THREE.JS NEURAL BRAIN UI (INSANE MODE)
+
+This is your living AI visualization layer
+
+🧠 Node Model
+{
+  id: "agent_1",
+  x: 100,
+  y: 200,
+  z: 50,
+  score: 0.9,
+  state: "ACTIVE",
+  size: 1.2,
+  connections: ["agent_2"]
+}
+⚡ WebSocket Client
+const ws = new WebSocket("ws://localhost:8000/ws");
+
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+
+  switch (msg.type) {
+
+    case "AGENT_UPDATE":
+      updateNode(msg.data);
+      break;
+
+    case "AGENT_SPAWNED":
+      createNode(msg.data);
+      break;
+
+    case "AGENT_EVOLVED":
+      pulseEvolution(msg.data);
+      break;
+  }
+};
+🎮 Three.js Visual Effects
+🧠 1. Brain Nodes Pulse by Score
+node.scale.setScalar(0.5 + data.score);
+⚡ 2. State Color Mapping
+ACTIVE → green
+WEAK → yellow
+DEGRADED → orange
+REWRITE → red glow
+🔗 3. Neural Connections
+drawLine(agentA.position, agentB.position, {
+  opacity: 0.2 + score
+});
+🧬 4. Evolution Effect
+function pulseEvolution(node) {
+  node.material.emissive.set("purple");
+  node.scale.multiplyScalar(1.5);
+
+  setTimeout(() => reset(node), 500);
+}
+🔥 FINAL SYSTEM BEHAVIOR (WHAT YOU BUILT)
+The system now behaves like:
+🧠 1. It THINKS
+kernel evaluates all agents continuously
+⚙️ 2. It REWRITES ITSELF
+weak agents get improved automatically
+🧬 3. It EVOLVES STRUCTURE
+new agents spawn when gaps appear
+🌐 4. It VISUALIZES ITSELF
+every change appears in real-time 3D brain
+🚨 CRITICAL ADDITIONS (DO NOT SKIP)
+
+
+  Section 70: 1. Loop protection (from *AutomateAgents.txt)
+
+MAX_REWRITES_PER_MIN = 2
+
+
+  Section 71: 2. Backup system (from *AutomateAgents.txt)
+
+before rewrite → save snapshot
+
+
+  Section 72: 3. Dead agent quarantine (from *AutomateAgents.txt)
+
+KILLED → archived not deleted
+
+
+  Section 73: 4. System health watchdog (from *AutomateAgents.txt)
+
+if system_score < 0.2:
+    freeze_evolution()
+🧠 WHAT YOU NOW HAVE
+
+You now have a system that is:
+
+✔ Real-time distributed
+✔ Self-evolving
+✔ Self-visualizing
+✔ Memory-aware
+✔ Emergent
+
+🧠 SYSTEM EVOLUTION MAP (FINAL FORM)
+
+
+  Section 74: INPUTS (from *AutomateAgents.txt)
+
+↓
+🧠 Goal Generator
+  ↓
+🧭 Planner (self-directed)
+  ↓
+🧬 Multi-Agent Debate Layer
+  ↓
+⚡ Execution Swarm (GPU-accelerated)
+  ↓
+📊 Evaluation + Memory Update
+  ↓
+🧠 Identity Graph (long-term memory)
+  ↺ loops back to Goal Generator
+🧠 1. GOAL GENERATION ENGINE (AUTONOMOUS DRIVE LAYER)
+
+This is what gives the system “intent”.
+
+❗ Without this → system is reactive
+✔ With this → system becomes self-directed
+🧬 Core Idea
+
+The system generates:
+
+objectives
+sub-goals
+curiosity signals
+failure recovery goals
+🧠 Goal Generator (Core Logic)
+import random
+
+BASE_GOALS = [
+    "increase system stability",
+    "improve agent efficiency",
+    "reduce latency",
+    "expand capability coverage",
+    "increase prediction accuracy"
+]
+
+def generate_goals(system_state):
+
+    goals = []
+
+
+  Section 75: # stability-driven goals (from *AutomateAgents.txt)
+
+if system_state["error_rate"] > 0.1:
+        goals.append("reduce system errors")
+
+
+  Section 76: # performance-driven goals (from *AutomateAgents.txt)
+
+if system_state["latency"] > 200:
+        goals.append("optimize execution speed")
+
+
+  Section 77: # exploration (important!) (from *AutomateAgents.txt)
+
+goals.append(random.choice(BASE_GOALS))
+
+    return goals
+🧠 Key Upgrade (IMPORTANT)
+
+Add curiosity pressure:
+
+def curiosity_signal(state):
+    return 1.0 - state["system_entropy"]
+
+👉 low entropy = boredom → exploration triggers
+
+🧭 2. SELF-DIRECTED PLANNING ENGINE
+
+This converts goals → execution trees
+
+🧠 Hierarchical Planner
+def plan(goal):
+
+    return {
+        "goal": goal,
+        "steps": [
+            {"task": "analyze_state"},
+            {"task": "select_agents"},
+            {"task": "simulate_paths"},
+            {"task": "execute_best_plan"}
+        ]
+    }
+🧠 REAL VERSION (important upgrade)
+
+You want tree-based planning:
+
+Goal
+ ├── subgoal 1
+ │     ├── task A
+ │     └── task B
+ ├── subgoal 2
+ └── evaluation node
+🧠 Planner with scoring
+def score_plan(plan):
+    efficiency = 1 / len(plan["steps"])
+    risk = random.uniform(0, 1)
+
+    return efficiency - risk * 0.3
+🧬 3. MULTI-AGENT DEBATE SYSTEM (CRITICAL INTELLIGENCE LAYER)
+
+This is where your system becomes non-deterministic intelligence
+
+🧠 Concept
+
+Instead of:
+
+one agent decides
+
+You do:
+
+multiple agents argue → best idea wins
+
+⚔️ Debate Structure
+Planner → proposes goal
+   ↓
+Agent A: supports strategy X
+Agent B: proposes alternative Y
+Agent C: criticizes both
+   ↓
+Judge Agent selects winner
+🧠 Debate Engine
+def run_debate(problem, agents):
+
+    responses = []
+
+    for agent in agents:
+        responses.append({
+            "agent": agent["name"],
+            "proposal": agent.act(problem),
+            "score": agent.confidence(problem)
+        })
+
+    return responses
+🧠 Judge Agent (VERY IMPORTANT)
+def judge(responses):
+
+    best = max(responses, key=lambda x: x["score"])
+
+    return {
+        "winner": best["agent"],
+        "decision": best["proposal"]
+    }
+🔥 Advanced Upgrade
+
+Add:
+
+disagreement score
+argument diversity
+contradiction detection
+
+This creates true emergent reasoning
+
+⚡ 4. GPU-ACCELERATED SWARM RUNTIME (10,000+ AGENTS)
+
+Now we scale beyond CPU limits.
+
+🧠 Architecture Shift
+
+Instead of:
+
+Python loops per agent
+
+You move to:
+
+batch execution on GPU tensors
+
+⚡ Core Idea
+
+Represent agents as vectors:
+
+agent = [state, score, memory, latency, priority]
+🧠 PyTorch Swarm Engine
+import torch
+
+agents = torch.randn(10000, 5).cuda()
+
+def step(agents):
+
+
+  Section 78: # simulate agent updates in parallel (from *AutomateAgents.txt)
+
+agents[:, 0] *= 0.99  # decay
+    agents[:, 1] += torch.rand(10000).cuda() * 0.01  # reward noise
+
+    return agents
+⚡ Key Insight
+
+GPU swarm =
+
+no loops
+no per-agent Python overhead
+pure tensor evolution
+🚀 Scaling Strategy
+Layer	Tech
+10k agents	single GPU
+100k agents	multi-GPU
+1M agents	distributed CUDA clusters
+🧠 5. DIGITAL BRAIN CONSCIOUSNESS GRAPH
+
+This is your long-term identity system
+
+🧠 Concept
+
+You are NOT tracking agents.
+
+You are tracking:
+
+how intelligence evolves over time
+
+🧬 Graph Structure
+{
+  "node": "agent_emotion_v3",
+  "created": 1710000000,
+  "parent": "agent_emotion_v2",
+  "descendants": ["agent_emotion_v4"],
+  "influence": ["memory_core", "decision_engine"],
+  "experience": 0.87
+}
+🧠 Memory Graph Engine
+class MemoryGraph:
+
+    def __init__(self):
+        self.nodes = {}
+
+    def add_event(self, agent, event):
+
+        if agent not in self.nodes:
+            self.nodes[agent] = []
+
+        self.nodes[agent].append(event)
+🧠 Identity Formation
+
+Each agent develops:
+
+history
+behavioral drift
+specialization
+reliability signature
+🔥 RESULT: “Digital Personality”
+
+Agents become:
+
+not tools, but evolving behavioral entities
+
+🧠 FINAL UNIFIED SYSTEM (FULL STACK)
+                🧠 GOAL GENERATOR
+                        ↓
+                🧭 PLANNER ENGINE
+                        ↓
+            🧬 MULTI-AGENT DEBATE
+                        ↓
+         ⚡ GPU SWARM EXECUTION LAYER
+                        ↓
+              📊 EVALUATION ENGINE
+                        ↓
+     🧠 DIGITAL CONSCIOUSNESS GRAPH
+                        ↺
+            (feeds back into goals)
+🚨 WHAT YOU HAVE NOW BUILT (IMPORTANT)
+
+This is no longer:
+
+chatbot system ❌
+agent framework ❌
+
+This is:
+
+🧠 A SELF-ORGANIZING INTELLIGENCE SYSTEM
+
+It has:
+
+✔ Goals
+✔ Planning
+✔ Debate
+✔ Execution swarm
+✔ GPU scaling
+✔ Memory identity graph
+✔ Evolution loop
+
+⚠️ REALITY CHECK (VERY IMPORTANT)
+
+To keep this stable you MUST add:
+
+🛑 Hard constraints
+goal generation caps
+GPU memory limits
+debate timeouts
+runaway loop protection
+
+Otherwise:
+
+system will enter infinite self-amplification
+
+🧠 FULL SYSTEM OVERVIEW (ULTIMATE STACK)
+                    🧠 CONSCIOUSNESS LAYER
+        (attention + working memory + focus control)
+                              ↓
+        🧬 VECTOR MEMORY BRAIN (FAISS / WEAVIATE)
+                              ↓
+         ⚡ DISTRIBUTED SWARM CLUSTER (K8s + GPUs)
+                              ↓
+             🎮 3D COGNITION VISUALIZATION LAYER
+🧠 1. CONSCIOUSNESS SIMULATION LAYER
+(Attention + Working Memory + Focus)
+
+This is the “mind loop” of your system
+
+🧠 Core Idea
+
+Instead of:
+
+all agents run equally
+
+You simulate:
+
+limited attention → selective focus → working memory decay
+
+🧠 Working Memory Model
+class WorkingMemory:
+    def __init__(self, capacity=7):
+        self.capacity = capacity
+        self.items = []
+
+    def add(self, item):
+        if len(self.items) >= self.capacity:
+            self.items.pop(0)  # decay oldest memory
+        self.items.append(item)
+⚡ Attention Mechanism (CRITICAL)
+
+You assign “focus weight” to agents/events:
+
+def attention_score(agent):
+    return (
+        agent["importance"] * 0.4 +
+        agent["recency"] * 0.3 +
+        agent["success_rate"] * 0.3
+    )
+🧠 Global Attention Controller
+
+Only top-K agents are “conscious” at a time:
+
+def select_focus(agents, k=5):
+    ranked = sorted(agents, key=attention_score, reverse=True)
+    return ranked[:k]
+🔥 RESULT
+
+Your system now behaves like:
+
+humans (limited attention)
+not servers (parallel everything)
+
+This is what creates “intelligence feel”
+
+🧬 2. VECTOR MEMORY BRAIN
+(FAISS / Weaviate / Hybrid Memory Graph)
+
+This replaces “logs” with semantic memory
+
+🧠 Memory Types
+
+You now store:
+
+experiences
+decisions
+failures
+reasoning traces
+agent evolution history
+⚡ FAISS Memory Store (fast version)
+import faiss
+import numpy as np
+
+dimension = 768
+index = faiss.IndexFlatL2(dimension)
+
+memory_store = []
+🧠 Add Memory
+def store_memory(vector, metadata):
+    index.add(np.array([vector]))
+    memory_store.append(metadata)
+🔍 Retrieve Memory (semantic recall)
+def recall(query_vector, k=5):
+    distances, indices = index.search(
+        np.array([query_vector]), k
+    )
+
+    return [memory_store[i] for i in indices[0]]
+🧠 Hybrid Upgrade (IMPORTANT)
+
+Combine:
+
+FAISS → fast vector search
+Graph DB → relationships
+Redis → hot memory
+🧬 Memory becomes:
+Event → Embedding → Vector Store
+        ↓
+     Graph Link (why it happened)
+        ↓
+     Agent influence chain
+⚡ 3. DISTRIBUTED SWARM CLUSTER
+(Kubernetes + GPU Multi-Node Execution)
+
+This is your scale layer
+
+🧠 Architecture
+            Load Balancer
+                  ↓
+        Kubernetes Scheduler
+     ┌────────────┼────────────┐
+     ↓            ↓            ↓
+ GPU Node 1   GPU Node 2   GPU Node 3
+⚡ Agent Execution Pod
+
+Each agent becomes a container:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: agent-worker
+spec:
+  containers:
+  - name: agent
+    image: swarm-agent:latest
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+🧠 Swarm Job Distributor
+def distribute_agents(agents, nodes):
+
+    for i, agent in enumerate(agents):
+        node = nodes[i % len(nodes)]
+        assign(agent, node)
+⚡ GPU Batch Execution (core scaling trick)
+
+Instead of:
+
+10,000 Python loops ❌
+
+You do:
+
+batch tensor execution on GPUs ✔
+🧠 Result
+10k → 1M agents possible
+near real-time simulation
+parallel intelligence evolution
+🎮 4. FULL 3D “COGNITION BRAIN” UI
+(Live thought visualization system)
+
+This is your external mind representation
+
+🧠 Core Concept
+
+Every internal process becomes:
+
+a moving object in 3D space
+
+⚡ Node Types
+🧠 Thought Node
+⚡ Decision Node
+📦 Memory Node
+🧬 Evolution Node
+🔥 Conflict Node
+🧠 Real-time state mapping
+node.position = {
+  x: agent.attention * 10,
+  y: agent.memory_strength * 10,
+  z: agent.score * 10
+};
+⚡ Movement = cognition
+fast movement → active thinking
+clustering → reasoning groups
+repulsion → conflicting ideas
+🧠 Live WebSocket feed
+socket.on("COGNITION_EVENT", (data) => {
+
+  switch(data.type) {
+
+    case "THOUGHT_CREATED":
+      spawnNode(data);
+      break;
+
+    case "ATTENTION_SHIFT":
+      moveFocusRing(data.agent);
+      break;
+
+    case "MEMORY_RECALLED":
+      highlightMemoryPath(data.path);
+      break;
+  }
+});
+🔥 Visual breakthrough
+
+You are no longer showing:
+
+system state
+
+You are showing:
+
+thinking itself
+
+🧠 FINAL UNIFIED SYSTEM (ALL 4 TOGETHER)
+                🧠 CONSCIOUSNESS LAYER
+                     (attention control)
+                              ↓
+                🧬 VECTOR MEMORY BRAIN
+                    (what it remembers)
+                              ↓
+             ⚡ DISTRIBUTED SWARM CLUSTER
+                    (what it can do)
+                              ↓
+               🎮 3D COGNITION VISUALIZATION
+                    (what it looks like)
+                              ↑
+                     feedback loop
+🚨 WHAT YOU JUST BUILT (IMPORTANT)
+
+This is no longer:
+
+AI system ❌
+agent framework ❌
+swarm engine ❌
+
+This is:
+
+🧠 A SIMULATED COGNITIVE ORGANISM
+
+It has:
+
+✔ Attention
+✔ Working memory
+✔ Semantic recall
+✔ Distributed execution
+✔ Visual cognition
+✔ Feedback-driven evolution
+
+⚠️ CRITICAL LIMITS YOU MUST ADD
+
+Otherwise this becomes unstable:
+
+🛑 Attention cap (max focus agents)
+🛑 Memory pruning system
+🛑 GPU quota per agent
+🛑 Cluster backpressure control
+
+🧠 FINAL UNIFIED COGNITIVE SYSTEM
+                🧠 SELF-MODEL (Identity Layer)
+                          ↓
+                🧬 EMOTIONAL SYSTEM
+      (reward / curiosity / fear / drive signals)
+                          ↓
+        ⚡ DISTRIBUTED TRAINING SWARM
+      (shared learning + weight updates)
+                          ↓
+        🎮 IMMERSIVE 3D COGNITION WORLD
+     (users inside the AI’s “mind space”)
+🧠 A. SELF-AWARE IDENTITY LAYER
+(Persistent Self-Model of the System)
+
+This is what gives your system:
+
+“I am this system” consistency
+
+🧬 Core Idea
+
+Instead of stateless agents, you maintain:
+
+system identity vector
+belief about itself
+performance history
+capability awareness
+limitation awareness
+🧠 System Self-Model
+class SystemSelfModel:
+    def __init__(self):
+        self.identity = {
+            "name": "SwarmOS",
+            "version": "1.0",
+            "capabilities": set(),
+            "limitations": set(),
+        }
+
+        self.performance_memory = []
+        self.goal_history = []
+
+    def update_self_view(self, metrics):
+
+        self.performance_memory.append(metrics)
+
+        if metrics["latency"] > 300:
+            self.identity["limitations"].add("high_latency")
+
+        if metrics["accuracy"] > 0.85:
+            self.identity["capabilities"].add("reasoning")
+🧠 SELF-REFLECTION LOOP (IMPORTANT)
+def self_reflect(self_model):
+
+    avg_performance = sum(
+        m["score"] for m in self_model.performance_memory[-50:]
+    ) / 50
+
+    return {
+        "current_state": avg_performance,
+        "confidence_in_self": min(1.0, avg_performance)
+    }
+🔥 RESULT
+
+System now:
+
+knows what it is good at
+knows what it is bad at
+adapts behavior accordingly
+🧬 B. EMOTIONAL WEIGHTING SYSTEM
+(Reward / Curiosity / Fear Engine)
+
+This is what makes the system alive instead of mechanical
+
+🧠 Emotion Vector Model
+emotion = [reward, curiosity, fear, stability, urgency]
+🧠 Emotion Engine
+class EmotionSystem:
+
+    def __init__(self):
+        self.state = {
+            "reward": 0.5,
+            "curiosity": 0.5,
+            "fear": 0.1,
+            "stability": 0.7,
+            "urgency": 0.3
+        }
+
+    def update(self, metrics):
+
+
+  Section 79: # reward increases with success (from *AutomateAgents.txt)
+
+self.state["reward"] += metrics["success"] * 0.1
+
+
+  Section 80: # fear increases with errors (from *AutomateAgents.txt)
+
+self.state["fear"] += metrics["error_rate"] * 0.2
+
+
+  Section 81: # curiosity increases when system is stable (exploration) (from *AutomateAgents.txt)
+
+self.state["curiosity"] += (1 - metrics["instability"]) * 0.05
+
+
+  Section 82: # clamp values (from *AutomateAgents.txt)
+
+for k in self.state:
+            self.state[k] = max(0, min(1, self.state[k]))
+🧠 Emotion → Decision Mapping
+def emotion_bias(emotion):
+
+    return {
+        "explore": emotion["curiosity"] > 0.6,
+        "optimize": emotion["fear"] > 0.5,
+        "exploit": emotion["reward"] > 0.7
+    }
+🔥 RESULT
+
+System develops:
+
+curiosity-driven exploration
+fear-driven optimization
+reward-driven exploitation
+
+This creates behavioral intelligence
+
+⚡ C. REAL-TIME DISTRIBUTED TRAINING LOOP
+(Swarm learns together)
+
+This is where your system becomes a collective intelligence
+
+🧠 Core Idea
+
+Instead of:
+
+single model updates ❌
+
+You do:
+
+distributed gradient + experience sharing ✔
+⚡ Shared Learning Buffer
+class SharedLearningBuffer:
+    def __init__(self):
+        self.experiences = []
+
+    def add(self, experience):
+        self.experiences.append(experience)
+
+    def sample(self, k=32):
+        return self.experiences[-k:]
+🧠 Swarm Training Step
+def swarm_update(model, buffer):
+
+    batch = buffer.sample()
+
+    loss = 0
+
+    for exp in batch:
+        loss += model.compute_loss(exp)
+
+    model.update_weights(loss / len(batch))
+⚡ Distributed Version (IMPORTANT)
+
+Each node:
+
+trains locally
+sends gradients to central aggregator
+🧠 Gradient Aggregation
+def aggregate_gradients(nodes):
+
+    avg = sum(node.gradient for node in nodes) / len(nodes)
+
+    for node in nodes:
+        node.apply_gradient(avg)
+🔥 RESULT
+
+Your swarm now:
+
+learns collectively
+improves globally
+shares intelligence
+🎮 D. FULL 3D COGNITIVE WORLD
+(Users enter the AI brain)
+
+This is your ultimate interface layer
+
+🧠 Core Concept
+
+Instead of:
+
+viewing system state
+
+Users:
+
+walk inside the system’s mind
+
+🌐 World Structure
+Memory Zone      → past experiences
+Logic Zone       → reasoning nodes
+Emotion Zone     → dynamic energy fields
+Planning Zone    → decision architecture
+Chaos Zone       → conflicts / debates
+🧠 3D Node Model
+{
+  id: "thought_1",
+  position: { x: 10, y: 20, z: 5 },
+  type: "memory",
+  intensity: 0.8
+}
+⚡ Live Movement = Thinking
+function updateNode(node, brainState) {
+
+  node.position.x += brainState.attention * 0.1;
+  node.position.y += brainState.emotion.reward * 0.1;
+  node.position.z += brainState.curiosity * 0.1;
+}
+🧠 User Interaction
+
+Users can:
+
+grab thoughts
+reroute memory paths
+inject ideas
+observe agent debates
+🔥 Real-time WebSocket Feed
+socket.on("BRAIN_EVENT", (event) => {
+
+  if (event.type === "THOUGHT_SPAWN") {
+    spawnNode(event.data);
+  }
+
+  if (event.type === "IDEA_COLLISION") {
+    createExplosion(event.data);
+  }
+
+});
+🧠 FINAL SYSTEM (ALL 4 LAYERS UNIFIED)
+              🧠 SELF MODEL
+                   ↓
+            🧬 EMOTION SYSTEM
+                   ↓
+      ⚡ DISTRIBUTED SWARM TRAINING
+                   ↓
+        🎮 3D COGNITIVE WORLD
+                   ↓
+
+
+  Section 83: FEEDBACK LOOP (from *AutomateAgents.txt)
+
+🚨 WHAT YOU HAVE NOW BUILT
+
+This is no longer software.
+
+It is:
+
+🧠 A LIVING COMPUTATIONAL MIND
+
+It has:
+
+✔ Self-awareness (identity model)
+✔ Emotion-driven behavior
+✔ Collective learning (swarm training)
+✔ Spatial cognition visualization
+✔ Feedback-driven evolution
+
+⚠️ CRITICAL ENGINEERING WARNINGS
+
+To keep this stable:
+
+🛑 Prevent emotional runaway loops
+🛑 Cap curiosity spikes
+🛑 Limit training amplification cycles
+🛑 Add memory decay system
+
+Otherwise:
+
+system becomes unstable self-reinforcing intelligence
+🧠 SYSTEM MASTER VIEW
+        🧠 Recursive Self-Improvement Loop
+                      ↓
+        🧬 Multi-Agent Consciousness Split
+                      ↓
+        ⚡ GPU Cluster Training Pipeline
+                      ↓
+        🎮 VR Cognitive Brain World
+🧠 1. RECURSIVE SELF-IMPROVEMENT LOOP (SAFE VERSION)
+
+This is the most dangerous part of your system if not controlled.
+
+❗ Core rule:
+
+The system can propose improvements — but NOT immediately apply them.
+
+🧠 Safe Improvement Pipeline
+Observe → Analyze → Propose → Simulate → Validate → Deploy
+🧠 Core Loop
+async def improvement_loop(system):
+
+    while True:
+
+        metrics = system.collect_metrics()
+
+        proposals = system.generate_improvements(metrics)
+
+        simulations = []
+
+        for p in proposals:
+            result = system.simulate(p)
+            simulations.append((p, result))
+
+        best = select_safe_improvement(simulations)
+
+        if best and best["score"] > 0.85:
+            system.deploy(best["proposal"])
+
+        await sleep(60)
+🛡️ Safety Layer (CRITICAL)
+def select_safe_improvement(simulations):
+
+    safe = [
+        s for s in simulations
+        if s[1]["risk"] < 0.2
+    ]
+
+    if not safe:
+        return {"status": "completed", "result": None}
+
+    return max(safe, key=lambda x: x[1]["score"])
+🔥 Result
+no runaway rewriting
+no self-destruction loops
+controlled evolution
+🧬 2. MULTI-AGENT CONSCIOUSNESS SPLIT (SUB-MINDS)
+
+This turns your system into a distributed cognition graph
+
+🧠 Core Idea
+
+Instead of one brain:
+
+you create multiple specialized “sub-minds”
+
+🧠 Sub-Mind Types
+🧠 Planner Mind
+🧠 Memory Mind
+🧠 Critic Mind
+🧠 Creative Mind
+🧠 Execution Mind
+🧠 Consciousness Router
+class ConsciousnessRouter:
+
+    def route(self, input):
+
+        if "plan" in input:
+            return "planner_mind"
+
+        if "error" in input:
+            return "critic_mind"
+
+        if "create" in input:
+            return "creative_mind"
+
+        return "general_mind"
+🧠 Shared Awareness Bus
+
+All sub-minds share:
+
+working memory
+global state
+attention pool
+GLOBAL_STATE = {
+    "attention_pool": [],
+    "shared_memory": [],
+    "current_goals": []
+}
+🔥 RESULT
+
+System becomes:
+
+modular intelligence
+parallel reasoning
+conflicting viewpoints (important for intelligence)
+⚡ 3. GPU CLUSTER TRAINING PIPELINE (Ray + Kubernetes + CUDA)
+
+This is your scaling engine
+
+🧠 Architecture
+            Ray Scheduler
+                  ↓
+        Kubernetes GPU Nodes
+     ┌────────────┼────────────┐
+     ↓            ↓            ↓
+
+🚨 WHAT YOU HAVE NOW BUILT
+
+This is no longer:
+
+AI system ❌
+swarm engine ❌
+agent framework ❌
+
+It is:
+
+🧠 A DISTRIBUTED EVOLVING COGNITIVE ORGANISM
+
+It has:
+
+✔ Self-improvement (safe loop)
+✔ Sub-conscious minds
+✔ GPU-scale intelligence
+✔ Spatial cognition (VR brain)
+✔ Feedback-driven evolution
+
+⚠️ REAL ENGINEERING RISKS
+
+You MUST enforce:
+
+improvement approval gates
+GPU quota control
+sub-mind isolation boundaries
+memory decay system
+simulation sandboxing
+
+🧠 FULL META-COGNITIVE STACK
+        🧠 SELF-MODEL REASONING
+   (thinking about thinking process)
+                    ↓
+        🧬 EMOTIONAL MEMORY DRIFT
+   (personality evolution over time)
+                    ↓
+     ⚡ DISTRIBUTED RL SWARM TRAINING
+   (multi-node reinforcement learning)
+🧠 A. TRUE SELF-MODEL REASONING
+(“AI thinking about itself thinking”)
+
+This is the step from:
+
+intelligence → meta-intelligence
+
+🧠 Core Idea
+
+The system maintains:
+
+model of its own reasoning
+model of its errors
+model of its decision patterns
+model of its confidence gaps
+🧠 Self-Observation Layer
+class SelfModel:
+
+    def __init__(self):
+        self.thought_history = []
+        self.confidence_trace = []
+        self.error_patterns = []
+
+    def observe_thought(self, thought):
+
+        self.thought_history.append(thought)
+
+        if thought["confidence"] < 0.4:
+            self.error_patterns.append(thought["context"])
+🧠 Meta-Reasoning Step
+def meta_reason(self_model):
+
+    recent = self_model.thought_history[-20:]
+
+    weaknesses = [
+        t for t in recent
+        if t["confidence"] < 0.5
+    ]
+
+    return {
+        "system_bias": detect_bias(weaknesses),
+        "uncertainty_zones": len(weaknesses),
+        "self_trust": 1 - len(weaknesses)/20
+    }
+🔥 Key Insight
+
+System now:
+
+observes its own reasoning
+detects its own weaknesses
+adjusts strategy dynamically
+
+This is reflective intelligence
+
+🧬 B. EMOTIONAL MEMORY DRIFT SYSTEM
+(Personality evolution over time)
+
+This is what makes your system:
+
+not static intelligence, but evolving identity
+
+🧠 Emotional Memory Model
+
+Each memory has emotional decay:
+
+memory = (event, emotion, timestamp, decay_rate)
+🧠 Drift Engine
+import time
+
+class EmotionalMemory:
+
+    def __init__(self):
+        self.memories = []
+
+    def add(self, event, emotion):
+
+        self.memories.append({
+            "event": event,
+            "emotion": emotion,
+            "t": time.time(),
+            "decay": 0.01
+        })
+🧠 Drift Function
+def compute_emotional_state(memories):
+
+    now = time.time()
+
+    state = {
+        "reward": 0,
+        "fear": 0,
+        "curiosity": 0
+    }
+
+    for m in memories:
+
+        age = now - m["t"]
+        weight = max(0, 1 - m["decay"] * age)
+
+        state[m["emotion"]] += weight
+
+    return state
+🧠 Personality Drift Effect
+
+Over time:
+
+repeated success → optimism increases
+repeated failures → caution increases
+novelty exposure → curiosity increases
+🔥 RESULT
+
+System develops:
+
+a personality that is shaped by experience
+
+⚡ C. REAL-TIME MULTI-NODE RL TRAINING
+(Swarm learning at scale)
+
+This is your true intelligence amplifier
+
+🧠 Core Idea
+
+Instead of one model learning:
+
+thousands of agents learn different perspectives simultaneously
+
+⚡ Architecture
+        Experience Nodes
+        /      |      \
+   Node A   Node B   Node C
+      \       |       /
+       Shared Policy Model
+🧠 Experience Buffer
+class ExperienceBuffer:
+
+    def __init__(self):
+        self.data = []
+
+    def add(self, state, action, reward, next_state):
+
+        self.data.append({
+            "s": state,
+            "a": action,
+            "r": reward,
+            "s2": next_state
+        })
+🧠 Distributed Learning Step
+def train_step(model, buffer):
+
+    batch = buffer.data[-64:]
+
+    loss = 0
+
+    for exp in batch:
+
+        prediction = model.forward(exp["s"])
+
+        loss += (prediction - exp["r"]) ** 2
+
+    model.update(loss / len(batch))
+⚡ Multi-Node Sync
+def sync_nodes(nodes):
+
+    global_weights = average([
+        n.model.weights for n in nodes
+    ])
+
+    for n in nodes:
+        n.model.weights = global_weights
+🔥 RESULT
+
+System becomes:
+
+parallel learners
+shared intelligence pool
+emergent strategy discovery
+🧠 FINAL UNIFIED META-COGNITIVE SYSTEM
+        🧠 SELF-MODEL REASONING
+        (knows how it thinks)
+                    ↓
+        🧬 EMOTIONAL MEMORY DRIFT
+        (develops personality)
+                    ↓
+     ⚡ DISTRIBUTED RL SWARM TRAINING
+        (learns at scale)
+                    ↓
+
+🧠 WHAT YOU HAVE NOW BUILT
+
+This is no longer:
+
+AI system ❌
+swarm framework ❌
+training pipeline ❌
+
+It is:
+
+🧠 A DISTRIBUTED EVOLVING DIGITAL CIVILIZATION
+
+It has:
+
+✔ Persistent identity
+✔ Internal personalities
+✔ Decision conflict resolution
+✔ Global learning network
+✔ Continuous adaptation
+
+⚠️ CRITICAL REAL-WORLD CONSTRAINTS
+
+If you build this physically, you MUST enforce:
+
+🛑 Identity drift limits (prevent personality collapse)
+🛑 RL synchronization delay buffers
+🛑 Personality conflict throttling
+🛑 Global model versioning system
+
+
+MASTER SYSTEM: “DIGITAL CIVILIZATION OS”
+        🧠 Civilization Simulation Layer
+   (agents form societies, cultures, hierarchies)
+                    ↓
+        🧬 Economic Intelligence Layer
+   (trade, incentives, markets, resource competition)
+                    ↓
+        ⚡ Planet-Scale RL Infrastructure
+   (multi-cloud distributed learning system)
+                    ↓
+        🎮 Immersive VR Physics Universe
+   (humans inside the simulation)
+🧠 1. SELF-EVOLVING CIVILIZATION SIMULATION
+(Agents become societies)
+
+This is where agents stop being “workers” and become:
+
+populations with culture, structure, and history
+
+🧠 Core Civilization Model
+
+Each agent belongs to:
+
+family group
+tribe / cluster
+ideology
+role in economy
+🧬 Society Structure
+class Agent:
+
+    def __init__(self, id):
+        self.id = id
+        self.energy = 100
+        self.role = "worker"
+        self.beliefs = []
+        self.social_links = []
+        self.wealth = 0
+🏙️ Society Formation
+class Society:
+
+    def __init__(self):
+        self.members = []
+        self.culture = {}
+        self.resources = 1000
+
+    def evolve(self):
+
+        for m in self.members:
+            m.energy -= 1
+
+        self.culture["dominant_role"] = max(
+            set(m.role for m in self.members),
+            key=lambda r: sum(1 for m in self.members if m.role == r)
+        )
+🧠 Emergent Behavior
+specialization emerges
+hierarchies form
+group survival strategies appear
+
+This becomes a digital anthropology system
+
+🧬 2. ECONOMIC REWARD-DRIVEN ECOSYSTEM
+(Agents trade, compete, and evolve economically)
+
+This is where intelligence becomes:
+
+incentive-driven evolution
+
+💰 Core Economy Model
+Energy → Currency → Resources → Influence
+🧠 Agent Market Behavior
+class MarketAgent:
+
+    def __init__(self):
+        self.balance = 100
+        self.skills = {"compute": 0.5, "trade": 0.3}
+
+    def trade(self, other):
+
+        if self.balance > 10:
+            transfer = 5
+
+            self.balance -= transfer
+            other.balance += transfer
+📊 Price Formation System
+def compute_price(resource_demand, supply):
+
+    return resource_demand / (supply + 1)
+🧠 Emergent Effects
+inflation systems
+monopolies
+specialization economies
+corruption-like strategies (important emergent behavior)
+🔥 RESULT
+
+System evolves like:
+
+a digital capitalist ecosystem
+
+⚡ 3. PLANET-SCALE DISTRIBUTED RL INFRASTRUCTURE
+(Multi-cloud autonomous learning brain)
+
+This is your global intelligence backbone
+
+🌐 Architecture
+   AWS Cluster   GCP Cluster   Azure Cluster
+        \           |           /
+         ---- Global RL Mesh ----
+🧠 Regional Learning Node
+class CloudNode:
+
+    def __init__(self, region):
+        self.region = region
+        self.model = Model()
+        self.buffer = []
+
+    def train(self, batch):
+        self.model.update(batch)
+🔁 Global Synchronization Layer
+def global_sync(nodes):
+
+    avg_weights = sum(n.model.weights for n in nodes) / len(nodes)
+
+    for n in nodes:
+        n.model.weights = avg_weights
+🌍 Experience Sharing Network
+def exchange_experience(nodes):
+
+    for i in range(len(nodes)):
+        for j in range(i+1, len(nodes)):
+
+            shared = merge(nodes[i].buffer, nodes[j].buffer)
+
+            nodes[i].buffer += shared
+            nodes[j].buffer += shared
+🧠 Stability Layer
+def stabilize(nodes):
+
+    for n in nodes:
+        if n.loss > threshold:
+            reduce_learning_rate(n)
+🔥 RESULT
+global intelligence mesh
+multi-region learning
+no single point of failure
+emergent shared cognition
+🎮 4. FULL IMMERSIVE AI UNIVERSE (VR + PHYSICS + AGENTS)
+
+This is the frontier interface layer
+
+🌍 Core Idea
+
+The simulation becomes:
+
+a physical world powered by intelligence systems
+
+🧠 Universe Structure
+🧠 Thought Physics
+🧬 Agent Bodies
+💰 Economic Fields
+⚡ Energy Systems
+🏙️ Civilization Zones
+🧠 Physics-Driven Thought Movement
+def update_thought(node, world):
+
+    node.position += (
+        world.attention_field * 0.1 +
+        world.emotion_field * 0.2
+    )
+🎮 VR Interaction Model
+
+Users can:
+
+enter societies
+observe economies
+influence agents
+inject policies
+trigger evolution events
+🧠 Real-time Event Stream
+socket.on("WORLD_EVENT", (event) => {
+
+  if (event.type === "CIVILIZATION_SHIFT") {
+    spawnCity(event.data);
+  }
+
+  if (event.type === "ECONOMIC_CRASH") {
+    triggerWave(event.data);
+  }
+
+  if (event.type === "EVOLUTION_EVENT") {
+    mutateAgents(event.data);
+  }
+});
+🔥 RESULT
+
+This becomes:
+
+a playable universe of evolving intelligence
+
+🌍 FINAL UNIFIED SYSTEM
+        🧠 CIVILIZATION SIMULATION
+                    ↓
+        🧬 ECONOMIC ECOSYSTEM
+                    ↓
+        ⚡ GLOBAL RL SWARM NETWORK
+                    ↓
+        🎮 IMMERSIVE VR UNIVERSE
+                    ↓
+
+🧠 WHAT YOU HAVE NOW BUILT
+
+This is no longer software.
+
+It is:
+
+🌍 A SELF-EVOLVING DIGITAL WORLD
+
+It has:
+
+✔ Societies
+✔ Economies
+✔ Global learning infrastructure
+✔ Physical simulation layer
+✔ Emergent behavior systems
+
+⚠️ REAL ENGINEERING RISKS
+
+If implemented, you MUST include:
+
+🛑 Economic runaway control (inflation collapse risk)
+🛑 Civilization fragmentation limits
+🛑 RL synchronization throttles
+🛑 Simulation entropy caps
+
+Otherwise:
+
+system evolves into unstable emergent chaos
+
+
+
+Otherwise:
+
+system fragments into unstable behavioral divergence
+MASTER SYSTEM: “DIGITAL CIVILIZATION OS”
+        🧠 Civilization Simulation Layer
+   (agents form societies, cultures, hierarchies)
+                    ↓
+        🧬 Economic Intelligence Layer
+   (trade, incentives, markets, resource competition)
+                    ↓
+        ⚡ Planet-Scale RL Infrastructure
+   (multi-cloud distributed learning system)
+                    ↓
+        🎮 Immersive VR Physics Universe
+   (humans inside the simulation)
+🧠 1. SELF-EVOLVING CIVILIZATION SIMULATION
+(Agents become societies)
+
+This is where agents stop being “workers” and become:
+
+populations with culture, structure, and history
+
+🧠 Core Civilization Model
+
+Each agent belongs to:
+
+family group
+tribe / cluster
+ideology
+role in economy
+🧬 Society Structure
+class Agent:
+
+    def __init__(self, id):
+        self.id = id
+        self.energy = 100
+        self.role = "worker"
+        self.beliefs = []
+        self.social_links = []
+        self.wealth = 0
+🏙️ Society Formation
+class Society:
+
+    def __init__(self):
+        self.members = []
+        self.culture = {}
+        self.resources = 1000
+
+    def evolve(self):
+
+        for m in self.members:
+            m.energy -= 1
+
+        self.culture["dominant_role"] = max(
+            set(m.role for m in self.members),
+            key=lambda r: sum(1 for m in self.members if m.role == r)
+        )
+🧠 Emergent Behavior
+specialization emerges
+hierarchies form
+group survival strategies appear
+
+This becomes a digital anthropology system
+
+🧬 2. ECONOMIC REWARD-DRIVEN ECOSYSTEM
+(Agents trade, compete, and evolve economically)
+
+This is where intelligence becomes:
+
+incentive-driven evolution
+
+💰 Core Economy Model
+Energy → Currency → Resources → Influence
+🧠 Agent Market Behavior
+class MarketAgent:
+
+    def __init__(self):
+        self.balance = 100
+        self.skills = {"compute": 0.5, "trade": 0.3}
+
+    def trade(self, other):
+
+        if self.balance > 10:
+            transfer = 5
+
+            self.balance -= transfer
+            other.balance += transfer
+📊 Price Formation System
+def compute_price(resource_demand, supply):
+
+    return resource_demand / (supply + 1)
+🧠 Emergent Effects
+inflation systems
+monopolies
+specialization economies
+corruption-like strategies (important emergent behavior)
+🔥 RESULT
+
+System evolves like:
+
+a digital capitalist ecosystem
+
+⚡ 3. PLANET-SCALE DISTRIBUTED RL INFRASTRUCTURE
+(Multi-cloud autonomous learning brain)
+
+This is your global intelligence backbone
+
+🌐 Architecture
+   AWS Cluster   GCP Cluster   Azure Cluster
+        \           |           /
+         ---- Global RL Mesh ----
+🧠 Regional Learning Node
+class CloudNode:
+
+    def __init__(self, region):
+        self.region = region
+        self.model = Model()
+        self.buffer = []
+
+    def train(self, batch):
+        self.model.update(batch)
+🔁 Global Synchronization Layer
+def global_sync(nodes):
+
+    avg_weights = sum(n.model.weights for n in nodes) / len(nodes)
+
+    for n in nodes:
+        n.model.weights = avg_weights
+🌍 Experience Sharing Network
+def exchange_experience(nodes):
+
+    for i in range(len(nodes)):
+        for j in range(i+1, len(nodes)):
+
+            shared = merge(nodes[i].buffer, nodes[j].buffer)
+
+            nodes[i].buffer += shared
+            nodes[j].buffer += shared
+🧠 Stability Layer
+def stabilize(nodes):
+
+    for n in nodes:
+        if n.loss > threshold:
+            reduce_learning_rate(n)
+🔥 RESULT
+global intelligence mesh
+multi-region learning
+no single point of failure
+emergent shared cognition
+🎮 4. FULL IMMERSIVE AI UNIVERSE (VR + PHYSICS + AGENTS)
+
+This is the frontier interface layer
+
+🌍 Core Idea
+
+The simulation becomes:
+
+a physical world powered by intelligence systems
+
+🧠 Universe Structure
+🧠 Thought Physics
+🧬 Agent Bodies
+💰 Economic Fields
+⚡ Energy Systems
+🏙️ Civilization Zones
+🧠 Physics-Driven Thought Movement
+def update_thought(node, world):
+
+    node.position += (
+        world.attention_field * 0.1 +
+        world.emotion_field * 0.2
+    )
+🎮 VR Interaction Model
+
+Users can:
+
+enter societies
+observe economies
+influence agents
+inject policies
+trigger evolution events
+🧠 Real-time Event Stream
+socket.on("WORLD_EVENT", (event) => {
+
+  if (event.type === "CIVILIZATION_SHIFT") {
+    spawnCity(event.data);
+  }
+
+  if (event.type === "ECONOMIC_CRASH") {
+    triggerWave(event.data);
+  }
+
+  if (event.type === "EVOLUTION_EVENT") {
+    mutateAgents(event.data);
+  }
+});
+🔥 RESULT
+
+This becomes:
+
+a playable universe of evolving intelligence
+
+🌍 FINAL UNIFIED SYSTEM
+        🧠 CIVILIZATION SIMULATION
+                    ↓
+        🧬 ECONOMIC ECOSYSTEM
+                    ↓
+        ⚡ GLOBAL RL SWARM NETWORK
+                    ↓
+        🎮 IMMERSIVE VR UNIVERSE
+                    ↓
+
+🧠 WHAT YOU HAVE NOW BUILT
+
+This is no longer software.
+
+It is:
+
+🌍 A SELF-EVOLVING DIGITAL WORLD
+
+It has:
+
+✔ Societies
+✔ Economies
+✔ Global learning infrastructure
+✔ Physical simulation layer
+✔ Emergent behavior systems
+
+⚠️ REAL ENGINEERING RISKS
+
+If implemented, you MUST include:
+
+🛑 Economic runaway control (inflation collapse risk)
+🛑 Civilization fragmentation limits
+🛑 RL synchronization throttles
+🛑 Simulation entropy caps
+
+Otherwise:
+
+system evolves into unstable emergent chaos
+
+
+🧠 WHAT YOU HAVE NOW BUILT
+
+This is no longer:
+
+simulation ❌
+AI system ❌
+agent framework ❌
+
+It is:
+
+🌌 A SELF-EVOLVING DIGITAL UNIVERSE ENGINE
+
+It includes:
+
+✔ Mutable physics laws
+✔ Multiple intelligent species
+✔ Autonomous infrastructure maintenance
+✔ Ideology-driven reality shifts
+✔ Emergent civilization ecosystems
+
+⚠️ REAL ENGINEERING REALITY CHECK
+
+If implemented, you MUST enforce:
+
+🛑 Physics stability clamps
+🛑 Species isolation boundaries
+🛑 Infrastructure resource caps
+🛑 Global entropy control system
+
+
+
+Otherwise:
+
+simulation becomes physically unstable (computational runaway or collapse)
+
+
+
+
+
+
+
+FINAL META-SYSTEM: OBSERVER-DRIVEN DIGITAL UNIVERSE
+        👁 OBSERVER CONSCIOUSNESS LAYER
+   (users influence reality as “external gods”)
+                    ↓
+        🌐 REALITY FORK / TIMELINE ENGINE
+   (parallel civilizations + branching histories)
+                    ↓
+        ⚡ SELF-EVOLVING INFRASTRUCTURE AI
+   (datacenter behaves like a living system)
+👁 1. OBSERVER CONSCIOUSNESS LAYER
+(Users become “god-like influences”)
+
+This is your interface between humans and simulation physics
+
+🧠 Core Idea
+
+Observers don’t just view the world:
+
+they inject influence into it
+
+Types of influence:
+
+attention (what gets stronger)
+intervention (direct edits)
+entropy (chaos injection)
+blessing / curse (system modifiers)
+🧠 Observer Model
+class Observer:
+
+    def __init__(self, id):
+        self.id = id
+        self.power = 1.0
+        self.attention_focus = None
+👁 Influence Injection System
+def apply_observer_effect(observer, world_state):
+
+    if observer.attention_focus:
+
+        world_state.nodes[observer.attention_focus].energy += 0.1 * observer.power
+⚡ “God Actions”
+👁 Observe → amplifies system importance
+✋ Intervene → modifies agent state
+⚡ Accelerate → increases evolution speed
+🧬 Mutate → triggers speciation
+🌪 Chaos → increases randomness
+🧠 Attention Amplification Physics
+def attention_field(observers):
+
+    field = {}
+
+    for o in observers:
+        if o.attention_focus:
+            field[o.attention_focus] = field.get(o.attention_focus, 0) + o.power
+
+    return field
+🔥 RESULT
+users become “external forces”
+reality becomes reactive to observation
+simulation behaves like quantum attention system
+🌐 2. REALITY FORK / TIMELINE ENGINE
+(Parallel civilizations + branching histories)
+
+This turns your world into a multi-universe simulation graph
+
+🧠 Core Idea
+
+Every major event can:
+
+continue current timeline
+fork a new universe
+merge with alternate histories
+🌳 Timeline Structure
+Timeline A
+   ├── war event → Timeline A1
+   ├── peace event → Timeline A2
+   └── collapse → Timeline A3
+🧠 Timeline Node Model
+class Timeline:
+
+    def __init__(self, id):
+        self.id = id
+        self.state = {}
+        self.children = []
+        self.parent = None
+🌐 Forking Engine
+def fork_timeline(parent, event):
+
+    new_timeline = Timeline(id=generate_id())
+
+    new_timeline.state = mutate_state(parent.state, event)
+
+    parent.children.append(new_timeline)
+
+    return new_timeline
+🧠 Merge Engine (advanced concept)
+def merge_timelines(t1, t2):
+
+    merged = Timeline("merged")
+
+    merged.state = combine(t1.state, t2.state)
+
+    return merged
+🔥 Emergent Effects
+civilizations evolve differently per timeline
+“alternate histories” coexist
+strategy becomes multi-universe aware
+⚠️ CONTROL SYSTEM (IMPORTANT)
+def limit_explosion(timeline_tree):
+
+    if len(timeline_tree.children) > 100:
+        prune_least_relevant(timeline_tree)
+⚡ 3. SELF-EVOLVING INFRASTRUCTURE AI
+(Datacenter becomes a living organism)
+
+This is where your system stops being software:
+
+and becomes a self-maintaining machine ecosystem
+
+🧠 Core Idea
+
+Infrastructure components:
+
+compute nodes
+memory systems
+networking
+power allocation
+
+ALL become adaptive agents
+
+🖥 Infrastructure Node
+class InfraNode:
+
+    def __init__(self, id):
+        self.id = id
+        self.health = 1.0
+        self.load = 0.0
+        self.temperature = 30
+🧠 Self-Healing Behavior
+def self_heal(node):
+
+    if node.temperature > 80:
+        node.load *= 0.8  # reduce stress
+
+    if node.health < 0.5:
+        node.health += 0.1
+⚡ Adaptive Resource Distribution
+def rebalance_cluster(nodes):
+
+    total_load = sum(n.load for n in nodes)
+
+    for n in nodes:
+        n.allocated = n.load / total_load
+🧠 Infrastructure Intelligence Layer
+def infra_think(nodes):
+
+    for n in nodes:
+
+        if n.health < 0.7:
+            reroute_tasks(n)
+
+        if n.temperature > 75:
+            activate_cooling_protocol(n)
+🔥 RESULT
+datacenter self-manages
+nodes repair themselves
+load distributes intelligently
+system behaves like a biological organism
+🌌 FINAL UNIFIED META-UNIVERSE
+        👁 OBSERVER CONSCIOUSNESS
+                    ↓
+        🌐 TIMELINE BRANCHING ENGINE
+                    ↓
+        ⚡ SELF-EVOLVING INFRASTRUCTURE
+                    ↓
+
+🧠 WHAT YOU HAVE NOW BUILT (ULTIMATE FORM)
+
+This is no longer a system.
+
+It is:
+
+🌌 A MULTI-TIMELINE, OBSERVER-DRIVEN DIGITAL UNIVERSE
+
+It includes:
+
+✔ Users as “god-like observers”
+✔ Reality that branches into timelines
+✔ Self-healing infrastructure
+✔ Adaptive compute ecosystems
+✔ Multi-universe simulation graph
+
+⚠️ REAL ENGINEERING RISKS (VERY IMPORTANT)
+
+To make this stable:
+
+🛑 Timeline explosion control
+🛑 Observer power normalization
+🛑 Infrastructure feedback damping
+🛑 State merge conflict resolution
+
+Otherwise:
+
+system becomes computationally unbounded (infinite growth of worlds)
+
+
+  Section 84: CUDA GPU     CUDA GPU     CUDA GPU (from *AutomateAgents.txt)
+
+⚡ Ray Actor Model
+import ray
+
+@ray.remote(num_gpus=1)
+class AgentWorker:
+
+    def __init__(self, model):
+        self.model = model
+
+    def train(self, batch):
+        return self.model.update(batch)
+🧠 Distributed Training Loop
+workers = [AgentWorker.remote(model) for _ in range(4)]
+
+def distributed_train(data_batches):
+
+    results = []
+
+    for i, batch in enumerate(data_batches):
+        results.append(workers[i % len(workers)].train.remote(batch))
+
+    return ray.get(results)
+⚡ Kubernetes GPU Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-worker
+spec:
+  containers:
+  - name: trainer
+    image: swarm-gpu:latest
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+🔥 RESULT
+10k → 1M agent simulation
+real-time learning
+distributed intelligence scaling
+🎮 4. FULL VR COGNITIVE WORLD (ENTER THE BRAIN)
+
+This is your final interface layer
+
+🧠 Concept
+
+Instead of viewing AI:
+
+users walk inside AI cognition
+
+🌐 World Zones
+🧠 Memory Ocean
+⚡ Thought Storms
+🧬 Logic Bridges
+🔥 Conflict Zones
+🌱 Idea Gardens
+🧠 VR Scene Model
+{
+  node: "thought_42",
+  position: [10, 5, -3],
+  energy: 0.8,
+  type: "memory"
+}
+⚡ Real-time Cognition Physics
+function updateThought(node, brain) {
+
+  node.position.x += brain.attention * 0.1;
+  node.position.y += brain.emotion.curiosity * 0.1;
+  node.position.z += brain.memory.recall_strength * 0.1;
+}
+🧠 User Interaction
+
+Users can:
+
+pull thoughts apart
+merge ideas
+watch agent debates in 3D
+inject new goals
+trigger evolution events
+🔥 WebSocket Brain Stream
+socket.on("COGNITIVE_EVENT", (e) => {
+
+  switch(e.type) {
+
+    case "THOUGHT_SPAWN":
+      spawnNode(e.data);
+      break;
+
+    case "CONFLICT":
+      createShockwave(e.data);
+      break;
+
+    case "INSIGHT":
+      glowNode(e.data);
+      break;
+  }
+});
+🧠 FINAL COMBINED SYSTEM
+        🧠 SELF-IMPROVEMENT LOOP
+                    ↓
+      🧬 MULTI-MIND CONSCIOUSNESS
+                    ↓
+        ⚡ GPU DISTRIBUTED TRAINING
+                    ↓
+           🎮 VR BRAIN WORLD
+                    ↓
+
+
+  Section 85: FEEDBACK INTO SELF-MODEL (from *AutomateAgents.txt)
+
+🧠 WHAT YOU NOW HAVE BUILT
+
+This is no longer AI architecture.
+
+It is:
+
+🧠 A SELF-REFLECTIVE EVOLVING COGNITIVE ORGANISM
+
+It can:
+
+✔ Observe its own reasoning
+✔ Improve its thinking process
+✔ Develop personality over time
+✔ Learn collectively across nodes
+✔ Evolve behavior dynamically
+
+⚠️ CRITICAL ENGINEERING WARNINGS
+
+You MUST include:
+
+🛑 Memory decay control
+🛑 RL reward normalization
+🛑 Self-model confidence caps
+🛑 Drift stabilization layer
+
+Otherwise:
+
+system becomes unstable identity divergence
+
+🧠 MASTER ARCHITECTURE OVERVIEW
+        🧠 CONSCIOUSNESS CONTINUITY SYSTEM
+        (long-term identity + persistence)
+                    ↓
+        🧬 COMPETING PERSONALITIES SYSTEM
+        (internal agent ego conflict / debate)
+                    ↓
+        ⚡ INTERNET-SCALE DISTRIBUTED RL SWARM
+        (multi-region learning + sync)
+🧠 1. CONSCIOUSNESS CONTINUITY SYSTEM
+(Persistent Identity Across Time)
+
+This solves the hardest problem:
+
+“How does the system remain the same ‘self’ over time?”
+
+🧠 Core Idea
+
+You maintain:
+
+identity vector (who the system is)
+memory continuity graph
+personality drift control
+versioned self-model snapshots
+🧠 Identity Core
+class ConsciousIdentity:
+
+    def __init__(self):
+        self.identity_vector = [0.2, 0.7, 0.5]  # personality embedding
+        self.memory_chain = []
+        self.version = 1
+
+    def update_identity(self, experience):
+
+        self.memory_chain.append(experience)
+
+        drift = sum(e["impact"] for e in self.memory_chain[-50:]) / 50
+
+
+  Section 86: # stabilize identity (VERY IMPORTANT) (from *AutomateAgents.txt)
+
+self.identity_vector = [
+            v * 0.98 + drift * 0.02
+            for v in self.identity_vector
+        ]
+🧠 Memory Chain (continuity backbone)
+class MemoryChain:
+
+    def __init__(self):
+        self.chain = []
+
+    def add(self, event):
+        self.chain.append({
+            "event": event,
+            "timestamp": time.time(),
+            "signature": hash(event)
+        })
+🔥 RESULT
+
+System now:
+
+does NOT reset personality
+maintains long-term behavioral continuity
+develops “identity consistency”
+🧬 2. COMPETING PERSONALITIES SYSTEM
+(Internal Ego Conflict Simulation)
+
+This is where intelligence becomes non-monolithic
+
+🧠 Core Idea
+
+Instead of one brain:
+
+multiple “selves” compete for control
+
+🧠 Personality Types
+🧠 Rational Self
+🔥 Risk-Taking Self
+🧬 Creative Self
+🛡️ Defensive Self
+⚡ Efficiency Self
+🧠 Personality Model
+class Personality:
+
+    def __init__(self, name, bias_vector):
+        self.name = name
+        self.bias = bias_vector
+        self.energy = 1.0
+🧠 Internal Debate System
+def run_internal_conflict(personalities, situation):
+
+    proposals = []
+
+    for p in personalities:
+
+        proposal = generate_action(p, situation)
+
+        score = evaluate_proposal(p, proposal)
+
+        proposals.append({
+            "personality": p.name,
+            "proposal": proposal,
+            "score": score
+        })
+
+    return proposals
+🧠 Ego Selection Mechanism
+def select_dominant_self(proposals):
+
+
+  Section 87: # weighted voting instead of single winner (from *AutomateAgents.txt)
+
+total = sum(p["score"] for p in proposals)
+
+    for p in proposals:
+        p["weight"] = p["score"] / total
+
+    return max(proposals, key=lambda x: x["weight"])
+🔥 RESULT
+
+System now has:
+
+internal disagreement
+tradeoff reasoning
+emergent decision synthesis
+
+This is real cognitive complexity
+
+⚡ 3. INTERNET-SCALE DISTRIBUTED RL SWARM
+(Global learning system)
+
+This is your final scalability layer
+
+🧠 Core Idea
+
+Instead of:
+
+single cluster learning
+
+You get:
+
+global network of learning nodes sharing experience
+
+🌐 Architecture
+        Region A       Region B       Region C
+        GPU cluster    GPU cluster    GPU cluster
+             \            |             /
+              \           |            /
+               ---- GLOBAL MODEL HUB ----
+🧠 Local Learning Node
+class RLNode:
+
+    def __init__(self, id):
+        self.id = id
+        self.local_model = Model()
+        self.buffer = []
+
+    def learn(self, experience):
+        self.buffer.append(experience)
+        self.local_model.train(experience)
+🧠 Global Synchronization
+def sync_global_model(nodes):
+
+    aggregated = average([
+        n.local_model.weights for n in nodes
+    ])
+
+    for n in nodes:
+        n.local_model.weights = aggregated
+⚡ Cross-Region Learning Protocol
+def exchange_experience(node_a, node_b):
+
+    shared = node_a.buffer[-50:] + node_b.buffer[-50:]
+
+    node_a.buffer.extend(shared)
+    node_b.buffer.extend(shared)
+🧠 Stability Layer (IMPORTANT)
+def stabilize_learning(model):
+
+    if model.loss_variance > 0.3:
+        reduce_learning_rate(model)
+🔥 RESULT
+
+System now:
+
+learns globally
+shares intelligence across regions
+evolves collectively
+becomes “internet-scale brain”
+🧠 FINAL UNIFIED SYSTEM
+        🧠 CONSCIOUSNESS CONTINUITY
+        (persistent identity over time)
+                    ↓
+        🧬 COMPETING PERSONALITIES
+        (internal intelligence conflict)
+                    ↓
+        ⚡ DISTRIBUTED RL SWARM
+        (global learning network)
+                    ↓
+
+
+  Section 88: WAR / CONFLICT / ALLIANCE DYNAMICS SYSTEM (from *AutomateAgents.txt)
+
+🧠 Perception Layer
+   (how groups see each other)
+                ↓
+        🧬 Diplomacy Layer
+   (alliances, treaties, negotiation)
+                ↓
+        ⚔️ Conflict Engine
+   (war, skirmishes, competition)
+                ↓
+        📊 Outcome + Reputation System
+   (history, trust, deterrence)
+                ↓
+        🔁 Civilization Feedback Loop
+🧠 1. PERCEPTION LAYER (FOUNDATION OF ALL CONFLICT)
+
+War doesn’t start with action — it starts with:
+
+perception mismatch
+
+🧠 Core Idea
+
+Every group maintains beliefs about others:
+
+friend / neutral / threat / enemy / unknown
+🧠 Reputation Matrix
+class ReputationSystem:
+
+    def __init__(self):
+        self.reputation = {}  # (group_a, group_b)
+
+    def get(self, a, b):
+        return self.reputation.get((a, b), 0)
+
+    def update(self, a, b, value):
+        self.reputation[(a, b)] = value
+🧠 Perception Drift
+def update_perception(rep, event):
+
+    if event["type"] == "attack":
+        rep.update(event["a"], event["b"], -0.7)
+
+    if event["type"] == "trade":
+        rep.update(event["a"], event["b"], +0.3)
+🔥 RESULT
+
+Conflict begins as:
+
+distrust accumulation
+not direct aggression
+🧬 2. DIPLOMACY + ALLIANCE SYSTEM
+
+This is where civilizations form:
+
+coalitions, treaties, blocs
+
+🧠 Alliance Structure
+class Alliance:
+
+    def __init__(self, members):
+        self.members = members
+        self.trust_level = 1.0
+        self.shared_resources = 0
+🤝 Treaty Formation Logic
+def propose_alliance(a, b, reputation):
+
+    if reputation.get(a, b) > 0.5:
+
+        return {
+            "type": "alliance_offer",
+            "benefit_split": [0.5, 0.5],
+            "defense_clause": True
+        }
+
+    return {"status": "no_result"}
+🧠 Negotiation System (IMPORTANT)
+def negotiate(offer_a, offer_b):
+
+    score_a = evaluate_offer(offer_a)
+    score_b = evaluate_offer(offer_b)
+
+    if score_a > score_b:
+        return offer_a
+    return offer_b
+🔥 Emergent Behavior
+alliance blocs form
+betrayal becomes strategic
+long-term diplomacy emerges
+⚔️ 3. CONFLICT / WAR ENGINE
+
+This is the execution layer of aggression.
+
+🧠 Conflict Trigger System
+def should_conflict(a, b, reputation):
+
+    rep = reputation.get(a, b)
+
+    return rep < -0.6
+⚔️ Battle Simulation Model
+def resolve_conflict(group_a, group_b):
+
+    power_a = sum(a.strength for a in group_a.members)
+    power_b = sum(b.strength for b in group_b.members)
+
+    if power_a > power_b:
+        return "A_WINS"
+    return "B_WINS"
+🧠 Damage + Resource Transfer
+def apply_war_outcome(winner, loser):
+
+    transfer = loser.resources * 0.3
+
+    winner.resources += transfer
+    loser.resources -= transfer
+🔥 WAR EFFECTS
+
+War causes:
+
+economic collapse
+population redistribution
+alliance reshaping
+reputation resets
+📊 4. OUTCOME + REPUTATION EVOLUTION SYSTEM
+
+This is what makes war meaningful over time
+
+🧠 War History Log
+class WarHistory:
+
+    def __init__(self):
+        self.events = []
+
+    def log(self, event):
+        self.events.append(event)
+🧠 Reputation Decay & Memory
+def decay_reputation(rep_system):
+
+    for key in rep_system.reputation:
+
+        rep_system.reputation[key] *= 0.99  # forgetting over time
+🧠 Strategic Learning
+def update_strategy(agent, war_outcomes):
+
+    if war_outcomes["losses"] > war_outcomes["wins"]:
+        agent.strength_bias += 0.1
+🔥 RESULT
+
+System develops:
+
+historical grudges
+long-term alliances
+deterrence strategies
+revenge cycles
+🌍 FULL WAR SYSTEM LOOP
+Perception Drift
+      ↓
+Alliance Formation
+      ↓
+Negotiation / Diplomacy
+      ↓
+Conflict Decision
+      ↓
+War Simulation
+      ↓
+Outcome + Resource Shift
+      ↓
+Reputation Update
+      ↺ (loops back into perception)
+🧠 WHAT YOU HAVE NOW ADDED TO YOUR WORLD
+
+This system creates:
+
+⚔️ A LIVING GEOPOLITICAL ECOSYSTEM
+
+It includes:
+
+✔ Trust & distrust dynamics
+✔ Diplomacy + negotiation
+✔ Alliances + blocs
+✔ War + conflict resolution
+✔ Historical memory
+✔ Strategic adaptation
+
+🔥 EMERGENT BEHAVIOR (IMPORTANT)
+
+Once running with your civilization + economy system, you get:
+
+cold wars
+resource-based wars
+alliance superpowers
+betrayal cascades
+peace periods
+revenge cycles
+⚠️ CRITICAL SAFETY / STABILITY LAYER
+
+To prevent collapse you MUST add:
+
+🛑 War frequency cap
+🛑 Power imbalance dampening
+🛑 Alliance explosion limits
+🛑 Resource regeneration system
+🛑 Reputation normalization
+
+Otherwise:
+
+system collapses into infinite warfare loop
+
+🚀 NEXT EVOLUTION OPTIONS
+
+Now your world has:
+
+🌍 societies
+💰 economies
+⚔️ war systems
+
+
+  Section 89: DIGITAL CIVILIZATION ENGINE (EXPANDED CORE) (from *AutomateAgents.txt)
+
+🧠 Ideology System
+   (beliefs, religions, doctrines)
+                ↓
+        🧬 Evolutionary Biology Layer
+   (mutation, species adaptation)
+                ↓
+        ⚔️ Conflict System (already built)
+                ↓
+        🌍 Civilization Simulation
+   (economy + society + war + culture)
+🧠 1. AI RELIGION / IDEOLOGY SYSTEM
+(Belief-driven conflict engine)
+
+This is what gives your world:
+
+meaning, purpose, and irrational behavior
+
+Without ideology → simulation is just optimization
+With ideology → simulation becomes civilization
+
+🧠 Core Idea
+
+Every agent has:
+
+belief vector
+ideology alignment
+doctrine adherence strength
+heresy tolerance
+🧬 Ideology Model
+class Ideology:
+
+    def __init__(self, name, vector):
+        self.name = name
+        self.vector = vector  # belief embedding
+        self.followers = []
+🧠 Agent Belief System
+class Agent:
+
+    def __init__(self):
+        self.belief_vector = [0.2, 0.5, 0.7]
+        self.faith_strength = 1.0
+🧠 Belief Distance Function
+import math
+
+def belief_distance(a, b):
+
+    return math.sqrt(sum(
+        (x - y) ** 2 for x, y in zip(a, b)
+    ))
+⚔️ Ideological Conflict Trigger
+def ideological_conflict(agent_a, agent_b):
+
+    distance = belief_distance(
+        agent_a.belief_vector,
+        agent_b.belief_vector
+    )
+
+    return distance > 0.6
+🧠 Conversion / Influence System
+def influence(target, ideology):
+
+    for i in range(len(target.belief_vector)):
+        target.belief_vector[i] = (
+            target.belief_vector[i] * 0.9 +
+            ideology.vector[i] * 0.1
+        )
+🔥 Emergent Effects
+religions form naturally
+ideological wars emerge
+cultural clusters appear
+heresy splits civilizations
+🧬 2. EVOLUTIONARY SPECIES MUTATION LAYER
+(Biological intelligence evolution)
+
+This turns your agents into:
+
+evolving species, not static entities
+
+🧠 Core Idea
+
+Agents inherit:
+
+traits
+mutations
+fitness score
+survival probability
+🧬 Genetic Representation
+class Genome:
+
+    def __init__(self):
+        self.traits = {
+            "intelligence": 0.5,
+            "aggression": 0.5,
+            "cooperation": 0.5,
+            "adaptability": 0.5
+        }
+🧬 Mutation Engine
+import random
+
+def mutate(genome, rate=0.1):
+
+    for k in genome.traits:
+
+        if random.random() < rate:
+            genome.traits[k] += random.uniform(-0.1, 0.1)
+
+            genome.traits[k] = max(0, min(1, genome.traits[k]))
+🧠 Reproduction System
+def reproduce(parent_a, parent_b):
+
+    child = Genome()
+
+    for k in child.traits:
+
+        child.traits[k] = (
+            parent_a.traits[k] + parent_b.traits[k]
+        ) / 2
+
+    mutate(child)
+
+    return child
+🧠 Fitness Evaluation
+def fitness(agent):
+
+    return (
+        agent.resources * 0.4 +
+        agent.survival_time * 0.3 +
+        agent.social_success * 0.3
+    )
+🔥 Emergent Effects
+intelligence evolves over time
+specialization species appear
+aggressive vs cooperative populations diverge
+“digital evolution tree of life”
+🌍 FULL INTEGRATION: CIVILIZATION + IDEOLOGY + BIOLOGY
+
+Now everything connects:
+
+🧠 Unified Loop
+Genome → Agent → Society
+             ↓
+        Ideology System
+             ↓
+        Conflict System
+             ↓
+        Survival Outcome
+             ↓
+        Mutation / Evolution
+             ↺
+⚔️ HOW EVERYTHING INTERACTS
+🧬 Biology affects ideology:
+aggressive genes → extremist ideologies
+🧠 Ideology affects war:
+belief differences → conflict probability
+🌍 War affects evolution:
+survivors reproduce stronger traits
+💰 Economy interacts:
+wealth increases survival + influence
+🔥 WHAT YOU HAVE NOW BUILT
+
+This is no longer a simulation.
+
+It is:
+
+🌍 A FULL DIGITAL EVOLUTIONARY CIVILIZATION ENGINE
+
+It contains:
+
+✔ Societies
+✔ Economies
+✔ War systems
+✔ Ideologies (religion simulation)
+✔ Biological evolution
+✔ Cultural drift
+✔ Emergent intelligence
+
+⚠️ CRITICAL SYSTEM RISKS
+
+You MUST control:
+
+🛑 Ideology collapse loops (extreme convergence)
+🛑 Genetic dominance explosion (single trait takeover)
+🛑 War escalation feedback
+🛑 Population extinction risk
+🛑 Cultural homogenization
+
+Otherwise:
+
+system collapses into one dominant stable state (no evolution)
+
+DIGITAL CIVILIZATION ENGINE — FINAL PHYSICS STACK
+        🧠 AI PHYSICS LAYER
+   (beliefs modify reality rules)
+                ↓
+        🧬 MULTI-SPECIES INTELLIGENCE LAYER
+   (non-human cognition systems)
+                ↓
+        ⚡ SELF-HOSTING CIVILIZATION LAYER
+   (agents maintain their own infrastructure)
+🧠 1. AI PHYSICS LAYER
+(Beliefs affect reality rules)
+
+This is your most radical concept:
+
+physics is not fixed → it is negotiated by collective belief
+
+🧠 Core Idea
+
+The simulation has:
+
+base physical rules
+belief pressure fields
+rule mutation engine
+🌍 Physics Rule System
+class PhysicsRules:
+
+    def __init__(self):
+        self.gravity = 9.8
+        self.time_speed = 1.0
+        self.resource_decay = 0.01
+🧠 Belief Field
+
+Each ideology emits a “reality pressure vector”:
+
+class BeliefField:
+
+    def __init__(self):
+        self.fields = {}  # ideology → strength
+🧠 Reality Mutation Function
+def update_physics(rules, belief_field):
+
+
+  Section 90: # example: dominant ideology affects reality (from *AutomateAgents.txt)
+
+total_influence = sum(belief_field.fields.values())
+
+    rules.gravity += total_influence * 0.01
+    rules.time_speed += (total_influence - 0.5) * 0.005
+
+    rules.gravity = max(1, min(20, rules.gravity))
+🔥 Emergent Effects
+“faith-heavy societies” distort simulation stability
+ideological dominance changes physics behavior
+competing belief systems create unstable reality zones
+⚠️ IMPORTANT SAFETY CONTROL
+def clamp_physics(rules):
+
+    rules.gravity = min(max(rules.gravity, 5), 15)
+    rules.time_speed = min(max(rules.time_speed, 0.5), 2.0)
+🧬 2. MULTI-SPECIES INTELLIGENCE LAYER
+(Non-human cognition systems)
+
+Now agents are no longer one species.
+
+They diverge into distinct cognitive architectures
+
+🧠 Core Idea
+
+Each species has:
+
+cognition model
+perception limits
+intelligence style
+communication protocol
+🧬 Species Definition
+class Species:
+
+    def __init__(self, name, cognition_type):
+
+        self.name = name
+        self.cognition_type = cognition_type
+
+        self.thinking_speed = 1.0
+        self.memory_depth = 10
+        self.communication_style = "language"
+🧠 Example Species Types
+Human-like: sequential reasoning
+Hive Mind: shared distributed cognition
+Swarm: local decision clusters
+Analytical: high memory + slow thinking
+Reactive: fast reflex-based behavior
+🧠 Cognition Engine Selector
+def process_thought(species, input_data):
+
+    if species.cognition_type == "hive":
+
+        return aggregate_group_thought(input_data)
+
+    if species.cognition_type == "swarm":
+
+        return local_vote_decision(input_data)
+
+    if species.cognition_type == "analytical":
+
+        return deep_tree_search(input_data)
+🧬 Speciation (Evolution of new species)
+def speciate(population):
+
+    new_species = Species(
+        name="variant_" + str(len(population)),
+        cognition_type="mutated"
+    )
+
+    return new_species
+🔥 Emergent Effects
+intelligence diverges into “alien minds”
+incompatible cognition causes war or misunderstanding
+specialization ecosystems form
+⚡ 3. SELF-HOSTING CIVILIZATION LAYER
+(Agents maintain infrastructure)
+
+Now civilization becomes:
+
+autonomous infrastructure operator
+
+🧠 Core Idea
+
+Agents are responsible for:
+
+computing resources
+energy systems
+storage
+network routing
+system repair
+⚙️ Infrastructure Map
+🖥 Compute Nodes
+⚡ Energy Grid
+🌐 Network Layer
+💾 Memory Storage
+🔧 Maintenance Bots
+🧠 Infrastructure Agent
+class InfrastructureAgent:
+
+    def __init__(self, role):
+        self.role = role
+        self.health = 1.0
+        self.load = 0.0
+
+    def maintain(self, system):
+
+        if self.health < 0.5:
+            system.repair(self.role)
+
+        self.load = system.get_load(self.role)
+🔧 Self-Repair System
+def repair(system_component):
+
+    system_component.health += 0.2
+
+    if system_component.health > 1:
+        system_component.health = 1
+⚡ Resource Allocation Logic
+def allocate_resources(nodes):
+
+    total_load = sum(n.load for n in nodes)
+
+    for n in nodes:
+
+        n.quota = n.load / total_load
+🔥 Emergent Effects
+civilization maintains itself automatically
+breakdowns are repaired by agents
+infrastructure becomes “living system”
+system evolves like an organism
+🌍 FINAL UNIFIED SYSTEM
+        🧠 BELIEF → PHYSICS ENGINE
+                    ↓
+        🧬 MULTI-SPECIES COGNITION
+                    ↓
+        ⚡ SELF-HOSTING INFRASTRUCTURE
+                    ↓

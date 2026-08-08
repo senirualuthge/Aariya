@@ -1,0 +1,187 @@
+
+# Gaps in: AI_Girl_Improvements.md
+
+
+# Gaps in: AI_Girl_Security.md
+
+await websocket.close(code=4001, reason="Missing auth token")
+Call this in server startup. Exits immediately if required secrets are missing.
+missing = [key for key in REQUIRED_SECRETS if not os.environ.get(key)]
+if missing:
+print(f"[FATAL] Missing required environment variables: {missing}")
+"""Centralized secret retrieval — raises if missing."""
+# ❌ NEVER do this:
+# ❌ NEVER:
+[ ] JWT_SECRET in .env (64+ hex chars) — never hardcoded
+[ ] WebSocket rejects connections without valid token
+[ ] /auth/login endpoint issuing tokens
+[ ] Tokens expire in 24 hours
+[ ] .env in .gitignore
+[ ] .env never committed (check: git log --all -- .env)
+[ ] validate_secrets() called at startup
+[ ] All secrets from environment — zero hardcoded values
+[ ] Text capped at 2000 chars
+[ ] Audio base64 capped at 5MB
+[ ] Dangerous patterns filtered from text
+[ ] Valence/arousal clamped to [-1, 1]
+[ ] Injection patterns detected and blocked
+[ ] User text wrapped in delimiters before LLM
+[ ] System prompt never includes raw user input
+[ ] Max 3 WebSocket connections per IP
+[ ] Max 20 turns/minute per user
+[ ] Max 10 audio turns/minute per user
+[ ] All SQL uses ? / %s placeholders — no f-strings
+[ ] Redis requires password and bound to 127.0.0.1
+[ ] Sensitive DBs not world-readable (chmod 600 *.db)
+[ ] Production uses wss:// not ws://
+[ ] TLS cert installed and auto-renewed
+[ ] HTTP redirects to HTTPS
+[ ] pip-audit passing clean
+[ ] npm audit passing clean
+[ ] Versions pinned in requirements.txt
+[ ] SafeLogger used throughout
+[ ] No API keys or audio blobs in log files
+[ ] Log files not publicly accessible
+
+# Gaps in: analysis_avatar_voice.md
+
+
+# Gaps in: analysis_recorrection_system.md
+
+- **⚠️ IMPACT: MEDIUM (Implement Simplified Version):** The "Invariant Checks" and basic logging from `RecoorectionSystem.txt`.
+- **The Missing Piece:** The **Social Intent System** addresses a logic gap. Currently, your AI likely "reacts" to input. A Social Intent system gives it "goals" (e.g., "I want to comfort the user" vs "I want to end this conversation"), making it feel much more alive.
+
+# Gaps in: ANALYTICS_DASHBOARD.md
+
+
+# Gaps in: APP_POLICIES.md
+
+
+# Gaps in: bug_report_memory.md
+
+
+# Gaps in: bug_report_rag.md
+
+
+# Gaps in: bug_report_rl.md
+
+- Line 35: Syntax error: missing colon after function definition. Severi[6D[K
+- Line 79: Syntax error: missing colon after function definition. Severi[6D[K
+
+# Gaps in: bug_report_security.md
+
+
+# Gaps in: bug_report_swarm.md
+
+
+# Gaps in: bug_report_voice.md
+
+
+# Gaps in: bug_report.md
+
+
+# Gaps in: CAMERA_DEBUG.md
+
+console.error("❌ Camera error:", err.name, err.message);
+
+# Gaps in: Dockerfile.ui
+
+
+# Gaps in: Dockerfile.server
+
+
+# Gaps in: FOCUS_MODES.md
+
+
+# Gaps in: frontend_gaps.md
+
+
+# Gaps in: fix_log.md
+
+
+# Gaps in: IMPLEMENTATION_GAP_ANALYSIS.md
+
+# Implementation Gap Analysis
+| **Confidence Drift Visualization** | ⚠️ Partially Implemented | UI exists in `RecorrectionTab`, but lacks the specific version-over-version drift charts. |
+| **SDK Modularization (`@rsdk/core`)** | ⚠️ Partially Implemented | Code exists in `server/systems/rsdk.py` but is not yet a standalone package. |
+| **CI/CD Security Gates** | ❌ Not Implemented | No automated scripts to block deployments based on anomaly thresholds. |
+| **Promotion/Rollback Automation** | ❌ Not Implemented | Promotion logic is defined but doesn't yet trigger automated model swapping. |
+| **Prompt Injection Protection** | ⚠️ Partially Implemented | Client-side `injectionGuard.js` exists; needs more robust server-side LLM validation. |
+| **SaaS Multi-tenancy Isolation** | ⚠️ Partially Implemented | Database supports `user_id`, but full row-level security (RLS) is not fully enforced in all layers. |
+| **Audio Injection Protection** | ⚠️ Partially Implemented | ASR text is passed through filters, but specific adversarial audio detection is missing. |
+| **Infrastructure Hardening (HTTPS/WSS)** | ❌ Not Implemented | Code level supports it, but Nginx/Cloudflare infra config is not yet standard. |
+| **DDoS Protection** | ❌ Not Implemented | No external mitigation layer currently configured. |
+| **Intrusion Detection System (IDS)** | ❌ Not Implemented | No automated logging analysis for pattern-based threat hunting. |
+| **Causality Violation Detector** | ⚠️ Partially Implemented | Basic logic exists for speech-after-withdrawal, but needs more complex causal rules. |
+| **Performance Sentinel (Latency Trend)** | ⚠️ Partially Implemented | Backend tracks latency trends, but lacks the frame-by-frame JS profiling. |
+| **Automatic Replay + Bisect** | ❌ Not Implemented | No mechanism to re-run specific state transitions for debugging. |
+| **Auto-Patch Suggestion Tooling** | ❌ Not Implemented | System detects issues but cannot yet suggest or apply specific code fixes. |
+| **Frame Budget Watchdog** | ❌ Not Implemented | `RuntimeLoop.js` does not yet alert on frames exceeding 25ms locally. |
+
+# Gaps in: IMPLEMENTATION_GAP_REPORT.md
+
+# Implementation Gap Report — All Blueprint Files vs Source Code
+| CVSS scoring | ⚠️ Partial — `cve_auto_patcher.py` exists but CVSS parsing may be minimal | Need deeper check |
+| **API integration** | ⚠️ Basic — SearchAPI is a mock stub (returns hardcoded results) | See note below |
+**Gap**: The Network Search `SearchAPI` returns **hardcoded mock results** rather than connecting to a real search API. Compare with the Research pipeline's `SearchAPI` which has real DuckDuckGo fallback.
+**Gap**: `face_pipeline.py` has a known issue — it imports `face_recognition` conditionally and falls back to `mediapipe`. The error message notes missing dependencies.
+**Gap**: The `*AdvancedPrediction.txt` blueprint specifically describes a **stock/crypto prediction engine integrated with the swarm architecture**. This is now considered **DEPRECATED (Out of scope)**. Financial market predictions will not be implemented.
+| Most wishlist features | ⚠️ Mixed | Many implemented (voice, RAG, swarm, RL), some may remain aspirational — would need detailed per-item check |
+| OpenAI SDK errors | ⚠️ Not verifiable at code level | Would need runtime testing |
+## 📋 GAP SUMMARY
+### ❌ Not Implemented (Major Gaps)
+| Blueprint | Missing Feature | Notes |
+### ⚠️ Partially Implemented (Minor Gaps)
+| Blueprint | Missing Feature | Notes |
+### ✅ Fully Implemented (No Gaps)
+
+# Gaps in: IMPLEMENTATION_STATUS.md
+
+## 🟡 In-Progress / Partially Implemented
+* The groundwork for multi-modal vision analysis (recognizing objects/environment) is partially implemented but not yet fully bound to the Swarm's reasoning agent.
+## 🔴 Not Yet Implemented (The Backlog)
+
+# Gaps in: INSTALLATION.md
+
+
+# Gaps in: Missing - Partially implemented.md
+
+# AI Girl: FIXV4 Gap Analysis & Feature Backlog (Pre-April 14th)
+This report provides a detailed overview of features that were identified as partially implemented or backlogged during the transition to the **FIXV4 Swarm Architecture**.
+**Status**: 🟡 Partially Implemented
+### Implementation Gaps
+**Status**: 🟡 Partially Implemented
+### Implementation Gaps
+- **3D Personality Space**: A planned Three.js/Canvas-based visualization representing personality traits as a 3D coordinate system (to visualize "Social Drift") remains in the backlog.
+### Implementation Gaps
+- **Social Awareness Triggers**: Missing the decision-engine to trigger proactive check-ins based on sentiment history, user absence duration, or specific "world events."
+**Status**: 🔴 Backlog
+### Implementation Gaps
+**Status**: 🔴 Backlog
+### Implementation Gaps
+**Status**: 🟡 Partially Implemented
+### Implementation Gaps
+
+# Gaps in: Need to complemte.md
+
+## 🟡 In-Progress / Partially Implemented
+* The groundwork for multi-modal vision analysis (recognizing objects/environment) is partially implemented but not yet fully bound to the Swarm's reasoning agent.
+## 🔴 Not Yet Implemented (The Backlog)
+| News Monitoring | 🔶 Partially | `/pulse-news` | Exists as standalone service but needs tighter BrainV2 integration. |
+| Multi-hop Search | ❌ Missing | — | Agent-style multi-hop reasoning is pending. |
+| RL Role Optimization | 🔶 Partially | `server/systems/rl/` | Framework exists; long-term reward grounding (PPO) needs data. |
+| Latency Masking | 🔶 Partially | `src/store.js` | State transitions are smoothed, but "Thinking" animations need polish. |
+
+# Gaps in: MIGRATION_GUIDE.md
+
+├─ Face Detection (12-25ms) ❌ BLOCKS
+useStore.setState({ blendshapes: newValues }); // ❌
+
+# Gaps in: THERMAL_CONTROLLER.md
+
+// ❌ Bad: Force high settings when thermally throttled
+- [ ] Platform-specific thermal APIs (Battery, CPU temp)
+- [ ] Machine learning to predict thermal events
+- [ ] Per-component thermal budgets
+- [ ] Thermal history for analytics
+- [ ] User-configurable aggressiveness
