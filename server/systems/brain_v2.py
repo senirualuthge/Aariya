@@ -410,7 +410,7 @@ class BrainV2:
             "and expressiveness — never the truth of what you say. If a Layer-2 impulse "
             "would contradict a Layer-1 fact, Layer 1 wins. This separation is non-negotiable.",
             "",
-            "═══ LAYER 1 — REASONING GROUND TRUTH (what she actually knows) ═══",
+            "LAYER 1 — REASONING & GROUND TRUTH",
             f"STRATEGY: {strategy}",
             "",
             f"IDENTITY (core values — never violate):\n{identity_core}",
@@ -423,7 +423,7 @@ class BrainV2:
             sections.append(f"\nRECENT CONVERSATION:\n{history}")
         sections.extend([
             "",
-            "═══ LAYER 2 — PRESENTATION & EXPRESSION (tone only, never truth) ═══",
+            "LAYER 2 — PRESENTATION & EXPRESSION (tone only, never truth)",
             f"RELATIONSHIP STATE:\n{self._describe_inner_state()}",
             "",
             f"COMMUNICATION STYLE (evolves slowly):\n{identity_style}",
