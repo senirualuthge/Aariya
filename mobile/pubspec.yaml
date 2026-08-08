@@ -11,6 +11,9 @@ dependencies:
 
   # WebSocket connection to Python AI Brain
   web_socket_channel: ^3.0.0
+  # Generic two-way channel abstraction (WebSocketChannel implements it) —
+  # also lets widget tests attach fake sockets via StreamChannelController.
+  stream_channel: ^2.1.0
 
   # State management
   provider: ^6.0.5
