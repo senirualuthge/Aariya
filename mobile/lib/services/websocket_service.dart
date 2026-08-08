@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:stream_channel/stream_channel.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'ack_outbox.dart';
 import 'server_config.dart';
@@ -30,9 +31,12 @@ class WebSocketService {
   WebSocketService._();
 
   // ── Channels ────────────────────────────────────────────────────────────────
-  WebSocketChannel? _chatChannel;
-  WebSocketChannel? _controlChannel;
-  WebSocketChannel? _analyticsChannel;
+  // Typed as the generic StreamChannel because a live WebSocketChannel is just
+  // one implementation — tests attach a StreamChannelController fake socket to
+  // drive the real frame path end-to-end without a network connection.
+  StreamChannel<dynamic>? _chatChannel;
+  StreamChannel<dynamic>? _controlChannel;
+  StreamChannel<dynamic>? _analyticsChannel;
 
   // ── Reliable-message outbox (Protocol v2 ACK/retry) ───────────────────────
   final AckOutbox _outbox = AckOutbox();
@@ -152,6 +156,21 @@ class WebSocketService {
     });
   }
 
+  /// Test seam: attach a fake socket as the CONTROL channel.
+  ///
+  /// Frames pushed on the fake socket travel the real path — channel
+  /// subscription, `_decodeFrame` JSON parsing, then out to `messagesStream`
+  /// — so widget tests can verify the server's actual frame shape (e.g. a
+  /// `command_denied` payload with `reason` + `detail`) end-to-end without a
+  /// network connection.
+  @visibleForTesting
+  void attachControlChannel(StreamChannel<dynamic> channel) {
+    _controlChannel = channel;
+    // No reconnect wiring: the test owns the socket's lifetime, and a close
+    // must not start a reconnect timer inside a widget test.
+    _subscribeChannel(channel, _messagesController);
+  }
+
   void _openControl(String url) {
     final channel = WebSocketChannel.connect(Uri.parse(url));
     _controlChannel = channel;
@@ -169,7 +188,7 @@ class WebSocketService {
   }
 
   void _subscribeChannel(
-    WebSocketChannel channel,
+    StreamChannel<dynamic> channel,
     StreamController<Map<String, dynamic>> controller, {
     VoidCallback? onError,
     VoidCallback? onDone,

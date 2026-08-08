@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:aariya_mobile/services/websocket_service.dart';
 import 'package:aariya_mobile/state/chat_controller.dart';
 import 'package:aariya_mobile/ui/screens/chat_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stream_channel/stream_channel.dart';
 
 /// Minimal harness that reproduces ChatScreen's `command_denied` listener
 /// wiring and shows the snackbar through the SAME production static the real
@@ -108,6 +111,62 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.text('"force mode" is laptop-dashboard only — denied by Aariya'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('server command_denied payload (reason + detail) over a fake socket',
+      (tester) async {
+    // NOTE: controller.dispose() skipped — FlutterTts.stop() hits a platform
+    // channel under flutter test (see earlier tests).
+    final controller = ChatController();
+
+    // A real StreamChannelController pair: `local` is the fake SERVER side,
+    // `foreign` is what we hand the WebSocketService as its control channel.
+    final socket = StreamChannelController<dynamic>();
+    WebSocketService.instance.attachControlChannel(socket.foreign);
+    addTearDown(() => socket.local.sink.close());
+
+    // Capture the decoded frame as ChatController sees it, so we can assert
+    // the FULL server payload shape (reason + detail) survived the socket →
+    // _decodeFrame → messagesStream path — not just the action-derived state.
+    Map<String, dynamic>? decodedFrame;
+    final sub = WebSocketService.instance.messagesStream.listen((frame) {
+      if (frame['type'] == 'command_denied') decodedFrame = frame;
+    });
+    addTearDown(sub.cancel);
+
+    await tester.pumpWidget(MaterialApp(
+      home: _CommandDeniedHarness(controller: controller),
+    ));
+
+    // Exactly what server/systems/security/mobile_authority.py's
+    // denied_frame() sends for a refused wipe_memory — raw JSON over the
+    // socket, the same bytes a live /ws/mobile/control connection carries.
+    socket.local.sink.add(jsonEncode({
+      'type': 'command_denied',
+      'action': 'wipe_memory',
+      'reason': 'authority_required',
+      'detail': 'This command requires the laptop dashboard (authority layer).',
+    }));
+
+    await tester.pumpAndSettle();
+
+    // The full server payload survives the socket → decode → ChatController
+    // path: every field of denied_frame() arrives intact...
+    expect(decodedFrame, isNotNull);
+    final frame = decodedFrame!;
+    expect(frame['type'], 'command_denied');
+    expect(frame['action'], 'wipe_memory');
+    expect(frame['reason'], 'authority_required');
+    expect(
+      frame['detail'],
+      'This command requires the laptop dashboard (authority layer).',
+    );
+    // ...and the prettified action surfaces in the snackbar.
+    expect(controller.commandDenied.value, 'wipe memory');
+    expect(
+      find.text('"wipe memory" is laptop-dashboard only — denied by Aariya'),
       findsOneWidget,
     );
   });
