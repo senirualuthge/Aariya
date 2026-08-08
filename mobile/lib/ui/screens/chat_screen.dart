@@ -12,6 +12,26 @@ import 'server_settings_sheet.dart';
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
+  /// Shows the `command_denied` snackbar for a refused authority-only command.
+  ///
+  /// Extracted as a static so the widget test drives the exact production UI
+  /// (same text / colors / behavior) without pumping the full screen — which
+  /// would also initialise speech recognition and hit platform channels.
+  static void showCommandDenied(BuildContext context, String denied) {
+    final messenger = ScaffoldMessenger.of(context);
+    // Replace rather than queue: if a previous denial is still on screen, the
+    // operator should see the newest refusal immediately (rapid repeated
+    // attempts would otherwise stack snackbars for 4s each).
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('"$denied" is laptop-dashboard only — denied by Aariya'),
+        backgroundColor: Colors.redAccent.shade700,
+        behavior: SnackBarBehavior.floating,
+      )
+    );
+  }
+
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
@@ -37,13 +57,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _showCommandDenied() {
     final denied = _chatController.commandDenied.value;
     if (denied == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('"$denied" is laptop-dashboard only — denied by Aariya'),
-        backgroundColor: Colors.redAccent.shade700,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    ChatScreen.showCommandDenied(context, denied);
   }
 
   void _initSpeech() async {
