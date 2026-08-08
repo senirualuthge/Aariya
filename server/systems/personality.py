@@ -103,6 +103,126 @@ class SocialAxis:
         return self
 
 
+# ── Personality presets (authority-layer mode overrides) ────────────────────────
+# The laptop dashboard can SET the persona via set_personality. Each preset id
+# matches the dashboard's PERSONALITY_MODES (src/components/AnalyticsDashboard.jsx)
+# and maps to a full 12-trait vector. Balanced = the system defaults.
+PERSONALITY_PRESETS: Dict[str, Dict[str, float]] = {
+    "balanced": {
+        "cognitive.curiosity":     0.70,
+        "cognitive.depth":         0.65,
+        "cognitive.logic_bias":    0.45,
+        "cognitive.creativity":    0.60,
+        "emotional.warmth":        0.65,
+        "emotional.expressiveness": 0.60,
+        "emotional.empathy":       0.72,
+        "emotional.resilience":    0.60,
+        "social.assertiveness":    0.50,
+        "social.playfulness":      0.55,
+        "social.openness":         0.60,
+        "social.formality":        0.30,
+    },
+    "warm": {
+        "cognitive.curiosity":     0.65,
+        "cognitive.depth":         0.62,
+        "cognitive.logic_bias":    0.38,
+        "cognitive.creativity":    0.62,
+        "emotional.warmth":        0.90,
+        "emotional.expressiveness": 0.82,
+        "emotional.empathy":       0.88,
+        "emotional.resilience":    0.68,
+        "social.assertiveness":    0.48,
+        "social.playfulness":      0.72,
+        "social.openness":         0.78,
+        "social.formality":        0.20,
+    },
+    "playful": {
+        "cognitive.curiosity":     0.74,
+        "cognitive.depth":         0.52,
+        "cognitive.logic_bias":    0.34,
+        "cognitive.creativity":    0.86,
+        "emotional.warmth":        0.78,
+        "emotional.expressiveness": 0.88,
+        "emotional.empathy":       0.70,
+        "emotional.resilience":    0.62,
+        "social.assertiveness":    0.56,
+        "social.playfulness":      0.94,
+        "social.openness":         0.72,
+        "social.formality":        0.12,
+    },
+    "intellectual": {
+        "cognitive.curiosity":     0.94,
+        "cognitive.depth":         0.90,
+        "cognitive.logic_bias":    0.88,
+        "cognitive.creativity":    0.72,
+        "emotional.warmth":        0.50,
+        "emotional.expressiveness": 0.48,
+        "emotional.empathy":       0.58,
+        "emotional.resilience":    0.58,
+        "social.assertiveness":    0.60,
+        "social.playfulness":      0.28,
+        "social.openness":         0.56,
+        "social.formality":        0.62,
+    },
+    "empathetic": {
+        "cognitive.curiosity":     0.66,
+        "cognitive.depth":         0.68,
+        "cognitive.logic_bias":    0.36,
+        "cognitive.creativity":    0.56,
+        "emotional.warmth":        0.86,
+        "emotional.expressiveness": 0.72,
+        "emotional.empathy":       0.96,
+        "emotional.resilience":    0.64,
+        "social.assertiveness":    0.34,
+        "social.playfulness":      0.56,
+        "social.openness":         0.84,
+        "social.formality":        0.18,
+    },
+    "assertive": {
+        "cognitive.curiosity":     0.68,
+        "cognitive.depth":         0.70,
+        "cognitive.logic_bias":    0.76,
+        "cognitive.creativity":    0.56,
+        "emotional.warmth":        0.52,
+        "emotional.expressiveness": 0.64,
+        "emotional.empathy":       0.48,
+        "emotional.resilience":    0.84,
+        "social.assertiveness":    0.94,
+        "social.playfulness":      0.36,
+        "social.openness":         0.60,
+        "social.formality":        0.54,
+    },
+    "cold": {
+        "cognitive.curiosity":     0.52,
+        "cognitive.depth":         0.66,
+        "cognitive.logic_bias":    0.72,
+        "cognitive.creativity":    0.42,
+        "emotional.warmth":        0.22,
+        "emotional.expressiveness": 0.26,
+        "emotional.empathy":       0.30,
+        "emotional.resilience":    0.62,
+        "social.assertiveness":    0.58,
+        "social.playfulness":      0.16,
+        "social.openness":         0.26,
+        "social.formality":        0.84,
+    },
+    "creative": {
+        "cognitive.curiosity":     0.90,
+        "cognitive.depth":         0.60,
+        "cognitive.logic_bias":    0.34,
+        "cognitive.creativity":    0.96,
+        "emotional.warmth":        0.70,
+        "emotional.expressiveness": 0.84,
+        "emotional.empathy":       0.68,
+        "emotional.resilience":    0.58,
+        "social.assertiveness":    0.48,
+        "social.playfulness":      0.82,
+        "social.openness":         0.76,
+        "social.formality":        0.14,
+    },
+}
+
+
 # ── Overlay definitions ────────────────────────────────────────────────────────
 
 OVERLAYS: Dict[str, Dict] = {
@@ -227,6 +347,28 @@ class PersonalitySystem:
             conn.close()
         except Exception as e:
             logger.warning(f"[Personality] Save failed: {e}")
+
+    # ── Authority presets ───────────────────────────────────────────────────────
+
+    def apply_preset(self, preset_id: str) -> bool:
+        """
+        Override the entire baseline persona with a named preset vector and
+        persist it. Returns False for unknown preset ids.
+
+        This is the AUTHORITY-layer write path (laptop dashboard only) — it
+        replaces the slow organic drift with an explicit persona definition.
+        """
+        preset = PERSONALITY_PRESETS.get(preset_id)
+        if preset is None:
+            return False
+        self._apply_dict(preset)
+        self.save()
+        return True
+
+    @staticmethod
+    def PRESETS_KEYS() -> list:
+        """Known preset ids (for error messages / UI metadata)."""
+        return sorted(PERSONALITY_PRESETS.keys())
 
     # ── Evolution ──────────────────────────────────────────────────────────────
 

@@ -15,7 +15,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import useStore from '../store';
 import { eventBus } from '../core/EventBus';
 import { BRAIN_RAG_EVENT } from '../systems/brainClient';
-import { subscribeMetrics } from '../systems/metricsClient';
+import { subscribeMetrics, sendMetricsCommand } from '../systems/metricsClient';
 import { isBuildSummaryFresh, BUILD_WARN_MAX_AGE_HOURS } from '../utils/buildFreshness.js';
 import CveScannerPanel from './security/CveScannerPanel';
 import { useSignalsStore } from '../admin/store/useSignalsStore';
@@ -345,6 +345,9 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   const [autoAdapt, setAutoAdapt] = useState(true);
   const [uptime, setUptime] = useState(0);
   const [memoryWiped, setMemoryWiped] = useState(false);
+  // Authority-layer feedback: the last authority.ack frame from the server
+  // (executed on /ws/brain_metrics), so the UI confirms server-side success.
+  const [authStatus, setAuthStatus] = useState(null);
   const mountTimeRef = useRef(0);
 
   // Security stream
@@ -424,6 +427,18 @@ export default function AnalyticsDashboard({ isPopup = false }) {
     return () => BC.removeEventListener('message', handler);
   }, [setPersonalityPreset]);
 
+  // ── Authority-layer ack listener ─────────────────────────────────────────
+  // The server replies to every command on the shared /ws/brain_metrics socket
+  // with an authority.ack frame; surface it in the Control tab so the laptop
+  // operator sees the wipe / persona change actually executed server-side.
+  useEffect(() => {
+    const unsub = subscribeMetrics(
+      (m) => m.type === 'authority.ack',
+      (m) => setAuthStatus({ ...m, at: Date.now() })
+    );
+    return unsub;
+  }, []);
+
   // uptime — mountTimeRef is set on first paint via useEffect to avoid Date.now() at render time
   useEffect(() => {
     mountTimeRef.current = Date.now();
@@ -435,6 +450,9 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   const handleModeChange = (mode) => {
     setPersonalityPreset(mode);
     publishOverride('STORE_OVERRIDE', { mode });
+    // AUTHORITY LAYER: also rewrite the persona server-side so every surface
+    // (phones, Unity, other dashboards) inherits the mode, not just this tab.
+    sendMetricsCommand('set_personality', { preset: mode });
   };
 
   const handleAutoAdapt = () => {
@@ -444,10 +462,16 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   };
 
   const handleMemoryWipe = () => {
+    if (!window.confirm('Wipe Aariya\u2019s working memory on the server? This is executed by the authority layer and cannot be undone.')) return;
     setMemoryWiped(true);
     clearSignals();
     publishOverride('ACTION', { action: 'memory_wipe' });
+    sendMetricsCommand('wipe_memory');
     setTimeout(() => setMemoryWiped(false), 3000);
+  };
+
+  const handleForceMode = (mode) => {
+    sendMetricsCommand('force_mode', { mode });
   };
 
   const handleSessionReset = () => {
@@ -607,6 +631,8 @@ export default function AnalyticsDashboard({ isPopup = false }) {
               meetingMode={meetingMode}
               onToggleMeeting={toggleMeeting}
               onSetMeetingWindow={setMeetingWindow}
+              authStatus={authStatus}
+              onForceMode={handleForceMode}
             />
           )}
 
@@ -1175,7 +1201,7 @@ function StateRow({ label, active, color }) {
 }
 
 // ── Control Tab ───────────────────────────────────────────────────────────────
-function ControlTab({ personalityPreset, autoAdapt, onModeChange, onAutoAdapt, onMemoryWipe, onSessionReset, memoryWiped, isOnline, meetingMode, onToggleMeeting, onSetMeetingWindow }) {
+function ControlTab({ personalityPreset, autoAdapt, onModeChange, onAutoAdapt, onMemoryWipe, onSessionReset, memoryWiped, isOnline, meetingMode, onToggleMeeting, onSetMeetingWindow, authStatus, onForceMode }) {
   const [windowDraft, setWindowDraft] = React.useState(meetingMode?.base_window || 30);
 
   return (
@@ -1240,6 +1266,68 @@ function ControlTab({ personalityPreset, autoAdapt, onModeChange, onAutoAdapt, o
           </div>
         </Card>
       </div>
+
+      {/* ── Authority Layer (laptop-only, server-executed) ── */}
+      <Card accentColor="#a78bfa">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.5, textTransform: 'uppercase' }}>🔐 Authority Layer</div>
+          <span style={{
+            fontSize: 9, fontWeight: 800, letterSpacing: 1, padding: '2px 8px', borderRadius: 4,
+            background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.4)',
+            color: '#a78bfa', whiteSpace: 'nowrap',
+          }}>LAPTOP ONLY</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 14 }}>
+          Destructive / identity-mutating commands are <b style={{ color: '#f87171' }}>denied</b> on the mobile
+          channel — they are <b style={{ color: '#a78bfa' }}>executed here</b>, on the laptop's /ws/brain_metrics
+          socket, and broadcast to every surface. Changes persist server-side.
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 10 }}>Force Behaviour Mode</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {['focus', 'relax', 'guard', 'chat'].map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => onForceMode(mode)}
+                    style={{
+                      padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+                      fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8,
+                      background: 'rgba(167,139,250,0.08)',
+                      border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseOver={e => { e.currentTarget.style.background = 'rgba(167,139,250,0.2)'; e.currentTarget.style.borderColor = '#a78bfa'; }}
+                    onMouseOut={e => { e.currentTarget.style.background = 'rgba(167,139,250,0.08)'; e.currentTarget.style.borderColor = 'rgba(167,139,250,0.3)'; }}
+                  >{mode}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 10 }}>Last Server Ack</div>
+            <div style={{
+              padding: '12px 14px', borderRadius: 8, fontSize: 12,
+              background: authStatus
+                ? (authStatus.ok ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)')
+                : 'rgba(255,255,255,0.02)',
+              border: `1px solid ${authStatus ? (authStatus.ok ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)') : 'rgba(255,255,255,0.06)'}`,
+              fontFamily: "'JetBrains Mono', monospace",
+              color: authStatus ? (authStatus.ok ? '#34d399' : '#f87171') : 'rgba(255,255,255,0.3)',
+            }}>
+              {!authStatus
+                ? '— no command sent yet —'
+                : `${authStatus.ok ? '✓' : '✗'} ${authStatus.action}${authStatus.preset ? ` → ${authStatus.preset}` : ''}${authStatus.mode ? ` → ${authStatus.mode}` : ''}${authStatus.error ? ` (${authStatus.error})` : ''}${authStatus.at ? ` @ ${new Date(authStatus.at).toLocaleTimeString()}` : ''}`}
+            </div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 8 }}>
+              Wipe Memory & Personality Mode buttons above execute on this same channel.
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* ── Meeting Mode Panel ── */}
       <Card accentColor={meetingMode?.active ? '#ffd93d' : undefined}>
