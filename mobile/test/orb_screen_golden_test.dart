@@ -24,7 +24,13 @@ void main() {
 
   // Fixed pump schedule — the orb runs a repeating 60 s animation controller,
   // so pumpAndSettle() would never settle. Fixed durations make the captured
-  // frame deterministic.
+  // frame deterministic (controller value = elapsed/60000 under the test
+  // binding's virtual clock, independent of runner load).
+  //
+  // NOTE: the level smoother converges exponentially, so the goldens lock a
+  // CONVERGING (mid-attack) state, not a steady state. That is deterministic,
+  // but a change to the smoothing constants will shift the goldens — bump them
+  // deliberately with --update-goldens.
   Future<void> pumpOrb(WidgetTester tester, VoiceReactiveOrb orb) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -41,11 +47,14 @@ void main() {
         ),
       ),
     );
-    // Let the level smoother converge to steady state, then a final frame.
+    // Let the level smoother converge toward target, then a final frame.
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 1200));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 100));
+    // A paint-time exception could still rasterize a plausible-looking frame;
+    // surface it explicitly so it can't masquerade as a changed golden.
+    expect(tester.takeException(), isNull);
   }
 
   testWidgets('cosmic theme at idle (orb_screen_idle_cosmic)', (tester) async {
