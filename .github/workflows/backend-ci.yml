@@ -14,6 +14,10 @@
 #
 # A separate frontend-audit job gates production npm dependencies (npm audit
 # --omit=dev) on every run; the schedule catches drift there too.
+#
+# flutter-sdk-stale-check (schedule-only) watches the mobile job's pinned SDK
+# so the exact-version pin can't silently go stale; workflow_dispatch lets you
+# run it on demand.
 
 name: Backend CI
 
@@ -22,6 +26,7 @@ on:
   pull_request:
   schedule:
     - cron: "0 4 * * *" # nightly 04:00 UTC
+  workflow_dispatch:    # manual re-run of the stale check (and everything else)
 
 # PRs fire both push and pull_request — cancel superseded runs instead of
 # queueing duplicates on a shared repo.
@@ -134,3 +139,77 @@ jobs:
       - name: Test suite (flutter test)
         run: flutter test
 
+  # Flutter SDK staleness check — runs ONLY on the nightly schedule (never on
+  # push/PR, where it would wrongly fail unrelated work). Parses the pinned
+  # flutter-version from THIS file (single source of truth — the same value the
+  # mobile job installs), then compares it against the latest stable release
+  # published by Flutter (resolved via current_release.stable hash → version).
+  # When the pin is stale the job FAILS the nightly run (loud, persistent red)
+  # and opens a GitHub issue (idempotent — one open issue per stale pin) so the
+  # staleness can't be silently ignored. Fix = bump flutter-version in the
+  # mobile job and regenerate goldens if rendering changed.
+  flutter-sdk-stale-check:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write        # open/close the stale-pin issue
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare pinned SDK vs latest stable
+        id: sdk
+        run: |
+          PINNED=$(grep -oE 'flutter-version: "[0-9]+\.[0-9]+\.[0-9]+"' .github/workflows/backend-ci.yml | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          if [ -z "$PINNED" ]; then
+            echo "::error::Could not parse flutter-version from .github/workflows/backend-ci.yml"
+            exit 1
+          fi
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+          LATEST=$(curl -s https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          stable_hash = d["current_release"]["stable"]
+          for r in d["releases"]:
+              if r.get("hash") == stable_hash:
+                  print(r["version"]); break
+          else:
+              sys.exit(1)
+          ')
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "pinned=$PINNED latest=$LATEST"
+          python3 - "$PINNED" "$LATEST" <<'PYEOF'
+          import re, sys
+          def key(v):
+              return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+          pinned, latest = sys.argv[1], sys.argv[2]
+          if key(latest) > key(pinned):
+              print(f"::error::Flutter SDK pin is STALE: {pinned} → latest stable {latest}. Bump flutter-version in the mobile job, run flutter test --update-goldens, and push.")
+              sys.exit(1)
+          print(f"Flutter SDK pin is current ({pinned} == latest stable {latest})")
+          PYEOF
+
+      - name: Open (or update) stale-pin issue
+        if: steps.sdk.outputs.latest != '' && failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OPEN=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title Flutter SDK pin is stale' --json number --jq 'length' 2>/dev/null || echo 0)
+          if [ "$OPEN" -eq 0 ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Flutter SDK pin is stale: ${{ steps.sdk.outputs.pinned }} → ${{ steps.sdk.outputs.latest }}" \
+              --body "The mobile CI job pins Flutter ${{ steps.sdk.outputs.pinned }}, but the latest stable is ${{ steps.sdk.outputs.latest }}. Bump flutter-version in the mobile job. If orb rendering changed, run flutter test --update-goldens and commit. This issue closes automatically once the pin is current."
+          else
+            echo "Stale-pin issue already open — skipping creation."
+          fi
+
+      - name: Close stale-pin issue (pin is current again)
+        if: steps.sdk.outputs.latest != '' && success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NUM=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title Flutter SDK pin is stale' --json number --jq '.[0].number' 2>/dev/null || echo '')
+          if [ -n "$NUM" ]; then
+            gh issue close "$NUM" --repo "$GITHUB_REPOSITORY" --comment "Flutter SDK pin is current again — closing automatically."
+          fi
