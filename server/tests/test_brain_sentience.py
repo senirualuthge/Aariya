@@ -94,6 +94,101 @@ def test_layer_separation_guard_keeps_reasoning_and_presentation_apart(isolated_
     assert "must never change a fact" in prompt
 
 
+class ScriptedLLM:
+    """Returns pre-scripted replies in order and records every call — lets
+    tests verify the grounding guard's corrective regeneration fires."""
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    async def stream_to_callback(self, messages, on_token=None, temperature=0.7, max_tokens=150):
+        self.calls.append(messages)
+        return self.replies.pop(0) if self.replies else ""
+
+
+def test_grounding_guard_corrects_contradicting_reply(isolated_db, monkeypatch):
+    """A reply that negates a remembered fact must trigger ONE corrective
+    regeneration; the corrected text becomes the final reply."""
+    import server.systems.brain_v2 as brain_v2
+    from server.systems.memory.conversation_log import ConversationLog
+
+    ConversationLog("test_user").memorize(
+        "I love stargazing at night", valence=0.8, significance=0.9
+    )
+
+    llm = ScriptedLLM([
+        "You never loved stargazing at all.",       # draft: contradicts memory
+        "I remember how much you love stargazing — tell me about your last night out.",
+    ])
+    monkeypatch.setattr(brain_v2, "get_llm", lambda: llm)
+
+    async def run():
+        brain = BrainV2("test_user")
+        return await brain.process(MultimodalInput(text="do you remember stargazing?"))
+
+    out = asyncio.run(run())
+
+    # Two LLM calls: original + one bounded corrective regeneration.
+    assert len(llm.calls) == 2
+    assert "GROUNDING CORRECTION" in llm.calls[1][0]["content"]
+    assert "You never loved stargazing at all." in llm.calls[1][0]["content"]
+    # The corrected reply is what gets persisted/sent — clean, no residual issues.
+    assert out.text == "I remember how much you love stargazing — tell me about your last night out."
+    assert "grounding" not in out.meta
+
+
+def test_grounding_issues_surfaced_when_correction_fails(isolated_db, monkeypatch):
+    """If the model keeps contradicting after correction, the residual issues
+    must ride out in meta so the guard's action is observable."""
+    import server.systems.brain_v2 as brain_v2
+    from server.systems.memory.conversation_log import ConversationLog
+
+    ConversationLog("test_user").memorize(
+        "I love stargazing at night", valence=0.8, significance=0.9
+    )
+
+    llm = ScriptedLLM([
+        "You never loved stargazing.",
+        "You still never loved stargazing.",
+    ])
+    monkeypatch.setattr(brain_v2, "get_llm", lambda: llm)
+
+    async def run():
+        brain = BrainV2("test_user")
+        return await brain.process(MultimodalInput(text="do you remember stargazing?"))
+
+    out = asyncio.run(run())
+
+    assert len(llm.calls) == 2
+    grounding = out.meta.get("grounding")
+    assert grounding, "residual contradictions must surface in meta"
+    assert grounding[0]["fact"] == "I love stargazing at night"
+    assert "stargazing" in grounding[0]["reply"]
+
+
+def test_grounding_guard_silent_on_clean_reply(isolated_db, monkeypatch):
+    """A grounded reply must NOT trigger regeneration or meta noise."""
+    import server.systems.brain_v2 as brain_v2
+    from server.systems.memory.conversation_log import ConversationLog
+
+    ConversationLog("test_user").memorize(
+        "I love stargazing at night", valence=0.8, significance=0.9
+    )
+
+    llm = ScriptedLLM(["Stargazing sounds wonderful — tell me what you love most about it."])
+    monkeypatch.setattr(brain_v2, "get_llm", lambda: llm)
+
+    async def run():
+        brain = BrainV2("test_user")
+        return await brain.process(MultimodalInput(text="do you remember stargazing?"))
+
+    out = asyncio.run(run())
+
+    assert len(llm.calls) == 1, "no regeneration on a clean reply"
+    assert "grounding" not in out.meta
+
+
 def test_streaming_callback_invoked(isolated_db, stub_llm):
     """Tokens should be pushed through on_token during generation."""
     async def run():
