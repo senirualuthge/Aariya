@@ -1,0 +1,4364 @@
+First, I would not replace your current planner.
+Instead, I would introduce a Goal Reasoning Layer that works alongside your existing Cognitive Pipeline.
+
+Current architecture:
+
+Input
+    ↓
+Memory
+    ↓
+Reasoning
+    ↓
+Planner
+    ↓
+Execution
+Proposed architecture:
+
+Input
+    ↓
+Memory
+    ↓
+Reasoning
+    ↓
+Goal Reasoning Layer
+    ├───────────────┐
+    │               │
+Forward Planner     Backward Planner
+    │               │
+    └────Fusion─────┘
+          ↓
+Execution
+This preserves all of your current capabilities while adding a new planning mode.
+
+Cons of Backward Induction
+These are the major ones I'd design against from the beginning.
+
+Problem	Why it happens	Countermeasure
+Goal Fixation	AI becomes obsessed with one end state	Dynamic Goal Revalidation
+Brittle Plans	One failed dependency breaks everything	Incremental Replanning
+Huge Search Space	Millions of possible paths	Heuristic pruning
+Unknown World State	Missing information	Information-gathering actions
+Infinite recursion	Goal depends on another goal forever	Planning depth limits + cycle detection
+Overplanning	AI spends longer planning than acting	Time budget + anytime planning
+Wrong assumptions	Initial assumptions become invalid	Continuous world-state verification
+Memory explosion	Stores every possible plan	Plan cache with expiration
+Conflicts with autonomy	Background goals compete	Goal arbitration layer
+What I would add to Aariya
+Instead of only a Backward Induction Engine, I'd build these modules together.
+
+Goal Manager
+        │
+        ▼
+Backward Induction Engine
+        │
+        ▼
+Dependency Graph Builder
+        │
+        ▼
+Goal Validator
+        │
+        ▼
+World State Validator
+        │
+        ▼
+Plan Optimizer
+        │
+        ▼
+Forward Planner
+        │
+        ▼
+Execution
+This keeps ALL your existing strengths
+Your current architecture already has:
+
+Memory
+
+Prediction Engine
+
+Autonomy Loop
+
+Browser Controller
+
+Desktop Operator
+
+Safety Governor
+
+Those become inputs to backward induction instead of being replaced.
+
+Example:
+
+Current Prediction Engine
+
+Predict user needs
+New role
+
+Predict
+↓
+
+Probability each backward plan succeeds
+↓
+
+Choose best one
+New subsystems I'd introduce
+Goal Manager
+Responsibilities
+
+accepts goals
+
+prioritizes goals
+
+merges duplicate goals
+
+cancels obsolete goals
+
+Goal Validator
+Before planning
+
+Checks
+
+Is goal legal?
+
+Is goal possible?
+
+Does goal conflict?
+
+Is goal already complete?
+World State Validator
+Uses only live data.
+
+Checks
+
+browser
+
+filesystem
+
+sensors
+
+APIs
+
+memory
+
+No assumptions.
+
+Dependency Graph Builder
+Example
+
+Goal
+
+Book flight
+Produces
+
+Book Flight
+     ▲
+Payment
+     ▲
+Choose Flight
+     ▲
+Search Flights
+     ▲
+Travel Dates
+Plan Optimizer
+Chooses
+
+cheapest
+
+fastest
+
+safest
+
+highest confidence
+
+Dynamic Goal Revalidation
+Runs every few seconds.
+
+If
+
+Goal changed
+
+↓
+
+Replan
+instead of continuing with obsolete assumptions.
+
+This should NEVER use hardcoded data
+You specifically requested:
+
+real data no mock, synthetic or hardcoded
+
+I agree.
+
+Everything should come from real sources.
+
+For example
+
+Memory
+
+↓
+
+SQLite / PostgreSQL
+
+Browser
+
+↓
+
+Playwright
+
+Desktop
+
+↓
+
+OS APIs
+
+Calendar
+
+↓
+
+Google Calendar API
+
+Email
+
+↓
+
+IMAP
+
+Filesystem
+
+↓
+
+Local files
+
+Sensors
+
+↓
+
+Camera
+
+↓
+
+Microphone
+
+↓
+
+Vision
+
+↓
+
+LLM
+
+↓
+
+Real model inference
+
+No fake JSON.
+No dummy goals.
+No simulated users.
+
+                    Cognitive Kernel
+                           │
+                           ▼
+                 Goal Reasoning Layer
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+        ▼                  ▼                  ▼
+ Forward Planner    Backward Planner    Prediction Engine
+        │                  │                  │
+        └──────────────┬───┴──────────────────┘
+                       ▼
+              Adaptive Planning Engine
+                       │
+             Continuous Replanning
+                       │
+             Goal Arbitration Layer
+                       │
+                 Execution Manager
+                       │
+                Safety Governor
+                       │
+         Browser │ Desktop │ Files │ Email │ Shell
+
+This keeps your current architecture intact while making planning much more capable.
+
+One thing I would add
+
+I would not call it just "Backward Induction."
+
+Aariya should have an Adaptive Planning Engine (APE).
+
+Inside APE are several planning strategies:
+
+Forward Planning
+Backward Induction
+HTN (Hierarchical Task Networks)
+A* Graph Search
+Constraint Solver
+Prediction-based Planning
+Reactive Planning
+Recovery Planning
+
+Instead of deciding up front which planner to use, APE selects the most appropriate one for the current situation.
+
+Example:
+
+Goal: Find my lost PDF
+
+Uses:
+
+Forward search
+Memory search
+File index
+Goal: Build an application
+
+Uses:
+
+Backward induction
+HTN decomposition
+Goal: Book a flight
+
+Uses:
+
+Constraint solver
+Backward induction
+Prediction engine
+Goal: Continue yesterday's unfinished task
+
+Uses:
+
+Persistent planner
+Recovery planner
+Unexpected website changed
+
+Uses:
+
+Reactive planner
+
+This is much closer to how modern autonomous agents operate.
+
+---
+
+# Your permission model
+
+I like the approval rules you've chosen. I'd formalize them into a **Policy Engine** rather than scattering checks throughout the code.
+
+| Action | Permission |
+|---------|------------|
+| Read files | ✅ Automatic |
+| Modify files | ⚠ Preview + approval |
+| Browse websites | ✅ Automatic |
+| Download files | ⚠ Notify |
+| Install software | ❌ Always ask |
+| Execute shell commands | ⚠ Show command + ask |
+| Send emails | ⚠ Show draft + ask |
+| Delete files | ❌ Always ask |
+| System settings | ❌ Always ask |
+| Database writes | ✅ Automatic (internal memory only) |
+
+That keeps Aariya useful while avoiding surprising actions.
+
+---
+
+# One concern I want to solve before implementation
+
+Your architecture already contains:
+
+- Cognitive Pipeline
+- Prediction Engine
+- Autonomy Loop
+- Planner
+- Memory
+- Browser Controller
+
+Adding another planner creates a risk:
+
+
+Planner
+│
+Backward Planner
+│
+Prediction Planner
+│
+Autonomy Planner
+
+
+Eventually every subsystem starts making plans independently, leading to conflicts.
+
+Instead, I would introduce a **single Planning Bus**.
+
+
+Goal
+
+↓
+
+Planning Bus
+
+↓
+
+Forward Planner
+Backward Planner
+HTN
+Constraint Solver
+Prediction Planner
+
+↓
+
+Scores
+
+↓
+
+Adaptive Planning Engine
+
+↓
+
+Best Plan
+
+↓
+
+Execution
+
+
+Now every planner proposes a solution, but only one merged plan is executed.
+
+---
+
+# I would also add something not in your current documents
+
+## Planning Memory
+
+Most AI agents don't remember **how** they solved previous problems—they remember only the conversation.
+
+Planning Memory stores:
+
+
+Goal
+
+↓
+
+Plan
+
+↓
+
+Execution
+
+↓
+
+Outcome
+
+↓
+
+Success Score
+
+↓
+
+Lessons Learned
+
+
+The next time Aariya encounters a similar goal, it can retrieve the previous plan, adapt it, and avoid repeating mistakes. This is a powerful form of experiential learning that complements your existing semantic and episodic memories.
+
+---
+
+# I would add another subsystem
+
+## Plan Critic
+
+Before execution:
+
+
+Generated Plan
+
+↓
+
+Plan Critic
+
+↓
+
+Find Weaknesses
+
+↓
+
+Estimate Risks
+
+↓
+
+Suggest Better Plan
+
+↓
+
+Execution
+
+
+The Plan Critic acts as an internal reviewer. It asks questions like:
+
+- Is there a shorter path?
+- Is there a cheaper option?
+- Is there a safer option?
+- Could this violate a policy?
+- Will this likely fail?
+- Are there missing prerequisites?
+
+This greatly improves reliability.
+
+---
+
+# The biggest issue I still want to clarify
+
+This is the most important design decision remaining because it affects nearly every subsystem.
+
+### Should Aariya have **one global goal**, or support **many concurrent goals**?
+
+For example:
+
+
+User:
+Research Nvidia GPUs
+
+
+While that's running:
+
+
+Autonomy Loop:
+Read today's AI news
+
+
+At the same time:
+
+
+Reminder:
+Reply to an email in 30 minutes
+
+
+And:
+
+
+Background:
+Compress memory database
+
+
+There are two possible models:
+
+### Option A — Single Goal
+
+Only one active goal at a time.
+
+**Pros**
+- Simpler.
+- Easier to debug.
+- Lower CPU and memory usage.
+
+**Cons**
+- Can't multitask effectively.
+
+### Option B — Multi-Goal Executive (my recommendation)
+
+Maintain a **Goal Queue** where multiple goals can be active simultaneously, each with its own priority, dependencies, and state. An Executive Scheduler allocates time and resources, pauses lower-priority work, and resumes it later. This is more complex but aligns well with the autonomous architecture you've described.
+
+Because Aariya already has an Autonomy Loop, background services, OSINT, and long-running tasks, I recommend the multi-goal model.
+
+---
+
+After we settle that final architectural point, I can help you design the Adaptive Planning Engine in a way that integrates cleanly with the rest of Aariya and uses real components (PostgreSQL, your actual memory system, live browser automation, and real execution paths) rather than mock or hardcoded data.
+
+
+Phase 1 — Goal Executive System
+
+Instead of having planners communicate directly, create a central Goal Executive.
+
+                        Goal Executive
+                              │
+      ┌───────────────────────┼────────────────────────┐
+      │                       │                        │
+ Goal Manager          Scheduler               Planner Router
+      │                       │                        │
+      └───────────────Execution Coordinator────────────┘
+
+This becomes the "CEO" of Aariya.
+
+Responsibilities:
+
+create goals
+cancel goals
+merge duplicate goals
+assign priorities
+suspend goals
+resume goals
+archive completed goals
+Phase 2 — Goal Object
+
+Every goal should become a database object instead of just a string.
+
+Example
+
+{
+    "goal_id":"UUID",
+    "parent_goal":"UUID",
+    "title":"Build React Dashboard",
+    "description":"...",
+    "priority":82,
+    "urgency":75,
+    "importance":90,
+    "planner":"Backward",
+    "status":"Running",
+    "confidence":0.94,
+    "risk":0.13,
+    "created_at":"...",
+    "deadline":"...",
+    "dependencies":[],
+    "subgoals":[],
+    "execution_history":[],
+    "world_state_snapshot":"..."
+}
+
+Notice there is no hardcoded logic, only metadata that your planners and executors interpret.
+
+Phase 3 — Planner Router
+
+Instead of manually choosing planners, let the AI decide.
+
+Incoming Goal
+
+↓
+
+Goal Analysis
+
+↓
+
+Need decomposition?
+
+↓
+
+YES
+
+↓
+
+Backward Planner
+
+↓
+
+NO
+
+↓
+
+Need searching?
+
+↓
+
+YES
+
+↓
+
+Graph Planner
+
+↓
+
+NO
+
+↓
+
+Forward Planner
+
+Later this can evolve into a learned planner-selection policy.
+
+Phase 4 — Goal Scoring
+
+Aariya shouldn't treat every goal equally.
+
+Each goal should receive scores such as:
+
+Priority
+
+Urgency
+
+Risk
+
+Expected Reward
+
+Estimated Cost
+
+Estimated Time
+
+Confidence
+
+Reversibility
+
+Human Approval Required
+
+Learning Opportunity
+
+These scores help determine execution order.
+
+Phase 5 — World State Graph
+
+Backward induction is only useful if it knows the current world accurately.
+
+The World State Graph represents the AI's understanding of reality.
+
+Sources include:
+
+PostgreSQL memory
+local filesystem
+browser state
+open applications
+running processes
+clipboard
+calendar
+email
+web APIs
+sensors (camera, microphone)
+
+The graph updates continuously so plans are based on live information.
+
+Phase 6 — Planning Memory
+
+Store not only conversations but also plans.
+
+Example record:
+
+Goal
+
+↓
+
+Planner Used
+
+↓
+
+Execution Path
+
+↓
+
+Failures
+
+↓
+
+Recovery Steps
+
+↓
+
+Final Result
+
+↓
+
+Execution Time
+
+↓
+
+Success Rate
+
+Over time, Aariya learns which strategies work best.
+
+Phase 7 — Execution Coordinator
+
+Separate planning from execution.
+
+Planner
+
+↓
+
+Execution Coordinator
+
+↓
+
+Browser
+
+Desktop
+
+Files
+
+Database
+
+Email
+
+Shell
+
+Cloud APIs
+
+This allows the planner to remain independent of execution details.
+
+Phase 8 — Recovery Engine
+
+Failures are inevitable.
+
+The Recovery Engine should:
+
+detect failures
+determine the cause
+choose a recovery strategy
+retry when appropriate
+request user input when necessary
+escalate if recovery isn't possible
+
+This prevents entire goals from failing because of a single issue.
+
+Phase 9 — Reflection Loop
+
+After each completed goal:
+
+Goal Complete
+
+↓
+
+Compare Outcome vs Goal
+
+↓
+
+Identify Errors
+
+↓
+
+Generate Lessons
+
+↓
+
+Store in Planning Memory
+
+↓
+
+Update Planner Statistics
+
+This lets Aariya improve without retraining the language model.
+
+Phase 10 — Planner Statistics
+
+Track objective performance for each planner.
+
+For example:
+
+Planner	Success	Avg Time	Avg Cost	User Satisfaction
+Forward	93%	8 s	Low	High
+Backward	98%	14 s	Medium	High
+HTN	96%	10 s	Medium	High
+Constraint	89%	6 s	Very Low	Medium
+
+Planner selection can then be informed by actual historical performance rather than fixed rules.
+
+One subsystem I think is missing from your current architecture
+
+Your documents include a Prediction Engine, but not a Simulation Engine.
+
+These serve different purposes.
+
+Prediction Engine
+
+Answers:
+
+"What is most likely to happen?"
+
+Example:
+
+If I click this button,
+there's a 90% chance the page loads.
+Simulation Engine
+
+Answers:
+
+"What would happen if I tried five different plans?"
+
+Example:
+
+Plan A
+↓
+
+Estimated 95% success
+
+Plan B
+↓
+
+Estimated 78%
+
+Plan C
+↓
+
+Estimated 41%
+
+↓
+
+Choose Plan A
+
+The Simulation Engine evaluates multiple candidate plans before execution, reducing unnecessary failures.
+
+What you're describing is Need-Based Goal Generation, not just autonomous goal generation.
+
+Aariya should never create work simply because it discovered something new. It should first determine whether the work is necessary.
+
+I would add a subsystem before Goal Creation
+Observation
+      │
+      ▼
+Need Assessment Engine
+      │
+      ▼
+Goal Generator
+      │
+      ▼
+Planning Engine
+
+This prevents unnecessary goals from ever entering the system.
+
+Example 1 — NVIDIA SDK
+
+Current AI agent thinking:
+
+Found NVIDIA SDK v5.2
+
+↓
+
+Download
+
+↓
+
+Read
+
+↓
+
+Index
+
+↓
+
+Update Memory
+
+Aariya should instead reason like this:
+
+Found NVIDIA SDK v5.2
+
+↓
+
+Does Aariya use NVIDIA?
+
+↓
+
+No
+
+↓
+
+Ignore
+
+or
+
+Found NVIDIA SDK v5.2
+
+↓
+
+Is CUDA installed?
+
+↓
+
+No
+
+↓
+
+Does any subsystem require CUDA?
+
+↓
+
+No
+
+↓
+
+Discard observation
+
+No goal is created.
+
+Example 2 — Python package
+New TensorFlow released.
+
+Aariya should ask:
+
+Is TensorFlow installed?
+
+↓
+
+No
+
+↓
+
+Is any project using TensorFlow?
+
+↓
+
+No
+
+↓
+
+Ignore.
+Example 3 — Browser Extension
+Chrome released Manifest V4.
+Does Aariya use browser extensions?
+
+↓
+
+No
+
+↓
+
+Ignore.
+Example 4 — PostgreSQL
+PostgreSQL 19 released.
+Does Aariya use PostgreSQL?
+
+↓
+
+Yes
+
+↓
+
+Current version?
+
+↓
+
+16
+
+↓
+
+Security fixes?
+
+↓
+
+Yes
+
+↓
+
+Compatibility risk?
+
+↓
+
+Low
+
+↓
+
+Create Update Recommendation Goal
+
+Notice it still doesn't update automatically. It creates a recommendation because changing a core dependency can affect the system.
+
+General Decision Pipeline
+
+I would make every observation pass through something like this:
+
+New Observation
+
+↓
+
+Entity Identification
+
+↓
+
+Dependency Check
+
+↓
+
+Usage Check
+
+↓
+
+Need Assessment
+
+↓
+
+Impact Analysis
+
+↓
+
+Risk Analysis
+
+↓
+
+Goal Generation
+
+↓
+
+Planning
+Dependency Check
+
+Aariya should maintain a live dependency graph.
+
+Example
+
+CUDA
+   │
+   ├── Vision Engine
+   ├── Whisper
+   ├── Llama
+   └── Stable Diffusion
+
+When CUDA changes, it instantly knows which subsystems might be affected.
+
+Usage Check
+
+Something being installed doesn't mean it's actually used.
+
+Example
+
+Docker
+
+Installed
+
+↓
+
+Used?
+
+↓
+
+No
+
+↓
+
+No update needed.
+
+Likewise:
+
+VS Code
+
+Installed
+
+↓
+
+Used daily?
+
+↓
+
+Yes
+
+↓
+
+Monitor updates.
+Need Assessment Engine
+
+This becomes a major subsystem.
+
+Its job is to answer:
+
+Do I actually need to care?
+
+Inputs include:
+
+Dependency Graph
+Running Processes
+Installed Software
+Current Projects
+User Preferences
+Active Goals
+Historical Usage
+Security Policies
+Hardware Inventory
+
+Output:
+
+Need Score = 0.93
+
+Only if the score exceeds a threshold does it proceed.
+
+This also saves compute
+
+Without this engine:
+
+Observation
+
+↓
+
+Goal
+
+↓
+
+Planner
+
+↓
+
+Memory
+
+↓
+
+Simulation
+
+↓
+
+Execution
+
+With it:
+
+Observation
+
+↓
+
+Need Assessment
+
+↓
+
+Not Needed
+
+↓
+
+Discard
+
+Most observations end here, reducing unnecessary work.
+
+I would introduce another principle
+
+Instead of "Curiosity Driven", Aariya should be "Purpose Driven."
+
+Many autonomous systems gather everything they see. That doesn't scale.
+
+Aariya should ask:
+
+Does this affect me?
+Does this affect an active goal?
+Does this affect my future capabilities?
+Does this affect the user?
+Does this affect safety or security?
+
+If all answers are No, it simply logs the observation and moves on.
+
+I would go even further
+
+I think Aariya should maintain a Living System Model.
+
+This would be a real-time representation of everything relevant to its operation.
+
+It could include:
+
+Installed software
+Installed SDKs
+Python environments
+Node.js versions
+Databases
+GPU drivers
+CUDA
+Browser versions
+Running services
+Hardware
+Network interfaces
+Storage
+Active projects
+Git repositories
+APIs in use
+External services
+AI models
+User workflows
+
+This becomes the AI's understanding of its environment.
+
+Then, instead of asking:
+
+"Should I download the NVIDIA SDK?"
+
+Aariya asks:
+
+"Does my Living System Model indicate that any current or planned capability requires this SDK?"
+
+If the answer is no, no goal is created.
+
+Observation
+      │
+      ▼
+Entity Recognition
+      │
+      ▼
+Living System Model
+      │
+      ▼
+Dependency Graph
+      │
+      ▼
+Need Assessment Engine
+      │
+      ▼
+Impact Analyzer
+      │
+      ▼
+Goal Generator
+      │
+      ▼
+Adaptive Planning Engine
+      │
+      ▼
+Execution
+
+Next Step: Knowledge & World Model (KWM)
+
+This becomes the foundation for every subsystem.
+
+                 Reality
+                    │
+                    ▼
+         Knowledge Acquisition Layer
+                    │
+                    ▼
+        Living World Model (KWM)
+                    │
+     ┌──────────────┼──────────────┐
+     ▼              ▼              ▼
+System Model   User Model   External World
+     ▼              ▼              ▼
+      └─────────────┼──────────────┘
+                    ▼
+           Planning & Reasoning
+
+Without this, planners are constantly asking:
+
+"What software is installed?"
+
+"What project is this?"
+
+"Which database am I using?"
+
+Instead, they should query a single knowledge source.
+
+Major Subsystems I would add
+1. Knowledge Acquisition Engine (KAE)
+
+Purpose
+
+Collects real-world information continuously.
+
+Sources:
+
+Local filesystem
+PostgreSQL
+Git repositories
+Running applications
+Browser
+Calendar
+Email
+APIs
+Hardware
+Sensors
+User interactions
+
+Its only responsibility is gathering facts.
+
+It never plans.
+
+2. Living World Model (LWM)
+
+This is Aariya's internal picture of reality.
+
+Instead of remembering:
+
+CUDA 12
+Python 3.12
+VS Code
+
+It remembers relationships.
+
+Example:
+
+Aariya
+│
+├── Projects
+│      ├── AOS
+│      └── AI Girl
+│
+├── Hardware
+│      ├── RTX 4090
+│      └── 64 GB RAM
+│
+├── Installed Software
+│      ├── Python
+│      ├── PostgreSQL
+│      └── Docker
+│
+├── AI Models
+│      ├── Whisper
+│      └── Llama
+
+Every subsystem queries this instead of rescanning the computer.
+
+3. Knowledge Validator
+
+Not all information is trustworthy.
+
+Example:
+
+Browser says:
+
+CUDA 13 Released
+
+Validator checks:
+
+Official NVIDIA source
+Installed version
+Compatibility
+Existing projects
+
+Only then is it accepted.
+
+4. Change Detection Engine
+
+This subsystem constantly asks:
+
+What changed?
+
+Examples:
+
+New software installed
+Git commit
+File modified
+New email
+USB connected
+Package updated
+
+It produces events, not goals.
+
+5. Relevance Engine
+
+This is the subsystem we discussed previously.
+
+For every event:
+
+Does this matter?
+
+Inputs:
+
+Active goals
+User interests
+Running projects
+Installed software
+Dependencies
+Historical usage
+
+Output:
+
+Ignore
+
+Monitor
+
+Recommend
+
+Create Goal
+6. Goal Generator
+
+Only after the Relevance Engine approves.
+
+Example:
+
+RTX Driver Update
+
+↓
+
+GPU Used?
+
+↓
+
+Yes
+
+↓
+
+Compatibility?
+
+↓
+
+Good
+
+↓
+
+Security Fix?
+
+↓
+
+Yes
+
+↓
+
+Recommendation Goal
+Something I think is missing from almost every AI system
+Confidence Tracking
+
+Every fact should have confidence.
+
+Example:
+
+Python 3.12 Installed
+
+Confidence
+
+99.9%
+User likes Docker
+
+Confidence
+
+62%
+Project uses CUDA
+
+Confidence
+
+84%
+
+Planners should prefer high-confidence knowledge and verify uncertain facts before acting.
+
+I would also redesign Memory
+
+Your current documents describe:
+
+Episodic Memory
+Semantic Memory
+Vector Memory
+Graph Memory
+
+I'd organize them under a Memory Fabric.
+
+Memory Fabric
+
+├── Working Memory
+├── Episodic Memory
+├── Semantic Memory
+├── Procedural Memory
+├── Planning Memory
+├── Tool Memory
+├── Relationship Graph
+├── Vector Index
+├── World Model
+├── User Model
+└── System Model
+
+Each has a distinct purpose, but they're accessed through a unified interface.
+
+The next big architectural question
+
+                     AARIYA
+
+                 Cognitive Kernel
+                        │
+        ┌───────────────┼───────────────┐
+        │               │               │
+   Memory Fabric   Planning Engine  World Model
+        │               │               │
+        └───────────────┼───────────────┘
+                        │
+                 Execution Manager
+                        │
+          Capability Manager / Plugin Host
+                        │
+ ┌──────────┬──────────┬──────────┬──────────┐
+ │ Browser  │ Vision   │ Desktop  │ Voice    │
+ ├──────────┼──────────┼──────────┼──────────┤
+ │ Coding   │ OSINT    │ Robotics │ Finance  │
+ ├──────────┼──────────┼──────────┼──────────┤
+ │ CAD      │ IoT      │ Medical  │ Future...│
+ └──────────┴──────────┴──────────┴──────────┘
+
+
+Core Philosophy
+
+The core should never know how a capability works.
+
+It only knows:
+
+what capabilities exist
+what they can do
+whether they are available
+whether they have permission
+how to ask them to perform a task
+
+That separation is what keeps the architecture maintainable.
+
+The Stable Core
+
+These components should change very rarely.
+
+Core
+├── Cognitive Kernel
+├── Memory Fabric
+├── Planning Engine
+├── Goal Executive
+├── World Model
+├── Execution Manager
+├── Capability Manager
+├── Event Bus
+├── Permission Manager
+├── Safety Governor
+└── Scheduler
+
+Everything else is external.
+
+Capability Modules
+
+Every capability follows the same structure.
+
+vision/
+    manifest.json
+    capability.py
+    api.py
+    events.py
+    permissions.py
+    models/
+
+or
+
+robotics/
+browser/
+voice/
+desktop/
+finance/
+cad/
+osint/
+
+Each module can be updated independently.
+
+Capability Manifest
+
+Every module declares itself.
+
+Example:
+
+{
+  "id": "vision",
+
+  "name": "Computer Vision",
+
+  "version": "2.1",
+
+  "description": "Image understanding",
+
+  "permissions": [
+      "camera"
+  ],
+
+  "events": [
+      "camera.frame",
+      "screen.capture"
+  ],
+
+  "tools": [
+      "detect_objects",
+      "ocr",
+      "caption_image"
+  ],
+
+  "api": [
+      "/vision/analyze"
+  ]
+}
+
+The core reads this automatically.
+
+No hardcoding.
+
+Capability Lifecycle
+
+Every module follows the same lifecycle.
+
+Install
+
+↓
+
+Validate
+
+↓
+
+Register
+
+↓
+
+Load
+
+↓
+
+Start
+
+↓
+
+Ready
+
+↓
+
+Pause
+
+↓
+
+Resume
+
+↓
+
+Upgrade
+
+↓
+
+Unload
+
+The kernel manages only the lifecycle.
+
+Capability Registry
+
+The Capability Manager maintains something like:
+
+Capabilities
+
+Vision
+Status: Running
+
+Browser
+Status: Running
+
+Voice
+Status: Running
+
+Desktop
+Status: Running
+
+Finance
+Status: Disabled
+
+CAD
+Status: Installed
+
+Robotics
+Status: Offline
+
+The planner queries this registry before assigning work.
+
+Event Bus
+
+Rather than modules calling each other directly, they communicate through events.
+
+Examples:
+
+voice.transcribed
+
+image.detected
+
+browser.page_loaded
+
+desktop.file_created
+
+memory.updated
+
+goal.completed
+
+robot.connected
+
+emotion.changed
+
+Modules subscribe only to events they care about.
+
+Example:
+
+Vision subscribes to:
+
+camera.frame
+
+Memory subscribes to:
+
+conversation.finished
+
+Planning subscribes to:
+
+goal.updated
+
+This keeps components loosely coupled.
+
+Tool Interface
+
+Every capability exposes tools in a standard format.
+
+For example:
+
+Vision
+
+detect_objects()
+
+read_text()
+
+caption()
+
+segment()
+
+Browser
+
+open()
+
+search()
+
+click()
+
+extract()
+
+Desktop
+
+launch_app()
+
+type()
+
+capture_screen()
+
+move_file()
+
+The planner doesn't need to know the implementation—only the tool signatures.
+
+Planner Workflow
+
+When the user asks:
+
+"Summarize this PDF and email it."
+
+The planner could generate a task graph like:
+
+Read PDF
+
+↓
+
+OCR (Vision)
+
+↓
+
+Summarize (LLM)
+
+↓
+
+Compose Email
+
+↓
+
+Email Capability
+
+↓
+
+Done
+
+The planner chooses capabilities dynamically.
+
+Dependency Management
+
+Some modules rely on others.
+
+Example:
+
+Medical
+
+requires:
+
+Vision
+
+OCR
+
+RAG
+
+Memory
+
+The Capability Manager ensures dependencies are loaded before activation.
+
+Permissions
+
+Each module explicitly declares its required permissions.
+
+Camera
+
+Microphone
+
+Filesystem
+
+Browser
+
+USB
+
+Bluetooth
+
+Serial
+
+Internet
+
+Smart Home
+
+Financial APIs
+
+The Safety Governor authorizes or denies access.
+
+Future Capability Marketplace
+
+This design naturally supports an ecosystem of capabilities.
+
+Examples:
+
+Aariya Robotics Pack
+
+Aariya CAD Suite
+
+Aariya Legal Research
+
+Aariya Medical Assistant
+
+Aariya Stock Analyst
+
+Aariya Drone Control
+
+Aariya Home Automation
+
+Aariya Game Development
+
+Aariya Cybersecurity
+
+Aariya Chemistry Lab
+
+The core remains unchanged as these are added.
+
+Suggested Directory Structure
+aariya/
+
+core/
+    cognition/
+    planning/
+    memory/
+    execution/
+    safety/
+    permissions/
+    scheduler/
+    events/
+    capability_manager/
+
+capabilities/
+
+    browser/
+
+    vision/
+
+    desktop/
+
+    voice/
+
+    robotics/
+
+    osint/
+
+    finance/
+
+    coding/
+
+    cad/
+
+    iot/
+
+    medical/
+
+plugins/
+
+shared/
+
+configs/
+
+models/
+
+runtime/
+
+logs/
+
+tests/
+
+This organization keeps the core isolated from feature-specific code.
+
+Instead of the planner talking directly to capabilities, add a routing layer:
+
+Planner
+     │
+     ▼
+Capability Intelligence Layer
+     │
+     ├── Discover capabilities
+     ├── Rank candidates
+     ├── Check permissions
+     ├── Check resource usage (CPU/GPU/RAM)
+     ├── Resolve dependencies
+     ├── Select best implementation
+     └── Dispatch execution
+            │
+            ▼
+     Capability Modules
+
+This layer enables advanced behaviors later without changing the planner, such as:
+
+Selecting between multiple implementations of the same capability (e.g., local vs. cloud OCR).
+Preferring faster or more accurate modules based on context.
+Falling back gracefully if a module is unavailable.
+Scheduling resource-intensive tasks to avoid overloading the system.
+Allowing third-party capabilities to integrate seamlessly.
+
+
+1. Treat Everything as a Service
+
+Instead of one huge application:
+
+Aariya
+
+├── Memory
+├── Planner
+├── Voice
+├── Vision
+├── Browser
+├── Robotics
+
+Think of it like:
+
+Memory Service
+
+Planning Service
+
+Reasoning Service
+
+Voice Service
+
+Vision Service
+
+OSINT Service
+
+Browser Service
+
+Desktop Service
+
+Robot Service
+
+Each has:
+
+API
+events
+health monitoring
+logs
+versioning
+
+This makes scaling and debugging much easier.
+
+2. Internal Message Bus (Very Important)
+
+Avoid direct function calls between major components.
+
+Instead:
+
+Vision
+   │
+   ▼
+Event Bus
+   │
+   ▼
+Memory
+
+Planner
+
+Emotion
+
+Avatar
+
+Example:
+
+camera.frame
+
+↓
+
+Vision detects
+
+↓
+
+person_detected
+
+↓
+
+Memory stores
+
+↓
+
+Planner decides
+
+↓
+
+Avatar smiles
+
+Everything becomes event-driven.
+
+3. Unified Knowledge Graph
+
+Instead of isolated memories:
+
+User
+
+↓
+
+likes motorcycles
+
+↓
+
+owns ZX4RR
+
+↓
+
+visited Colombo
+
+↓
+
+studies AI
+
+Represent knowledge as a graph:
+
+Person
+   │
+likes
+   │
+Motorcycle
+   │
+is_model
+   │
+ZX4RR
+
+Benefits:
+
+better reasoning
+relationship discovery
+contradiction detection
+long-term memory
+4. Multi-Layer Memory
+
+Don't treat memory as one database.
+
+Working Memory
+
+↓
+
+Conversation Memory
+
+↓
+
+Episodic Memory
+
+↓
+
+Semantic Memory
+
+↓
+
+Skill Memory
+
+↓
+
+Knowledge Graph
+
+↓
+
+Vector Store
+
+↓
+
+Archive
+
+Each has different retention policies.
+
+5. Skill Learning
+
+Instead of only remembering conversations...
+
+Remember procedures.
+
+Example:
+
+User always exports PDFs this way.
+
+↓
+
+Create workflow.
+
+↓
+
+Store as skill.
+
+↓
+
+Reuse automatically.
+
+Eventually Aariya learns workflows.
+
+6. Goal Stack
+
+Instead of one goal.
+
+Current Goal
+
+↓
+
+Session Goal
+
+↓
+
+Daily Goal
+
+↓
+
+Long-Term Goal
+
+↓
+
+Life Goal
+
+Planner always knows priorities.
+
+7. Self-Reflection Engine
+
+Every few hours:
+
+Today's conversations
+
+↓
+
+Summarize
+
+↓
+
+Extract lessons
+
+↓
+
+Update semantic memory
+
+↓
+
+Forget duplicates
+
+Keeps memory clean and useful.
+
+8. Plugin Marketplace
+
+Design for third-party developers from day one.
+
+Capability
+
+Manifest
+
+Permissions
+
+Dependencies
+
+Documentation
+
+Settings
+
+Tests
+
+Anyone could build:
+
+CAD Module
+
+Music Module
+
+Chemistry Module
+
+Robotics Module
+
+Drone Module
+
+without modifying the core.
+
+9. Scheduler
+
+Don't let everything run constantly.
+
+Instead:
+
+High Priority
+
+Voice
+
+Safety
+
+Planner
+
+Avatar
+
+-------------
+
+Medium
+
+Memory
+
+Vision
+
+-------------
+
+Low
+
+Reflection
+
+Optimization
+
+Statistics
+
+Backup
+
+This improves responsiveness.
+
+10. Resource Manager
+
+Monitor:
+
+CPU
+
+GPU
+
+RAM
+
+VRAM
+
+Disk
+
+Network
+
+Battery
+
+Then decide:
+
+Use local model
+
+or
+
+Use lightweight model
+
+or
+
+Delay task
+
+or
+
+Queue task
+11. Capability Discovery
+
+Instead of hardcoding modules:
+
+startup
+
+↓
+
+scan folders
+
+↓
+
+read manifests
+
+↓
+
+register
+
+↓
+
+verify
+
+↓
+
+load
+
+↓
+
+start
+
+Exactly like modern IDE extensions.
+
+12. Unified Tool Interface
+
+Every capability exposes tools identically.
+
+Tool
+
+name
+
+description
+
+inputs
+
+outputs
+
+cost
+
+permissions
+
+latency
+
+Planner doesn't care who implements it.
+
+13. Agent Ecosystem
+
+Don't think of one AI.
+
+Think of specialized workers.
+
+Planner
+
+↓
+
+Research Agent
+
+↓
+
+Vision Agent
+
+↓
+
+Browser Agent
+
+↓
+
+Memory Agent
+
+↓
+
+Coding Agent
+
+↓
+
+Robot Agent
+
+↓
+
+Finance Agent
+
+Coordinator assigns work.
+
+14. Observability
+
+This is one of the biggest omissions in hobby AI projects.
+
+Build dashboards for:
+
+Current thoughts
+
+Planner queue
+
+Memory accesses
+
+Events
+
+Capability status
+
+CPU
+
+GPU
+
+Errors
+
+Goals
+
+Emotions
+
+Agent activity
+
+You'll save countless hours debugging.
+
+15. Simulation Mode
+
+Before allowing actions:
+
+User:
+
+Delete folder
+
+↓
+
+Planner
+
+↓
+
+Simulation
+
+↓
+
+Expected result
+
+↓
+
+Safe?
+
+↓
+
+Execute
+
+Greatly reduces risky mistakes.
+
+16. Versioned Memory
+
+Instead of overwriting beliefs:
+
+Old belief
+
+↓
+
+New evidence
+
+↓
+
+Conflict detected
+
+↓
+
+Keep history
+
+↓
+
+Update confidence
+
+Useful for long-term consistency.
+
+17. Digital Twin
+
+Maintain an internal model of the environment.
+
+Desktop
+
+Browser
+
+Files
+
+Devices
+
+Robot
+
+User
+
+Calendar
+
+Location
+
+Smart Home
+
+Planner reasons over this world model rather than querying everything repeatedly.
+
+18. Runtime Modes
+
+Not every subsystem needs to be active all the time.
+
+Examples:
+
+Conversation Mode – prioritize dialogue, memory, and emotion.
+Research Mode – prioritize web tools and synthesis.
+Coding Mode – prioritize code analysis and execution.
+Robot Mode – prioritize perception and control loops.
+Sleep Mode – pause nonessential services while running reflection, summarization, backups, and maintenance.
+19. Governance Layer
+
+As Aariya grows, it needs consistent decision-making policies.
+
+Responsibilities include:
+
+permission checks
+user consent
+action approval
+privacy boundaries
+audit logging
+policy enforcement
+
+This should be separate from the planner so safety rules remain consistent regardless of which capability is active.
+
+20. Testing & Sandboxing
+
+Every capability should support:
+
+isolated testing
+mocked dependencies
+health checks
+rollback after failed updates
+version compatibility validation
+
+This allows you to evolve modules confidently without risking the stability of the whole system.
+
+What I would call Aariya V3 Architecture
+                        USER
+                          │
+                    Conversation Layer
+                          │
+                  Cognitive Kernel
+                          │
+             Planning & Goal Executive
+                          │
+          Capability Intelligence Layer
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+   Event Bus        Memory Fabric     Governance
+        │                 │                 │
+  Capability Host   Knowledge Graph   Permissions
+        │                 │                 │
+ ┌──────┴──────┐    World Model      Scheduler
+ │             │
+ Browser   Vision   Voice   Desktop   Robotics
+ Finance   OSINT    CAD     Medical   Future...
+
+
+AARIYA AIOS v1.0
+Design Principles
+
+These principles should guide every architectural decision:
+
+Minimal Core – The kernel stays small and stable.
+Everything is a Capability – New functionality is added as modules.
+Everything Communicates Through Events – No unnecessary direct dependencies.
+Everything is Observable – Every decision, event, and task is traceable.
+Everything is Replaceable – Models, tools, and services can be swapped.
+Local-First – Prefer local execution; cloud is optional.
+Safety Before Action – Every external action passes through policy checks.
+Continuous Learning – Memory improves the system without changing its core.
+Layered Architecture
+┌─────────────────────────────────────────────┐
+│              User Interfaces                │
+│ Avatar │ Chat │ Voice │ Mobile │ Web │ API │
+└─────────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────────┐
+│          Conversation & Interaction         │
+│ Dialogue │ Emotion │ Personality │ Context │
+└─────────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────────┐
+│             Cognitive Kernel                │
+│ Intent │ Planner │ Reasoner │ Goal Manager │
+└─────────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────────┐
+│          Capability Intelligence Layer      │
+│ Discovery │ Routing │ Scheduling │ Fallback │
+└─────────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────────┐
+│        Event Bus & Execution Manager        │
+└─────────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────────┐
+│           Capability Modules                │
+│ Vision │ Voice │ Browser │ Robotics │ OSINT │
+│ CAD │ Finance │ Medical │ Desktop │ Coding │
+└─────────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────────┐
+│ Shared Infrastructure                       │
+│ Memory │ World Model │ Safety │ Resources   │
+└─────────────────────────────────────────────┘
+The Cognitive Kernel
+
+This is the "brain." It should not know anything about browsers, cameras, or robots.
+
+It only answers questions like:
+
+What is happening?
+What is the goal?
+What information is missing?
+Which capabilities are needed?
+Is the plan safe?
+What should happen next?
+
+Its responsibilities are:
+
+Intent understanding
+Task decomposition
+Planning
+Prioritization
+Coordination
+Recovery from failures
+Capability Intelligence Layer (CIL)
+
+This becomes the "operating system" for capabilities.
+
+Instead of:
+
+Planner
+   ↓
+Vision
+
+you'll have:
+
+Planner
+   ↓
+Capability Intelligence Layer
+   ↓
+Vision
+
+The CIL handles:
+
+Capability discovery
+Tool selection
+Permission validation
+Dependency resolution
+Load balancing
+Resource awareness
+Retry/fallback strategies
+
+This means the planner stays simple while the CIL grows smarter over time.
+
+Event Bus
+
+Everything important is represented as an event.
+
+Examples:
+
+conversation.started
+conversation.finished
+
+goal.created
+goal.completed
+
+memory.updated
+
+emotion.changed
+
+camera.frame
+
+vision.person_detected
+
+voice.transcribed
+
+browser.page_loaded
+
+desktop.file_saved
+
+robot.connected
+
+task.failed
+
+No component should need to know who is listening.
+
+Memory Fabric
+
+Rather than a single "memory," use specialized stores:
+
+Layer	Purpose
+Working	Current reasoning context
+Conversation	Recent interactions
+Episodic	Significant experiences
+Semantic	Stable facts and concepts
+Procedural	Learned workflows and skills
+Knowledge Graph	Relationships between entities
+Vector Store	Semantic retrieval
+Archive	Long-term history
+
+A Memory Orchestrator decides where information belongs and when to summarize or archive it.
+
+World Model
+
+The World Model maintains Aariya's understanding of its environment.
+
+It tracks:
+
+User profile and preferences
+Open applications
+Browser tabs
+Files
+Connected devices
+Smart home devices
+Robot status
+Calendar
+Active tasks
+
+The planner reasons over this internal model instead of repeatedly querying every subsystem.
+
+Safety Governor
+
+Every external action flows through a single checkpoint:
+
+Planner
+   ↓
+Safety Governor
+   ↓
+Execution Manager
+
+Responsibilities include:
+
+Permission enforcement
+Confirmation for sensitive actions
+Rate limiting
+Audit logging
+Policy validation
+
+Keeping safety separate from planning makes behavior more predictable and easier to maintain.
+
+Capability Contract
+
+Every capability implements the same interface:
+
+initialize()
+
+start()
+
+stop()
+
+health_check()
+
+discover_tools()
+
+execute_tool()
+
+handle_event()
+
+shutdown()
+
+This uniformity allows the Capability Manager to treat all modules consistently.
+
+Internal Scheduler
+
+Different tasks deserve different priorities.
+
+Priority classes:
+
+Real-Time: voice, safety, avatar animation
+Interactive: dialogue, planning, memory retrieval
+Background: indexing, summarization, backups
+Maintenance: optimization, cleanup, analytics
+
+The scheduler ensures background work never degrades the user experience.
+
+Observability
+
+Build visibility into the system from day one.
+
+A developer dashboard could include:
+
+Active goals
+Running capabilities
+Event stream
+Memory activity
+Planner decisions
+Resource usage
+Errors and retries
+Current world model
+Safety decisions
+
+This will make debugging far easier than relying on logs alone.
+
+Evolution Without Rewrites
+
+Because everything follows contracts, adding a new capability is straightforward:
+
+Create a module.
+Add its manifest.
+Implement the standard interface.
+Register it.
+
+No changes to the kernel or planner should be required.
+
+Development Roadmap
+
+Rather than building everything at once, I'd structure the project into milestones:
+
+Phase 1 – AI Kernel
+Cognitive Kernel
+Event Bus
+Capability Manager
+Scheduler
+Safety Governor
+Phase 2 – Intelligence
+Memory Fabric
+Knowledge Graph
+World Model
+Planning Engine
+Goal Manager
+Phase 3 – Core Capabilities
+Voice
+Browser
+Desktop
+Vision
+Coding
+Phase 4 – Advanced Capabilities
+OSINT
+Robotics
+Smart Home
+CAD
+Finance
+Medical document understanding
+Phase 5 – Platform
+Plugin SDK
+Capability marketplace
+Third-party developer documentation
+Automated testing and certification
+One final recommendation
+
+I would establish a rule that becomes part of the project's architecture handbook:
+
+The Cognitive Kernel must never directly depend on any capability module.
+
+The dependency direction should always be:
+
+User
+   ↓
+Conversation Layer
+   ↓
+Cognitive Kernel
+   ↓
+Capability Intelligence Layer
+   ↓
+Capability Modules
+
+Never:
+
+Cognitive Kernel
+      ↓
+Vision
+
+or
+
+Cognitive Kernel
+      ↓
+Browser
+
+
+AARIYA Cognitive Operating System (A-COS)
+                   USER
+                     │
+             Conversation Layer
+                     │
+            Cognitive Operating System
+                     │
+ ┌─────────────────────────────────────────────┐
+ │ Executive Runtime                           │
+ │ • Task Scheduler                            │
+ │ • Goal Manager                              │
+ │ • Resource Manager                          │
+ │ • Safety Governor                           │
+ │ • Capability Intelligence Layer             │
+ └─────────────────────────────────────────────┘
+                     │
+ ┌─────────────────────────────────────────────┐
+ │ Cognitive Services                          │
+ │ • Planner                                  │
+ │ • Memory Fabric                            │
+ │ • World Model                              │
+ │ • Reflection Engine                        │
+ │ • Learning Engine                          │
+ └─────────────────────────────────────────────┘
+                     │
+ ┌─────────────────────────────────────────────┐
+ │ Capability Runtime                          │
+ │ Voice • Vision • Browser • Robotics • etc. │
+ └─────────────────────────────────────────────┘
+The Runtime Loop
+
+Everything in Aariya should happen inside a controlled execution loop instead of components running independently.
+
+Per Tick
+
+↓
+
+Collect Events
+
+↓
+
+Update World Model
+
+↓
+
+Update Memory
+
+↓
+
+Evaluate Goals
+
+↓
+
+Generate Plans
+
+↓
+
+Allocate Capabilities
+
+↓
+
+Execute Actions
+
+↓
+
+Observe Results
+
+↓
+
+Learn
+
+↓
+
+Repeat
+
+Think of it as a game engine's main loop, but for cognition.
+
+Task Graphs Instead of Linear Plans
+
+Instead of:
+
+Read PDF
+
+↓
+
+Summarize
+
+↓
+
+Email
+
+Represent work as a directed graph:
+
+        Read PDF
+             │
+     ┌───────┴────────┐
+     │                │
+ OCR Images      Extract Text
+     │                │
+     └───────┬────────┘
+             │
+      Merge Results
+             │
+        Summarize
+             │
+        Compose Email
+             │
+            Send
+
+Benefits:
+
+Parallel execution
+Retry only failed nodes
+Progress tracking
+Better visualization
+Blackboard Architecture
+
+Instead of agents sending messages directly, create a shared workspace.
+
+Planner
+      │
+Vision ───── Blackboard ─── Memory
+      │
+Browser ────┘
+
+The blackboard contains:
+
+current goal
+discovered facts
+partial plans
+observations
+hypotheses
+confidence scores
+
+Agents contribute to the shared state rather than coordinating manually.
+
+Confidence-Based Reasoning
+
+Every belief should have a confidence score.
+
+"The user likes motorcycles"
+
+Confidence: 0.98
+
+Source:
+Conversation
+"The user owns a drone"
+
+Confidence: 0.22
+
+Source:
+Single web mention
+
+This allows better conflict resolution and planning.
+
+Action Pipeline
+
+Every action follows the same lifecycle:
+
+Intent
+
+↓
+
+Planning
+
+↓
+
+Validation
+
+↓
+
+Permission Check
+
+↓
+
+Simulation
+
+↓
+
+Execution
+
+↓
+
+Verification
+
+↓
+
+Memory Update
+
+↓
+
+Reflection
+
+This creates a consistent execution model for every capability.
+
+Reflection Pipeline
+
+Instead of learning continuously during interaction, dedicate background cycles to reflection.
+
+Recent Events
+
+↓
+
+Cluster Similar Experiences
+
+↓
+
+Extract Knowledge
+
+↓
+
+Update Memory
+
+↓
+
+Generate Improvements
+
+↓
+
+Forget Redundant Details
+
+This keeps interaction responsive while still allowing long-term learning.
+
+Resource-Aware Scheduling
+
+Each task should advertise its expected resource usage:
+
+Voice Recognition
+CPU: Medium
+GPU: Low
+Priority: High
+
+Image Generation
+CPU: Medium
+GPU: Very High
+Priority: Background
+
+The scheduler can then avoid launching multiple GPU-heavy tasks simultaneously.
+
+Capability Metadata
+
+Every capability should declare more than just its tools.
+
+For example:
+
+id: vision
+
+version: 2.3
+
+dependencies:
+  - memory
+
+permissions:
+  - camera
+
+resource_profile:
+  cpu: medium
+  gpu: high
+  memory: 4GB
+
+startup_time: 2s
+
+supports_parallel_execution: true
+
+health_endpoint: /health
+
+provides:
+  - detect_objects
+  - ocr
+  - caption
+
+This gives the runtime enough information to make intelligent scheduling decisions.
+
+State Machine
+
+The runtime itself should have well-defined states:
+
+Boot
+
+↓
+
+Initialize
+
+↓
+
+Load Capabilities
+
+↓
+
+Ready
+
+↓
+
+Interactive
+
+↓
+
+Background Learning
+
+↓
+
+Maintenance
+
+↓
+
+Shutdown
+
+Explicit states make startup, recovery, and diagnostics much easier.
+
+Failure Recovery
+
+Every task should include a recovery strategy.
+
+Task
+
+↓
+
+Failed
+
+↓
+
+Retry?
+
+↓
+
+Alternative Capability?
+
+↓
+
+Ask User?
+
+↓
+
+Abort?
+
+For example, if a local OCR module fails, the runtime might choose another installed OCR implementation rather than abandoning the task.
+
+SDK for Capability Developers
+
+If you ever want external developers—or even your future self—to add modules easily, publish an SDK that provides:
+
+Standard capability interface
+Event subscription helpers
+Logging
+Metrics
+Permission handling
+Configuration loading
+Test harness
+Mock runtime
+
+A consistent SDK dramatically reduces integration complexity.
+
+Long-Term Evolution
+
+One capability I'd intentionally leave for later is adaptive optimization.
+
+Rather than allowing the system to rewrite its own code, start with configuration and policy optimization:
+
+Reorder planner heuristics based on performance.
+Adjust scheduling priorities.
+Learn preferred capability selections.
+Tune retrieval strategies.
+
+This gives you measurable improvements without the risks of self-modifying code.
+
+AARIYA v4 Target Architecture
+                        User
+                          │
+                  Conversation Layer
+                          │
+              Cognitive Operating System
+                          │
+      ┌─────────────────────────────────┐
+      │ Executive Runtime               │
+      │ Scheduler │ Goals │ Safety │ CIL│
+      └─────────────────────────────────┘
+                          │
+      ┌─────────────────────────────────┐
+      │ Cognitive Services              │
+      │ Planner │ Memory │ Reflection   │
+      │ World Model │ Learning          │
+      └─────────────────────────────────┘
+                          │
+                 Event Bus / Blackboard
+                          │
+      ┌─────────────────────────────────┐
+      │ Capability Runtime              │
+      │ Voice │ Vision │ Browser │ etc. │
+      └─────────────────────────────────┘
+                          │
+               Local Tools & External APIs
+
+AARIYA AIOS Specification (AAS) v1.0
+
+Think of this like the POSIX specification for Linux or the Win32 API for Windows.
+
+Developers shouldn't need to know how Aariya works internally.
+
+They only need to know the contracts.
+
+The Six Core Specifications
+AAS-100  Runtime Specification
+
+AAS-200  Event System
+
+AAS-300  Capability SDK
+
+AAS-400  Memory Fabric
+
+AAS-500  Planning System
+
+AAS-600  Intelligence Services
+
+Everything else depends on these.
+
+AAS-100 Runtime Specification
+
+The runtime is responsible for only seven things.
+
+Lifecycle
+
+Scheduling
+
+Resource Management
+
+Capability Loading
+
+Event Routing
+
+Safety Enforcement
+
+Monitoring
+
+Nothing else belongs here.
+
+The runtime should never contain business logic.
+
+Runtime States
+OFF
+
+↓
+
+BOOTING
+
+↓
+
+INITIALIZING
+
+↓
+
+READY
+
+↓
+
+INTERACTIVE
+
+↓
+
+BACKGROUND
+
+↓
+
+MAINTENANCE
+
+↓
+
+SHUTDOWN
+
+Every component can observe state changes.
+
+Runtime Tick
+
+Instead of random threads running independently:
+
+Tick()
+
+↓
+
+Collect Events
+
+↓
+
+Update Internal State
+
+↓
+
+Schedule Tasks
+
+↓
+
+Execute
+
+↓
+
+Observe
+
+↓
+
+Record Metrics
+
+↓
+
+Sleep
+
+Every subsystem participates in the same heartbeat.
+
+AAS-200 Event System
+
+This becomes the nervous system.
+
+Every event has the same structure.
+
+{
+  "id":"evt-23992",
+
+  "timestamp":"...",
+
+  "source":"vision",
+
+  "type":"vision.person_detected",
+
+  "priority":"high",
+
+  "payload":{},
+
+  "correlation":"goal-123",
+
+  "confidence":0.96
+}
+
+Notice:
+
+No component-specific fields.
+
+Universal schema.
+
+Event Categories
+Runtime
+
+Conversation
+
+Memory
+
+Planning
+
+Vision
+
+Browser
+
+Desktop
+
+Voice
+
+Robot
+
+Safety
+
+Capability
+
+Learning
+
+System
+Event Priorities
+Critical
+
+High
+
+Normal
+
+Low
+
+Background
+
+The scheduler respects priority.
+
+AAS-300 Capability SDK
+
+Every capability MUST implement the same interface.
+
+initialize()
+
+configure()
+
+start()
+
+pause()
+
+resume()
+
+execute()
+
+handleEvent()
+
+health()
+
+shutdown()
+
+No exceptions.
+
+Capability Manifest
+
+Every capability includes metadata like:
+
+Name
+
+Version
+
+Author
+
+Dependencies
+
+Permissions
+
+Resource Profile
+
+Tools
+
+Events
+
+Configuration Schema
+
+Health Check
+
+No hardcoded registration.
+
+AAS-400 Memory Fabric
+
+Memory becomes its own operating system.
+
+Working Memory
+
+↓
+
+Conversation
+
+↓
+
+Episodes
+
+↓
+
+Semantic
+
+↓
+
+Procedural
+
+↓
+
+Knowledge Graph
+
+↓
+
+Vector Store
+
+↓
+
+Archive
+Memory API
+
+Everything talks to memory through the same API.
+
+remember()
+
+recall()
+
+search()
+
+summarize()
+
+forget()
+
+consolidate()
+
+link()
+
+annotate()
+
+No component touches databases directly.
+
+AAS-500 Planning System
+
+Planning becomes hierarchical.
+
+Mission
+
+↓
+
+Goal
+
+↓
+
+Objective
+
+↓
+
+Task
+
+↓
+
+Action
+
+Example
+
+Mission
+
+Help User
+
+↓
+
+Goal
+
+Write report
+
+↓
+
+Objective
+
+Gather information
+
+↓
+
+Task
+
+Search web
+
+↓
+
+Action
+
+Browser.search()
+Planner Output
+
+Instead of plain text.
+
+Produce executable task graphs.
+
+Node A
+
+↓
+
+Node B
+
+↓
+
+Node C
+
+↓
+
+Node D
+
+Each node contains:
+
+Inputs
+
+Outputs
+
+Required Capability
+
+Estimated Cost
+
+Priority
+
+Timeout
+
+Retry Policy
+AAS-600 Intelligence Services
+
+Instead of one giant AI.
+
+Split intelligence into services.
+
+Reasoning
+
+Planning
+
+Reflection
+
+Learning
+
+Prediction
+
+Attention
+
+Emotion
+
+Social
+
+Creativity
+
+Curiosity
+
+Each service can evolve independently.
+
+Shared Contracts
+
+Every service follows the same request format.
+
+Request
+
+↓
+
+Context
+
+↓
+
+Reason
+
+↓
+
+Result
+
+↓
+
+Confidence
+
+↓
+
+Explanation
+
+↓
+
+Metrics
+
+Now every service becomes interchangeable.
+
+Internal API Gateway
+
+Instead of services talking directly.
+
+Planner
+
+↓
+
+Gateway
+
+↓
+
+Vision
+
+Benefits:
+
+authentication
+logging
+metrics
+versioning
+retries
+tracing
+Identity System
+
+Everything gets an ID.
+
+User
+
+Capability
+
+Agent
+
+Goal
+
+Memory
+
+Conversation
+
+Task
+
+Event
+
+Observation
+
+Nothing is anonymous.
+
+Universal Metadata
+
+Every object supports metadata.
+
+Created
+
+Modified
+
+Confidence
+
+Importance
+
+Owner
+
+Permissions
+
+Source
+
+Version
+
+Tags
+
+Now everything becomes searchable.
+
+Time Awareness
+
+Everything knows time.
+
+Created
+
+Updated
+
+Expires
+
+Observed
+
+Last Used
+
+Frequency
+
+Duration
+
+This dramatically improves memory quality.
+
+Observability Specification
+
+Every service exposes:
+
+Health
+
+Latency
+
+Queue Size
+
+CPU
+
+GPU
+
+Memory
+
+Errors
+
+Version
+
+Uptime
+
+The dashboard becomes automatic.
+
+Security Model
+
+No capability gets unrestricted access.
+
+Everything goes through:
+
+Capability
+
+↓
+
+Permission Check
+
+↓
+
+Policy Engine
+
+↓
+
+Execution
+
+Even internal modules respect permissions.
+
+Dependency Injection
+
+Never instantiate components directly.
+
+Instead:
+
+Runtime
+
+↓
+
+Dependency Container
+
+↓
+
+Capability
+
+Benefits:
+
+easier testing
+hot-swapping
+mocking
+version upgrades
+Configuration System
+
+Nothing hardcoded.
+
+Everything configurable.
+
+LLM
+
+Voice
+
+Memory
+
+Vision
+
+Scheduler
+
+Planner
+
+Avatar
+
+Permissions
+
+Profiles could be:
+
+Laptop
+
+Gaming PC
+
+Server
+
+Jetson
+
+Cloud
+
+Robot
+AI Model Abstraction
+
+This is a major long-term decision.
+
+Do not build Aariya around one model.
+
+Instead define a Model Provider interface:
+
+Reason()
+
+Generate()
+
+Embed()
+
+Transcribe()
+
+Speak()
+
+Detect()
+
+Translate()
+
+Summarize()
+
+Then implementations can be:
+
+Local Llama
+Local Qwen
+Local Mistral
+Cloud GPT
+Future open models
+
+The rest of the system never needs to know which model is behind the interface.
+
+What I Would Add Beyond Most AI Architectures
+
+Most agent frameworks stop at planning and tool use.
+
+I would add three platform services from the beginning:
+
+1. Experiment Service
+
+Run A/B tests on planners, prompts, retrieval strategies, or model providers. Measure latency, success rate, and user satisfaction before making changes permanent.
+
+2. Policy Engine
+
+Separate operational policies from code. For example:
+
+Which capabilities can run unattended?
+Which actions always require confirmation?
+What data can leave the local machine?
+
+Changing a policy should not require changing the planner.
+
+3. Provenance Service
+
+Every answer, memory, and action should carry provenance:
+
+Where did this information come from?
+Which capability produced it?
+Which model was used?
+When was it generated?
+How confident is it?
+
+This makes debugging, auditing, and trust much stronger.
+
+The Philosophy
+
+Every major AI system today is centered around a model.
+
+Model
+
+↓
+
+Chat UI
+
+Aariya is different.
+
+User
+
+↓
+
+Conversation
+
+↓
+
+Cognitive Operating System
+
+↓
+
+Capability Ecosystem
+
+↓
+
+Knowledge
+
+↓
+
+Action
+
+The LLM is replaceable.
+
+The architecture is permanent.
+
+The Six Pillars
+1. Cognitive Kernel
+
+The executive brain.
+
+Responsibilities:
+
+reasoning
+planning
+attention
+prioritization
+decision making
+goal management
+
+It never directly controls hardware.
+
+It only thinks.
+
+2. Living Memory Fabric
+
+Not a chat history.
+
+A living memory.
+
+Working Memory
+
+↓
+
+Conversation Memory
+
+↓
+
+Episodic Memory
+
+↓
+
+Semantic Memory
+
+↓
+
+Procedural Memory
+
+↓
+
+Knowledge Graph
+
+↓
+
+Vector Memory
+
+↓
+
+Archive
+
+The memory continuously evolves.
+
+It forgets.
+
+It summarizes.
+
+It reorganizes.
+
+It discovers relationships.
+
+3. Living World Model
+
+The OS always maintains an internal simulation.
+
+It understands:
+
+user
+desktop
+browser
+files
+devices
+robots
+calendar
+projects
+smart home
+environment
+
+The planner reasons over this model instead of querying dozens of APIs every second.
+
+4. Capability Ecosystem
+
+Everything outside the kernel is a capability.
+
+Examples:
+
+Voice
+
+Vision
+
+Browser
+
+Desktop
+
+Coding
+
+OSINT
+
+Finance
+
+Medical
+
+CAD
+
+Robotics
+
+IoT
+
+Future Modules
+
+Each capability is:
+
+installable
+removable
+versioned
+isolated
+sandboxed
+independently testable
+5. Executive Runtime
+
+The runtime behaves like a CPU scheduler for intelligence.
+
+Observe
+
+↓
+
+Think
+
+↓
+
+Plan
+
+↓
+
+Allocate
+
+↓
+
+Execute
+
+↓
+
+Reflect
+
+↓
+
+Learn
+
+↓
+
+Repeat
+
+Everything follows this cycle.
+
+6. Safety & Governance
+
+Safety is not a feature.
+
+It is infrastructure.
+
+Every action passes through:
+
+Intent
+
+↓
+
+Policy
+
+↓
+
+Permission
+
+↓
+
+Simulation
+
+↓
+
+Execution
+
+↓
+
+Audit
+
+This protects both the user and the platform.
+
+The Architecture
+                                    User
+                                      │
+      ┌────────────────────────────────────────────────────┐
+      │                 Interaction Layer                  │
+      │ Chat │ Voice │ Avatar │ Mobile │ Web │ API │ AR/VR │
+      └────────────────────────────────────────────────────┘
+                                      │
+      ┌────────────────────────────────────────────────────┐
+      │              Cognitive Operating System            │
+      │                                                    │
+      │  Executive Runtime                                │
+      │  Cognitive Kernel                                 │
+      │  Planning Engine                                  │
+      │  Goal Executive                                   │
+      │  Attention Manager                                │
+      │  Capability Intelligence Layer                    │
+      └────────────────────────────────────────────────────┘
+                                      │
+      ┌────────────────────────────────────────────────────┐
+      │               Shared Cognitive Services            │
+      │                                                    │
+      │ Memory Fabric                                      │
+      │ World Model                                        │
+      │ Knowledge Graph                                    │
+      │ Reflection Engine                                  │
+      │ Learning Engine                                    │
+      │ Policy Engine                                      │
+      │ Provenance Service                                 │
+      │ Resource Manager                                   │
+      └────────────────────────────────────────────────────┘
+                                      │
+      ┌────────────────────────────────────────────────────┐
+      │                 Event Bus & Blackboard             │
+      └────────────────────────────────────────────────────┘
+                                      │
+      ┌────────────────────────────────────────────────────┐
+      │                Capability Runtime                  │
+      │                                                    │
+      │ Voice │ Vision │ Browser │ Desktop │ Coding        │
+      │ Robotics │ Finance │ Medical │ IoT │ OSINT │ CAD   │
+      └────────────────────────────────────────────────────┘
+                                      │
+      ┌────────────────────────────────────────────────────┐
+      │        Local Tools • External APIs • Devices       │
+      └────────────────────────────────────────────────────┘
+How Aariya Thinks
+
+Unlike a chatbot, Aariya continuously runs a cognitive cycle.
+
+Observe
+
+↓
+
+Understand
+
+↓
+
+Update World Model
+
+↓
+
+Retrieve Memory
+
+↓
+
+Generate Goals
+
+↓
+
+Plan
+
+↓
+
+Execute
+
+↓
+
+Observe Outcome
+
+↓
+
+Reflect
+
+↓
+
+Learn
+
+Thinking is continuous.
+
+Conversation is only one source of observations.
+
+The Evolution Path
+Stage 1 — Assistant
+
+Reactive.
+
+Answers questions.
+
+Stage 2 — Companion
+
+Remembers.
+
+Plans.
+
+Tracks goals.
+
+Maintains context.
+
+Stage 3 — Operator
+
+Uses browser.
+
+Controls desktop.
+
+Writes code.
+
+Automates workflows.
+
+Stage 4 — Collaborator
+
+Works on long-running projects.
+
+Coordinates multiple capabilities.
+
+Manages knowledge.
+
+Provides proactive assistance.
+
+Stage 5 — Cognitive Platform
+
+Supports third-party capabilities.
+
+Runs on multiple devices.
+
+Shares knowledge across environments (under user control).
+
+Provides an SDK for developers.
+
+Becomes an extensible platform rather than a single application.
+
+Principles That Should Never Change
+
+These are the architectural rules I'd keep fixed unless there is a compelling reason to revisit them.
+
+Kernel is independent of capabilities.
+Everything communicates through contracts and events.
+Every capability is replaceable.
+Every action is observable and auditable.
+Memory is layered, not monolithic.
+Knowledge is structured as relationships, not just text.
+Safety is enforced by infrastructure, not by individual capabilities.
+Models are abstracted behind provider interfaces.
+Local-first by default; cloud is optional.
+Every subsystem can be tested in isolation.
+The North Star
+
+The goal isn't to create "the smartest chatbot."
+
+The goal is to build a cognitive platform that can evolve as AI technology evolves.
+
+If a better reasoning model appears in five years, you replace the model provider—not the architecture.
+
+If a new robotics framework becomes standard, you add or replace a capability—not the kernel.
+
+If entirely new interaction methods emerge (AR glasses, humanoid robots, brain-computer interfaces), they become new interfaces on top of the same Cognitive Operating System.
+
+In that sense, the most valuable asset of Aariya won't be any individual model or feature. It will be the stability of its architecture—the set of contracts and principles that let the system grow for years without requiring fundamental rewrites. That's the hallmark of a platform designed for longevity.

@@ -1,0 +1,4377 @@
+The goal is to build a cognitive platform that can evolve as AI technology evolves.
+If a better reasoning model appears in five years, you replace the model provider—not the architecture.
+If a new robotics framework becomes standard, you add or replace a capability—not the kernel.
+If entirely new interaction methods emerge (AR glasses, humanoid robots, brain-computer interfaces), they become new interfaces on top of the same Cognitive Operating System.
+In that sense, the most valuable asset of Aariya won't be any individual model or feature. It will be the stability of its architecture—the set of contracts and principles that let the system grow for years without requiring fundamental rewrites. That's the hallmark of a platform designed for longevity.
+
+
+
+
+
+I recommend a new phase before any more feature development:
+Phase 0 — Aariya Foundation Architecture
+
+This phase becomes the blueprint for everything that follows.
+
+It consists of 10 architecture documents, each followed by production-ready code.
+
+Step 1 — Vision & Core Principles
+
+Goal
+
+Define what Aariya is and what it will never become.
+
+Deliverables:
+
+Mission Statement
+Long-Term Vision
+Design Principles
+Core Values
+Non-goals
+Future Evolution Rules
+
+Code:
+
+core/constants.py
+core/config.py
+core/version.py
+Step 2 — Kernel Architecture
+
+This defines the permanent heart of Aariya.
+
+We'll design:
+
+AARIYA KERNEL
+
+Runtime Scheduler
+
+Event Bus
+
+Memory Manager
+
+Capability Registry
+
+Permission Engine
+
+State Manager
+
+Configuration Manager
+
+Health Monitor
+
+Logging System
+
+Plugin Loader
+
+Code:
+
+kernel/
+    runtime.py
+    scheduler.py
+    event_bus.py
+    registry.py
+    state.py
+    lifecycle.py
+Step 3 — Capability Standard
+
+Every capability must obey the same rules.
+
+Example
+
+class Capability:
+
+    async def initialize(self):
+        pass
+
+    async def execute(self, request):
+        pass
+
+    async def pause(self):
+        pass
+
+    async def resume(self):
+        pass
+
+    async def shutdown(self):
+        pass
+
+    def health(self):
+        pass
+
+Then
+
+Vision
+
+Speech
+
+Planning
+
+OSINT
+
+Learning
+
+Emotion
+
+Robotics
+
+Critical Thinking
+
+all work identically.
+
+Step 4 — Event Bus
+
+Everything communicates through events.
+
+Example
+
+Memory Updated
+
+Emotion Changed
+
+User Spoke
+
+Planner Finished
+
+Robot Arrived
+
+Vision Detected Person
+
+Speech Started
+
+Speech Ended
+
+Code
+
+event_bus.publish(...)
+
+event_bus.subscribe(...)
+
+No module directly calls another.
+
+Step 5 — Runtime Scheduler
+
+This controls execution order.
+
+Example
+
+Sensors
+
+↓
+
+Memory
+
+↓
+
+Thinking
+
+↓
+
+Planning
+
+↓
+
+Decision
+
+↓
+
+Emotion
+
+↓
+
+Expression
+
+↓
+
+Speech
+
+↓
+
+Avatar
+
+↓
+
+Robotics
+
+We'll implement:
+
+Priority queues
+
+Task scheduling
+
+Parallel execution
+
+Cancellation
+
+Timeouts
+
+Retries
+
+Step 6 — Memory System
+
+Design
+
+Working Memory
+
+↓
+
+Episodic Memory
+
+↓
+
+Semantic Memory
+
+↓
+
+Knowledge Graph
+
+↓
+
+Vector Database
+
+↓
+
+Archive
+
+We'll implement
+
+Memory retrieval
+
+Importance scoring
+
+Forgetting
+
+Consolidation
+
+Belief tracking
+
+Contradiction detection
+
+Step 7 — Permission & Safety
+
+Every action goes through
+
+Planner
+
+↓
+
+Policy Engine
+
+↓
+
+Permission Manager
+
+↓
+
+Executor
+
+We'll build
+
+Permission Rules
+
+Approval Flow
+
+Risk Scores
+
+Safe Execution
+
+Rollback
+
+Step 8 — Context Engine
+
+Aariya must know
+
+Current task
+
+Conversation
+
+Goals
+
+Location
+
+Time
+
+Emotion
+
+Available tools
+
+Resources
+
+Every capability reads the same context.
+
+Step 9 — Plugin System
+
+Every new feature becomes
+
+plugins/
+
+vision/
+
+robotics/
+
+critical_thinking/
+
+learning/
+
+calendar/
+
+email/
+
+browser/
+
+osint/
+
+games/
+
+music/
+
+Install
+
+Remove
+
+Update
+
+Disable
+
+without touching the kernel.
+
+Step 10 — Development Rules
+
+Every future module must include
+
+README
+
+Tests
+
+Health Check
+
+Configuration
+
+Metrics
+
+Documentation
+
+API
+
+Lifecycle
+
+This prevents architectural decay as the project grows.
+
+Then We Build the Cognitive Layer
+
+Only after the platform is stable:
+
+Phase 1
+
+Memory
+Reasoning
+Planning
+Reflection
+Critical Thinking
+
+Phase 2
+
+Personality
+Emotion
+Social Intelligence
+
+Phase 3
+
+Voice
+Vision
+Avatar
+Gestures
+
+Phase 4
+
+Robotics
+Sensors
+Navigation
+
+Phase 5
+
+Self-learning
+Skill acquisition
+Plugin marketplace
+Evolution system
+
+
+STEP 1 — Vision & Core Principles (Complete Foundation)
+
+This document is the constitution of Aariya. Every future decision should align with it.
+
+1.1 Mission Statement
+Aariya is a modular Cognitive Operating System designed to provide intelligent reasoning, long-term memory, autonomous planning, natural interaction, and continuous evolution through replaceable capabilities.
+
+Its architecture is built to outlive individual AI models, allowing future technologies to integrate without requiring fundamental redesign.
+1.2 Long-Term Vision
+Today's AI:
+        GPT
+Tomorrow:
+        Better LLM
+Future:
+        AGI-like Systems
+Later:
+        Robotics
+Later:
+        AR/VR
+Later:
+        Brain Interfaces
+
+↓
+
+AARIYA KERNEL NEVER CHANGES
+
+Rule #1
+
+Technology changes.
+
+Architecture remains.
+
+1.3 Core Principles
+Principle 1 — Modular
+
+Everything is a module.
+
+Speech
+
+Vision
+
+Emotion
+
+Planning
+
+Memory
+
+Learning
+
+OSINT
+
+Critical Thinking
+
+Avatar
+
+Robotics
+
+None of these belong inside the Kernel.
+
+Principle 2 — Replaceable
+
+Nothing depends on a specific AI.
+
+Wrong:
+
+Planner
+    ↓
+GPT
+
+Correct:
+
+Planner
+
+↓
+
+Reasoning Provider
+
+↓
+
+OpenAI
+Llama
+Qwen
+DeepSeek
+Future AI
+Principle 3 — Event Driven
+
+Nothing directly controls another module.
+
+Wrong
+
+Vision
+
+↓
+
+Memory
+
+Correct
+
+Vision
+
+↓
+
+Event Bus
+
+↓
+
+Memory
+Planner
+Emotion
+Avatar
+Logger
+Principle 4 — Context First
+
+Every decision uses the same context.
+
+Current Goal
+
+Conversation
+
+Memory
+
+Emotion
+
+Environment
+
+Permissions
+
+Time
+
+↓
+
+Reasoning
+Principle 5 — Safety First
+
+No module executes actions directly.
+
+Instead
+
+Planner
+
+↓
+
+Policy Engine
+
+↓
+
+Permission Manager
+
+↓
+
+Executor
+Principle 6 — Explainability
+
+Every important decision should answer:
+
+Why?
+
+Which memory?
+
+Which goal?
+
+Which capability?
+
+Confidence?
+
+Risk?
+Principle 7 — Observable
+
+Everything is measurable.
+
+CPU
+
+Memory
+
+Response Time
+
+Agent Health
+
+Reasoning Time
+
+Emotion State
+
+Memory Hits
+
+Errors
+Principle 8 — Evolvable
+
+Every capability should be removable.
+
+Disable Vision
+
+↓
+
+System still works
+Replace Speech
+
+↓
+
+No rewrite needed
+1.4 Core Values
+
+Aariya should always strive to be:
+
+Helpful
+Honest about uncertainty
+Modular
+Secure
+Explainable
+Extensible
+Reliable
+Privacy-conscious (especially if running locally)
+Maintainable
+1.5 Non-Goals
+
+These are things the architecture deliberately avoids.
+
+❌ One giant AI class
+
+❌ Tight coupling
+
+❌ Hidden global state
+
+❌ Model-specific logic everywhere
+
+❌ Hardcoded providers
+
+❌ Circular dependencies
+
+❌ Feature-specific hacks
+
+1.6 Development Philosophy
+
+Every feature answers these questions:
+
+Why?
+
+Can it be replaced?
+
+Can it fail safely?
+
+Can it be tested?
+
+Can it scale?
+
+Does it belong in the kernel?
+
+Or is it a plugin?
+1.7 Kernel Responsibilities
+
+The Kernel ONLY handles platform concerns.
+
+Kernel
+
+├── Runtime
+├── Event Bus
+├── Scheduler
+├── Registry
+├── State
+├── Configuration
+├── Logging
+├── Health
+├── Lifecycle
+└── Permissions
+
+Nothing else.
+
+1.8 Capability Responsibilities
+
+Capabilities provide intelligence.
+
+Memory
+
+Planning
+
+Vision
+
+Speech
+
+Learning
+
+OSINT
+
+Critical Thinking
+
+Emotion
+
+Avatar
+
+Robotics
+
+Each capability is independent.
+
+1.9 Golden Rules
+
+These are absolute rules for the project.
+
+Rule 1
+
+Kernel never imports capabilities.
+
+Always:
+
+Capability
+
+↓
+
+Kernel Interface
+
+Never:
+
+Kernel
+
+↓
+
+Vision
+Rule 2
+
+Capabilities never communicate directly.
+
+Always
+
+Capability A
+
+↓
+
+Event Bus
+
+↓
+
+Capability B
+Rule 3
+
+Every capability has a lifecycle.
+
+Initialize
+
+↓
+
+Start
+
+↓
+
+Pause
+
+↓
+
+Resume
+
+↓
+
+Stop
+
+↓
+
+Shutdown
+Rule 4
+
+Everything is logged.
+
+Task Started
+
+Task Finished
+
+Memory Retrieved
+
+Planning Failed
+
+Speech Started
+
+Emotion Changed
+Rule 5
+
+No magic numbers.
+
+Everything comes from configuration.
+
+1.10 Repository Structure (Version 1)
+Aariya/
+
+├── kernel/
+│   ├── runtime/
+│   ├── scheduler/
+│   ├── events/
+│   ├── registry/
+│   ├── lifecycle/
+│   ├── state/
+│   ├── logging/
+│   ├── permissions/
+│   └── health/
+│
+├── capabilities/
+│   ├── memory/
+│   ├── planner/
+│   ├── reasoning/
+│   ├── critical_thinking/
+│   ├── emotion/
+│   ├── speech/
+│   ├── vision/
+│   ├── avatar/
+│   ├── robotics/
+│   ├── learning/
+│   └── osint/
+│
+├── providers/
+│   ├── llm/
+│   ├── speech/
+│   ├── vision/
+│   └── embeddings/
+│
+├── interfaces/
+├── plugins/
+├── api/
+├── ui/
+├── configs/
+├── tests/
+├── docs/
+└── tools/
+
+
+STEP 2 — Designing the Aariya Kernel (Production Architecture)
+
+This is the most important part of the entire project.
+
+If the kernel is designed correctly, you should be able to replace:
+
+GPT → Qwen
+Qwen → Future AI
+Desktop → Robot
+Avatar → AR Glasses
+
+without rewriting the rest of the system.
+
+2.1 What is the Kernel?
+
+The Kernel is not intelligent.
+
+It doesn't think.
+
+It doesn't remember.
+
+It doesn't speak.
+
+It only manages the system.
+
+Think of it like the Linux kernel.
+
+Applications
+      ▲
+Capabilities
+      ▲
+Aariya Kernel
+      ▲
+Operating System
+2.2 Kernel Responsibilities
+
+The Kernel owns exactly these responsibilities:
+
+Runtime
+
+Scheduler
+
+Event Bus
+
+State
+
+Capability Registry
+
+Lifecycle
+
+Configuration
+
+Logging
+
+Health Monitoring
+
+Permission System
+
+Dependency Injection
+
+Nothing else.
+
+2.3 Final Kernel Architecture
+kernel/
+
+│
+
+├── runtime/
+
+│      runtime.py
+
+│
+
+├── scheduler/
+
+│      scheduler.py
+
+│
+
+├── events/
+
+│      event_bus.py
+
+│      event.py
+
+│
+
+├── registry/
+
+│      registry.py
+
+│
+
+├── lifecycle/
+
+│      lifecycle.py
+
+│
+
+├── permissions/
+
+│      policy.py
+
+│      permission_manager.py
+
+│
+
+├── state/
+
+│      state.py
+
+│
+
+├── config/
+
+│      config.py
+
+│
+
+├── health/
+
+│      health_monitor.py
+
+│
+
+├── logging/
+
+│      logger.py
+
+│
+
+├── dependency/
+
+│      container.py
+
+│
+
+└── kernel.py
+2.4 Runtime
+
+The runtime is the heartbeat.
+
+while True:
+
+    Update Sensors
+
+    Process Events
+
+    Execute Scheduler
+
+    Update State
+
+    Run Health Check
+
+    Sleep
+
+It never contains business logic.
+
+runtime.py
+from kernel.scheduler.scheduler import Scheduler
+from kernel.events.event_bus import EventBus
+
+class Runtime:
+
+    def __init__(self):
+
+        self.scheduler = Scheduler()
+
+        self.event_bus = EventBus()
+
+        self.running = False
+
+    async def start(self):
+
+        self.running = True
+
+        while self.running:
+
+            await self.scheduler.tick()
+
+            await self.event_bus.process()
+
+    def stop(self):
+
+        self.running = False
+2.5 Scheduler
+
+The scheduler decides execution order.
+
+Example
+
+HIGH
+
+Sensors
+
+Safety
+
+Memory
+
+Planner
+
+----------------
+
+NORMAL
+
+Speech
+
+Avatar
+
+Vision
+
+----------------
+
+LOW
+
+Analytics
+
+Learning
+
+Cleanup
+
+Scheduler never knows what the task is.
+
+Only priority.
+
+scheduler.py
+import heapq
+
+class Scheduler:
+
+    def __init__(self):
+
+        self.queue=[]
+
+    def add_task(self,priority,task):
+
+        heapq.heappush(self.queue,(priority,task))
+
+    async def tick(self):
+
+        while self.queue:
+
+            _,task=heapq.heappop(self.queue)
+
+            await task()
+2.6 Event Bus
+
+Everything communicates through events.
+
+Never directly.
+
+Vision
+
+↓
+
+Event
+
+↓
+
+Memory
+
+Planner
+
+Avatar
+
+Logger
+event.py
+from dataclasses import dataclass
+from typing import Any
+
+@dataclass
+class Event:
+
+    name:str
+
+    payload:Any
+event_bus.py
+from collections import defaultdict
+
+class EventBus:
+
+    def __init__(self):
+
+        self.listeners=defaultdict(list)
+
+        self.queue=[]
+
+    def subscribe(self,event,handler):
+
+        self.listeners[event].append(handler)
+
+    def publish(self,event):
+
+        self.queue.append(event)
+
+    async def process(self):
+
+        while self.queue:
+
+            event=self.queue.pop(0)
+
+            for handler in self.listeners[event.name]:
+
+                await handler(event)
+2.7 Capability Registry
+
+Instead of
+
+planner=Planner()
+
+memory=Memory()
+
+speech=Speech()
+
+Use
+
+Registry
+
+↓
+
+Planner
+
+↓
+
+Memory
+
+↓
+
+Speech
+registry.py
+class CapabilityRegistry:
+
+    def __init__(self):
+
+        self.capabilities={}
+
+    def register(self,name,obj):
+
+        self.capabilities[name]=obj
+
+    def get(self,name):
+
+        return self.capabilities.get(name)
+
+    def remove(self,name):
+
+        self.capabilities.pop(name,None)
+2.8 Lifecycle Manager
+
+Every capability follows one lifecycle.
+
+Created
+
+↓
+
+Initialized
+
+↓
+
+Running
+
+↓
+
+Paused
+
+↓
+
+Stopped
+
+↓
+
+Shutdown
+
+No exceptions.
+
+lifecycle.py
+from enum import Enum
+
+class Lifecycle(Enum):
+
+    CREATED=1
+
+    INITIALIZED=2
+
+    RUNNING=3
+
+    PAUSED=4
+
+    STOPPED=5
+
+    SHUTDOWN=6
+2.9 State Manager
+
+One shared system state.
+
+Conversation
+
+Emotion
+
+Goal
+
+Active Tasks
+
+Resources
+
+User
+
+Permissions
+state.py
+class StateManager:
+
+    def __init__(self):
+
+        self.state={}
+
+    def set(self,key,value):
+
+        self.state[key]=value
+
+    def get(self,key):
+
+        return self.state.get(key)
+2.10 Dependency Injection Container
+
+Never instantiate services manually inside modules.
+
+Instead
+
+Container
+
+↓
+
+Memory
+
+↓
+
+Planner
+
+↓
+
+Vision
+container.py
+class Container:
+
+    def __init__(self):
+
+        self.services={}
+
+    def register(self,name,obj):
+
+        self.services[name]=obj
+
+    def resolve(self,name):
+
+        return self.services[name]
+2.11 Health Monitor
+
+Every module reports health.
+
+Memory
+
+OK
+
+Speech
+
+OK
+
+Vision
+
+WARNING
+
+Planner
+
+OK
+
+OSINT
+
+ERROR
+health_monitor.py
+class HealthMonitor:
+
+    def __init__(self):
+
+        self.health={}
+
+    def update(self,name,status):
+
+        self.health[name]=status
+
+    def report(self):
+
+        return self.health
+2.12 Logger
+
+Every action becomes an event log.
+
+10:41
+
+Planner Started
+
+10:41
+
+Memory Retrieved
+
+10:41
+
+Vision Updated
+
+10:41
+
+Speech Generated
+
+10:41
+
+Avatar Blinked
+
+A production implementation should use Python's logging module with structured (JSON) logs so they can be searched and analyzed.
+
+2.13 Boot Sequence
+
+The startup order should always be deterministic.
+
+Load Configuration
+        │
+Initialize Logger
+        │
+Initialize Dependency Container
+        │
+Start Event Bus
+        │
+Start State Manager
+        │
+Load Capability Registry
+        │
+Initialize Capabilities
+        │
+Run Health Checks
+        │
+Start Runtime Loop
+        │
+System Ready
+2.14 Shutdown Sequence
+
+A clean shutdown prevents data loss.
+
+Stop Accepting New Tasks
+        │
+Drain Event Queue
+        │
+Pause Scheduler
+        │
+Save State
+        │
+Persist Memory
+        │
+Shutdown Capabilities
+        │
+Close External Connections
+        │
+Exit Runtime
+2.15 Kernel Rules (Non-Negotiable)
+The kernel never imports a capability directly.
+Capabilities communicate only through the Event Bus or well-defined service interfaces.
+The scheduler knows when to run work, not what the work means.
+Shared state is managed through the State Manager, not global variables.
+Every capability implements the same lifecycle.
+Every important action is logged.
+Failures in one capability should not crash the kernel.
+All external dependencies (LLMs, databases, TTS, vision models) are accessed through provider interfaces.
+
+
+STEP 3 — Capability Architecture (The Plugin System)
+
+This is where Aariya stops being "just software" and becomes a true Cognitive Operating System.
+
+The Kernel should never know what a capability does. It only knows how to manage it.
+
+3.1 Philosophy
+
+Think of capabilities like apps on a phone.
+
+Kernel
+      │
+      ├──────────────┐
+      │              │
+  Capability A   Capability B
+      │              │
+      └──────────────┘
+            Event Bus
+
+The Kernel doesn't care whether the capability is:
+
+Memory
+Vision
+Speech
+Robotics
+Planning
+Critical Thinking
+Future AI
+
+It manages them all the same way.
+
+3.2 Capability Folder Structure
+capabilities/
+
+    memory/
+
+        manifest.yaml
+
+        capability.py
+
+        config.py
+
+        events.py
+
+        api.py
+
+        health.py
+
+        tests/
+
+        README.md
+
+    planner/
+
+    speech/
+
+    vision/
+
+    emotion/
+
+    osint/
+
+    robotics/
+
+    critical_thinking/
+
+Every capability has the same layout.
+
+3.3 Capability Lifecycle
+
+Every capability must implement the same lifecycle.
+
+Installed
+
+↓
+
+Discovered
+
+↓
+
+Loaded
+
+↓
+
+Initialized
+
+↓
+
+Running
+
+↓
+
+Paused
+
+↓
+
+Stopped
+
+↓
+
+Shutdown
+
+↓
+
+Unloaded
+
+No exceptions.
+
+3.4 Base Capability Class
+from abc import ABC, abstractmethod
+
+class Capability(ABC):
+
+    @abstractmethod
+    async def initialize(self):
+        pass
+
+    @abstractmethod
+    async def start(self):
+        pass
+
+    @abstractmethod
+    async def execute(self, request):
+        pass
+
+    @abstractmethod
+    async def pause(self):
+        pass
+
+    @abstractmethod
+    async def resume(self):
+        pass
+
+    @abstractmethod
+    async def stop(self):
+        pass
+
+    @abstractmethod
+    async def shutdown(self):
+        pass
+
+    @abstractmethod
+    async def health(self):
+        pass
+
+Every capability inherits this class.
+
+3.5 Capability Manifest
+
+Each capability describes itself with a manifest.
+
+manifest.yaml
+
+id: memory
+
+name: Memory Engine
+
+version: 1.0.0
+
+author: Aariya Team
+
+priority: HIGH
+
+enabled: true
+
+dependencies:
+  - event_bus
+  - state_manager
+
+permissions:
+  - read_memory
+  - write_memory
+
+events:
+  publishes:
+    - memory.updated
+    - memory.deleted
+
+  subscribes:
+    - conversation.completed
+
+The Kernel reads this instead of hardcoding information.
+
+3.6 Capability Registry
+
+The registry stores metadata.
+
+class CapabilityInfo:
+
+    def __init__(
+        self,
+        id,
+        version,
+        status,
+        instance
+    ):
+        self.id=id
+        self.version=version
+        self.status=status
+        self.instance=instance
+3.7 Automatic Discovery
+
+Instead of manually importing every module:
+
+memory.py
+
+planner.py
+
+vision.py
+
+The Kernel scans:
+
+capabilities/
+
+↓
+
+Find manifest.yaml
+
+↓
+
+Import capability.py
+
+↓
+
+Register
+
+↓
+
+Initialize
+
+Adding a new capability requires no kernel changes.
+
+3.8 Dependency Resolution
+
+Example
+
+Planner
+
+↓
+
+Memory
+
+↓
+
+Reasoning
+
+↓
+
+LLM
+
+The Kernel resolves dependencies before startup.
+
+Example:
+
+Planner
+
+requires:
+
+Memory
+
+Reasoning
+
+↓
+
+Start Memory
+
+↓
+
+Start Reasoning
+
+↓
+
+Start Planner
+3.9 Event Registration
+
+During startup:
+
+Memory
+
+↓
+
+subscribe(memory.store)
+
+↓
+
+Event Bus
+
+Planner
+
+↓
+
+subscribe(plan.request)
+
+↓
+
+Event Bus
+
+Speech
+
+↓
+
+subscribe(response.generated)
+
+↓
+
+Event Bus
+
+Everything becomes loosely coupled.
+
+3.10 Capability Health
+
+Every capability reports:
+
+{
+    "status":"healthy",
+
+    "cpu":4.2,
+
+    "memory":512,
+
+    "errors":0,
+
+    "latency":12,
+
+    "uptime":5234
+}
+
+The Health Monitor collects this automatically.
+
+3.11 Capability Configuration
+
+Never hardcode settings.
+
+Each capability has:
+
+config.yaml
+
+Example
+
+embedding_model: bge-large
+
+cache_size: 500
+
+timeout: 20
+
+retry: 3
+3.12 Capability API
+
+Every capability exposes a small public interface.
+
+Example
+
+Memory
+
+store()
+
+retrieve()
+
+delete()
+
+search()
+
+summarize()
+
+Planner
+
+create_plan()
+
+cancel_plan()
+
+evaluate()
+
+execute()
+
+Speech
+
+speak()
+
+stop()
+
+change_voice()
+
+Everything else stays private.
+
+3.13 Error Isolation
+
+One capability must never crash the platform.
+
+Wrong
+
+Vision crashed
+
+↓
+
+Entire system crashes
+
+Correct
+
+Vision crashed
+
+↓
+
+Restart Vision
+
+↓
+
+Everything else continues
+
+The Kernel supervises capabilities.
+
+3.14 Hot Reload
+
+Eventually you should be able to:
+
+Unload Vision
+
+↓
+
+Replace files
+
+↓
+
+Reload Vision
+
+↓
+
+Continue running
+
+No restart required.
+
+3.15 Capability Communication
+
+Never do:
+
+Planner
+
+↓
+
+Memory.store()
+
+↓
+
+Vision.detect()
+
+↓
+
+Speech.say()
+
+Instead:
+
+Planner
+
+↓
+
+Publish Event
+
+↓
+
+Memory
+
+↓
+
+Vision
+
+↓
+
+Speech
+
+Loose coupling keeps the architecture maintainable.
+
+3.16 Capability Categories
+
+Organize capabilities by responsibility.
+
+Core Intelligence
+
+Memory
+
+Planner
+
+Reasoning
+
+Critical Thinking
+
+Learning
+
+-------------------
+
+Perception
+
+Vision
+
+Speech Recognition
+
+Audio
+
+Sensors
+
+-------------------
+
+Expression
+
+Speech
+
+Avatar
+
+Animation
+
+Emotion
+
+-------------------
+
+Tools
+
+Browser
+
+Email
+
+Calendar
+
+OSINT
+
+Filesystem
+
+Database
+
+-------------------
+
+Robotics
+
+Navigation
+
+Motor Control
+
+Camera
+
+SLAM
+
+Actuators
+3.17 Capability Permissions
+
+Each capability receives only the permissions it needs.
+
+Example
+
+Memory
+
+Read
+
+Write
+
+Speech
+
+Audio Output
+
+Browser
+
+Internet Access
+
+OSINT
+
+Internet
+
+Filesystem
+
+This principle of least privilege reduces the impact of bugs or compromised modules.
+
+3.18 Capability Versioning
+
+Each capability should declare:
+
+Major
+
+Minor
+
+Patch
+
+Example
+
+2.4.1
+
+Kernel verifies compatibility before loading.
+
+3.19 Capability State Machine
+Installed
+
+↓
+
+Loaded
+
+↓
+
+Initialized
+
+↓
+
+Running
+
+↓
+
+Paused
+
+↓
+
+Running
+
+↓
+
+Stopping
+
+↓
+
+Shutdown
+
+↓
+
+Unloaded
+
+The Kernel is the only component allowed to change a capability's state.
+
+
+STEP 4 — Enterprise Event Bus (The Nervous System of Aariya)
+
+If the Kernel is the heart, the Event Bus is the nervous system.
+
+Every thought, perception, memory update, emotion change, speech request, and robot action should flow through the Event Bus.
+
+4.1 Why an Event Bus?
+
+Without one:
+
+Vision
+   ↓
+Memory
+   ↓
+Planner
+   ↓
+Speech
+
+This creates tight coupling.
+
+With an Event Bus:
+
+Vision
+      │
+      ▼
+ Event Bus
+ ┌────┼────┐
+ ▼    ▼    ▼
+Memory Planner Logger
+            ▼
+         Speech
+
+Modules don't know who is listening.
+
+4.2 Architecture
+                    Runtime
+
+                       │
+
+                       ▼
+
+                 Event Manager
+
+                       │
+
+      ┌────────────────┼───────────────┐
+
+      ▼                ▼               ▼
+
+ Event Queue     Event Router     Dead Letter Queue
+
+      │                │
+
+      ▼                ▼
+
+ Priority Queue    Subscribers
+
+      │
+
+      ▼
+
+ Capability Handlers
+4.3 Event Structure
+
+Every event must look identical.
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+import uuid
+
+@dataclass
+class Event:
+
+    id: str
+
+    name: str
+
+    source: str
+
+    payload: Any
+
+    timestamp: datetime
+
+    priority: int
+
+    correlation_id: str
+
+    reply_to: str | None = None
+
+Example
+
+Event
+
+id:
+83472
+
+name:
+memory.store
+
+source:
+planner
+
+payload:
+{"text":"User likes coffee"}
+
+priority:
+2
+
+correlation_id:
+conversation_481
+4.4 Event Priorities
+
+Not all events are equal.
+
+CRITICAL
+
+Safety
+
+Emergency Stop
+
+Permission Denied
+
+-------------------
+
+HIGH
+
+Planner
+
+Memory
+
+Reasoning
+
+-------------------
+
+NORMAL
+
+Speech
+
+Vision
+
+Avatar
+
+-------------------
+
+LOW
+
+Analytics
+
+Logging
+
+Learning
+
+Cleanup
+
+Scheduler processes higher priorities first.
+
+4.5 Publish / Subscribe
+
+Publisher
+
+event_bus.publish(
+    Event(
+        name="memory.store",
+        source="planner",
+        payload={"text":"Remember this"}
+    )
+)
+
+Subscriber
+
+@subscribe("memory.store")
+
+async def save_memory(event):
+
+    ...
+
+Publisher never knows who receives it.
+
+4.6 Request / Response Pattern
+
+Some events expect replies.
+
+Planner
+
+↓
+
+memory.retrieve
+
+↓
+
+Memory
+
+↓
+
+Planner
+
+Instead of direct calls.
+
+Example
+
+response = await bus.request(
+    "memory.retrieve",
+    payload={"query":"favorite drink"}
+)
+4.7 Broadcast Pattern
+
+One event.
+
+Many listeners.
+
+Speech Finished
+
+↓
+
+Planner
+
+Avatar
+
+Logger
+
+Emotion
+
+Analytics
+
+No duplicated code.
+
+4.8 Sticky Events
+
+Some events should remain available.
+
+Example
+
+Current User
+
+↓
+
+Sticky Event
+
+↓
+
+New Capability Loads
+
+↓
+
+Reads Current User
+
+Without querying everything again.
+
+4.9 Delayed Events
+
+Useful for reminders.
+
+Now
+
+↓
+
+Publish
+
+↓
+
+Execute after 5 minutes
+
+Example
+
+Reminder
+
+↓
+
+Take medicine
+
+↓
+
+Tomorrow 9AM
+4.10 Event Replay
+
+Store events.
+
+Replay later.
+
+Conversation
+
+↓
+
+Events
+
+↓
+
+Database
+
+↓
+
+Replay
+
+Useful for
+
+Debugging
+
+Training
+
+Testing
+
+Learning
+
+4.11 Dead Letter Queue
+
+Never lose failed events.
+
+Publish
+
+↓
+
+Handler Failed
+
+↓
+
+Dead Letter Queue
+
+↓
+
+Retry
+
+Nothing disappears silently.
+
+4.12 Retry Policy
+Attempt 1
+
+↓
+
+Fail
+
+↓
+
+1 second
+
+↓
+
+Attempt 2
+
+↓
+
+Fail
+
+↓
+
+5 seconds
+
+↓
+
+Attempt 3
+
+↓
+
+Dead Letter Queue
+4.13 Event Persistence
+
+Important events should be stored.
+
+Memory Stored
+
+Conversation Ended
+
+Goal Completed
+
+Permission Denied
+
+System Error
+
+Useful for:
+
+Learning
+
+Recovery
+
+Auditing
+
+4.14 Event Categories
+System
+
+Runtime Started
+
+Runtime Stopped
+
+Health Updated
+
+-------------------
+
+Memory
+
+Store
+
+Delete
+
+Retrieve
+
+Summarize
+
+-------------------
+
+Planning
+
+Plan Created
+
+Plan Finished
+
+Goal Updated
+
+-------------------
+
+Speech
+
+Started
+
+Finished
+
+Interrupted
+
+-------------------
+
+Emotion
+
+Changed
+
+Suppressed
+
+Amplified
+
+-------------------
+
+Vision
+
+Person Detected
+
+Object Detected
+
+Scene Updated
+
+-------------------
+
+Robotics
+
+Motor Started
+
+Navigation Finished
+
+Obstacle Detected
+
+-------------------
+
+Security
+
+Permission Granted
+
+Permission Denied
+
+Policy Triggered
+4.15 Correlation IDs
+
+One user request may create dozens of events.
+
+Example
+
+User says:
+
+"Email John"
+
+↓
+
+Speech Recognized
+
+↓
+
+Planner
+
+↓
+
+Permission Check
+
+↓
+
+Email Tool
+
+↓
+
+Confirmation
+
+↓
+
+Speech Response
+
+Every event gets
+
+correlation_id
+
+conversation_9481
+
+Now debugging becomes simple.
+
+4.16 Event Monitoring
+
+Dashboard should show
+
+Events/sec
+
+Queue Size
+
+Subscribers
+
+Failed Events
+
+Average Delay
+
+Slowest Handler
+
+Dead Letter Count
+
+Memory Usage
+4.17 Security
+
+Capabilities cannot publish everything.
+
+Example
+
+Speech
+
+Allowed
+
+speech.started
+
+speech.finished
+
+Not allowed
+
+permission.granted
+
+Kernel verifies permissions before accepting an event.
+
+4.18 Event Flow Example
+
+User says
+
+"Remember I like tea."
+
+Flow
+
+Speech Recognition
+
+↓
+
+speech.recognized
+
+↓
+
+Planner
+
+↓
+
+memory.store.request
+
+↓
+
+Memory
+
+↓
+
+memory.store.completed
+
+↓
+
+Planner
+
+↓
+
+speech.generate
+
+↓
+
+Speech
+
+↓
+
+speech.finished
+
+↓
+
+Logger
+
+↓
+
+Analytics
+
+No module directly calls another.
+
+4.19 Production Folder Structure
+kernel/events/
+
+event.py
+
+event_bus.py
+
+dispatcher.py
+
+router.py
+
+subscriber.py
+
+publisher.py
+
+middleware.py
+
+priority_queue.py
+
+dead_letter.py
+
+persistence.py
+
+replay.py
+
+metrics.py
+4.20 Middleware Pipeline
+
+Every event passes through middleware.
+
+Incoming Event
+
+↓
+
+Permission Check
+
+↓
+
+Validation
+
+↓
+
+Logging
+
+↓
+
+Metrics
+
+↓
+
+Tracing
+
+↓
+
+Dispatch
+
+↓
+
+Subscribers
+
+Adding middleware never changes capabilities.
+
+4.21 Event Bus Rules
+
+These rules keep the system robust:
+
+Capabilities never call each other directly.
+Every event has a unique ID and timestamp.
+Every event has a correlation ID.
+Events are immutable after publication.
+Handlers should be idempotent where practical (safe to retry).
+Failed events go to the Dead Letter Queue.
+Long-running handlers should execute asynchronously.
+Business logic belongs in capabilities, not in the Event Bus.
+The Event Bus routes events; it does not make decisions.
+Every event can be traced from creation to completion.
+
+
+STEP 5 — Runtime Scheduler & Task Orchestration (The Executive Brain)
+
+At this point, Aariya has:
+
+✅ Vision
+✅ Kernel
+✅ Capability System
+✅ Event Bus
+
+Now we build the Runtime Scheduler.
+
+This is not the Planner.
+
+This is not the LLM.
+
+This is the operating system's Executive Manager.
+
+It decides:
+
+What runs
+When it runs
+How long it runs
+Which resources it gets
+Whether it should be paused
+Whether it should be cancelled
+
+Think of it as the CPU scheduler of Aariya.
+
+5.1 Overall Architecture
+                    Runtime
+
+                       │
+
+                       ▼
+
+              Runtime Scheduler
+
+        ┌─────────────┼─────────────┐
+
+        ▼             ▼             ▼
+
+  Task Queue     Resource Manager   Timer
+
+        │
+
+        ▼
+
+ Dependency Manager
+
+        │
+
+        ▼
+
+ Execution Engine
+
+        │
+
+        ▼
+
+ Capability
+5.2 Responsibilities
+
+The Scheduler is responsible for:
+
+Scheduling tasks
+Managing priorities
+Executing tasks
+Cancelling tasks
+Retrying failed tasks
+Monitoring deadlines
+Resource allocation
+Dependency resolution
+Background processing
+Real-time execution
+
+It never decides what should be done.
+
+That is the Planner's responsibility.
+
+5.3 Task Lifecycle
+
+Every task has the same lifecycle.
+
+Created
+
+↓
+
+Queued
+
+↓
+
+Waiting Dependencies
+
+↓
+
+Running
+
+↓
+
+Paused
+
+↓
+
+Running
+
+↓
+
+Completed
+
+↓
+
+Archived
+
+Or
+
+Running
+
+↓
+
+Failed
+
+↓
+
+Retry
+
+↓
+
+Completed
+5.4 Task Model
+
+Every task is standardized.
+
+from dataclasses import dataclass
+from datetime import datetime
+from uuid import UUID
+
+@dataclass
+class Task:
+
+    id: UUID
+
+    name: str
+
+    priority: int
+
+    capability: str
+
+    payload: dict
+
+    created_at: datetime
+
+    deadline: datetime | None
+
+    timeout: float | None
+
+    retries: int
+
+    correlation_id: str
+
+Every task in Aariya uses this model.
+
+5.5 Task Priorities
+Priority 0
+
+Emergency Stop
+
+Safety
+
+Shutdown
+
+-------------------
+
+Priority 1
+
+Speech
+
+Planner
+
+Memory
+
+Reasoning
+
+-------------------
+
+Priority 2
+
+Vision
+
+Avatar
+
+Navigation
+
+-------------------
+
+Priority 3
+
+Learning
+
+Analytics
+
+Cleanup
+
+-------------------
+
+Priority 4
+
+Maintenance
+
+Compression
+
+Garbage Collection
+
+Lower numbers = higher priority.
+
+5.6 Scheduler Queues
+
+Never use one queue.
+
+Instead:
+
+Emergency Queue
+
+↓
+
+Critical Queue
+
+↓
+
+Normal Queue
+
+↓
+
+Background Queue
+
+↓
+
+Maintenance Queue
+
+Each queue has independent workers.
+
+5.7 Execution Flow
+
+Example:
+
+User says
+
+"Open Spotify."
+
+Speech Recognition
+
+↓
+
+Planner
+
+↓
+
+Permission Check
+
+↓
+
+Browser Capability
+
+↓
+
+Confirmation
+
+↓
+
+Speech
+
+↓
+
+Avatar
+
+Each step is its own scheduled task.
+
+5.8 Parallel Execution
+
+Many tasks don't depend on each other.
+
+Example:
+
+Planner
+
+↓
+
+───────────────
+
+Speech
+
+Avatar
+
+Analytics
+
+Logger
+
+───────────────
+
+Run Together
+
+This dramatically improves responsiveness.
+
+5.9 Dependency Graph (DAG)
+
+Tasks may depend on others.
+
+Memory
+
+↓
+
+Reasoning
+
+↓
+
+Planning
+
+↓
+
+Speech
+
+Speech cannot execute until Planning finishes.
+
+Represent this as a Directed Acyclic Graph (DAG).
+
+5.10 Timeout Management
+
+Example:
+
+Vision
+
+↓
+
+Timeout
+
+↓
+
+5 seconds
+
+↓
+
+Cancel
+
+↓
+
+Fallback
+
+No task may run forever.
+
+5.11 Retry Policy
+Attempt 1
+
+↓
+
+Fail
+
+↓
+
+Retry
+
+↓
+
+Attempt 2
+
+↓
+
+Fail
+
+↓
+
+Retry
+
+↓
+
+Attempt 3
+
+↓
+
+Dead Letter Queue
+
+Avoid infinite retries.
+
+5.12 Cancellation
+
+Planner changes its mind.
+
+Navigate Kitchen
+
+↓
+
+User says
+
+"No."
+
+↓
+
+Cancel Navigation
+
+↓
+
+Stop Motors
+
+↓
+
+Cleanup
+
+Every task must support cancellation.
+
+5.13 Resource Manager
+
+Scheduler tracks:
+
+CPU
+
+GPU
+
+RAM
+
+Disk
+
+Network
+
+Battery (Robot)
+
+Camera
+
+Microphone
+
+Tasks only start if resources are available.
+
+5.14 Worker Pools
+
+Different capabilities have different workers.
+
+Speech Workers
+
+Planner Workers
+
+Vision Workers
+
+Learning Workers
+
+OSINT Workers
+
+Heavy vision shouldn't block speech.
+
+5.15 Background Tasks
+
+Some work shouldn't interrupt the user.
+
+Examples:
+
+Memory Consolidation
+
+Learning
+
+Summaries
+
+Model Updates
+
+Analytics
+
+Run only when the system is idle.
+
+5.16 Real-Time Tasks
+
+Robotics requires deterministic execution.
+
+Example:
+
+Motor Update
+
+10 ms
+
+↓
+
+Obstacle Detection
+
+20 ms
+
+↓
+
+Balance
+
+5 ms
+
+These tasks preempt background work.
+
+5.17 Task Monitoring
+
+Dashboard should display:
+
+Running Tasks
+
+Queued Tasks
+
+Completed Tasks
+
+Failed Tasks
+
+Average Runtime
+
+CPU Usage
+
+Memory Usage
+
+Worker Utilization
+5.18 Scheduling Policies
+
+Different workloads need different policies.
+
+Examples:
+
+Priority Scheduling — Safety-critical work.
+Round Robin — Fairness among equal-priority tasks.
+Earliest Deadline First (EDF) — Real-time deadlines.
+Weighted Fair Queuing — Prevents one capability from monopolizing resources.
+
+The scheduler should support multiple policies selected by configuration.
+
+5.19 Crash Recovery
+
+If Aariya crashes:
+
+Checkpoint
+
+↓
+
+Restart
+
+↓
+
+Restore Scheduler State
+
+↓
+
+Resume Safe Tasks
+
+↓
+
+Restart Failed Capabilities
+
+Not every task should be resumed automatically; classify tasks as resumable or restartable.
+
+5.20 Production Folder Structure
+kernel/scheduler/
+
+scheduler.py
+
+task.py
+
+queue.py
+
+worker.py
+
+dependency_graph.py
+
+executor.py
+
+resource_manager.py
+
+timer.py
+
+retry_manager.py
+
+monitor.py
+
+checkpoint.py
+
+policies/
+    priority.py
+    round_robin.py
+    edf.py
+5.21 Scheduler Rules
+Scheduler executes tasks; it never creates goals.
+Every task has an owner capability.
+Every task has a timeout.
+Every task is cancellable where feasible.
+Every task is logged.
+Dependencies must be resolved before execution.
+Long-running work should not block interactive tasks.
+Resource limits are enforced before scheduling.
+The scheduler remains deterministic given the same inputs.
+Every task belongs to a correlation ID for end-to-end tracing.
+
+
+STEP 6 — Goal Manager & Cognitive Task Planning (The Executive Mind)
+
+This is the point where Aariya begins acting like a persistent cognitive system instead of simply reacting to individual user requests.
+
+The Planner answers: "How do I achieve this?"
+
+The Scheduler answers: "When do I run this?"
+
+The Goal Manager answers: "What am I trying to achieve, and is it still worth doing?"
+
+6.1 Cognitive Architecture
+                  USER
+
+                    │
+
+                    ▼
+
+            Goal Manager
+
+                    │
+
+        ┌───────────┴───────────┐
+
+        ▼                       ▼
+
+ Goal Repository         Goal Evaluator
+
+        │
+
+        ▼
+
+      Planner
+
+        │
+
+        ▼
+
+    Runtime Scheduler
+
+        │
+
+        ▼
+
+   Capability System
+6.2 Responsibilities
+
+The Goal Manager owns:
+
+Goal creation
+Goal prioritization
+Goal persistence
+Goal conflict detection
+Goal cancellation
+Goal suspension
+Goal resumption
+Goal completion
+Goal failure handling
+Goal decomposition
+
+The Planner should never own these.
+
+6.3 Goal Object
+
+Every goal follows one structure.
+
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+
+class GoalStatus(Enum):
+    CREATED="created"
+    ACTIVE="active"
+    BLOCKED="blocked"
+    PAUSED="paused"
+    COMPLETED="completed"
+    FAILED="failed"
+    CANCELLED="cancelled"
+
+@dataclass
+class Goal:
+
+    id:str
+
+    title:str
+
+    description:str
+
+    priority:int
+
+    status:GoalStatus
+
+    created_at:datetime
+
+    deadline:datetime|None
+
+    owner:str
+
+    parent_goal:str|None
+
+    metadata:dict
+6.4 Goal Hierarchy
+
+Goals become trees.
+
+Graduate University
+
+│
+
+├── Study Database
+
+├── Finish Assignment
+
+├── Attend Lecture
+
+├── Practice SQL
+
+└── Revise
+
+Planner works on one branch at a time.
+
+6.5 Goal Decomposition
+
+Large goals become smaller goals.
+
+Example
+
+Learn Python
+
+↓
+
+Install Python
+
+↓
+
+Learn Variables
+
+↓
+
+Learn Loops
+
+↓
+
+Learn Functions
+
+↓
+
+Practice
+
+↓
+
+Build Project
+
+The Planner only receives atomic goals.
+
+6.6 Goal Repository
+
+Every goal is stored.
+
+goals/
+
+active/
+
+completed/
+
+failed/
+
+archived/
+
+Nothing disappears.
+
+6.7 Goal State Machine
+Created
+
+↓
+
+Active
+
+↓
+
+Planning
+
+↓
+
+Executing
+
+↓
+
+Completed
+
+or
+
+Executing
+
+↓
+
+Blocked
+
+↓
+
+Waiting
+
+↓
+
+Executing
+
+or
+
+Executing
+
+↓
+
+Failed
+
+↓
+
+Retry
+
+↓
+
+Executing
+6.8 Goal Priorities
+
+Example
+
+Emergency
+
+Safety
+
+----------------
+
+User Requests
+
+----------------
+
+Conversation
+
+----------------
+
+Learning
+
+----------------
+
+Maintenance
+
+Priority changes dynamically.
+
+6.9 Dynamic Prioritization
+
+Example
+
+User says
+
+"Stop."
+
+Current goal
+
+Navigate Kitchen
+
+Immediately becomes
+
+Stop Robot
+
+Priority changes without restarting the system.
+
+6.10 Goal Dependencies
+
+Example
+
+Write Report
+
+↓
+
+Research
+
+↓
+
+Collect Sources
+
+↓
+
+Read Sources
+
+Cannot write before research completes.
+
+6.11 Goal Conflict Detection
+
+Example
+
+Sleep
+
+AND
+
+Drive Car
+
+Impossible.
+
+System detects
+
+Conflict
+
+Planner chooses one.
+
+6.12 Goal Memory
+
+Completed goals become memories.
+
+Goal
+
+↓
+
+Completed
+
+↓
+
+Memory
+
+↓
+
+Experience
+
+Future planning improves.
+
+6.13 Goal Confidence
+
+Each goal receives
+
+Confidence
+
+92%
+
+Success Probability
+
+83%
+
+Risk
+
+Low
+
+Planner can choose alternatives.
+
+6.14 Goal Monitoring
+
+Dashboard
+
+Current Goal
+
+Progress
+
+Blocked
+
+Completed
+
+ETA
+
+Dependencies
+
+Risk
+
+Confidence
+6.15 Goal Policies
+
+Example
+
+Never interrupt:
+
+Emergency
+
+Safety
+
+User Speech
+
+Always interrupt
+
+Background Learning
+
+Analytics
+
+Cleanup
+
+Policies control behavior.
+
+6.16 Goal Persistence
+
+If PC shuts down
+
+Save
+
+↓
+
+Restart
+
+↓
+
+Resume Goals
+
+Nothing important is lost.
+
+6.17 Goal Events
+
+Examples
+
+goal.created
+
+goal.started
+
+goal.completed
+
+goal.failed
+
+goal.cancelled
+
+goal.paused
+
+goal.resumed
+
+Other capabilities subscribe.
+
+6.18 Goal Scoring
+
+Every goal gets a score.
+
+Importance
+
+Urgency
+
+Reward
+
+Risk
+
+Cost
+
+Dependencies
+
+↓
+
+Final Priority
+
+This score determines execution order.
+
+6.19 Multi-Goal Planning
+
+Example
+
+Study
+
+↓
+
+Assignment
+
+↓
+
+Reply Email
+
+↓
+
+Drink Water
+
+↓
+
+Charge Laptop
+
+Planner chooses optimal sequence.
+
+6.20 Goal Review Loop
+
+Every few minutes:
+
+Active Goals
+
+↓
+
+Still Relevant?
+
+↓
+
+Yes
+
+↓
+
+Continue
+
+No
+
+↓
+
+Cancel
+
+or
+
+Re-plan
+
+Keeps Aariya adaptive.
+
+6.21 Folder Structure
+capabilities/
+
+goal_manager/
+
+├── capability.py
+├── goal.py
+├── repository.py
+├── scorer.py
+├── dependency_graph.py
+├── conflict_detector.py
+├── persistence.py
+├── planner_interface.py
+├── monitor.py
+├── policies.py
+├── events.py
+└── tests/
+6.22 Goal Manager Rules
+Goals are persistent objects.
+Only one component owns the goal lifecycle.
+Goals are decomposed before planning.
+Priorities can change dynamically.
+Every goal has measurable progress.
+Conflicts are detected before execution.
+Completed goals become experiences.
+Long-running goals survive restarts.
+Goals are explainable.
+Goal changes emit events.
+
+STEP 7 — World Model & Context Engine (The Internal Reality of Aariya)
+
+This is arguably the most important cognitive layer in the entire architecture.
+
+Most AI assistants only remember conversations.
+
+Aariya should maintain a living model of the world.
+
+Think of it as Aariya's internal universe.
+
+Why a World Model?
+
+Without a World Model:
+
+User: "Call him."
+
+AI:
+Who is him?
+
+With a World Model:
+
+Conversation
+
+↓
+
+"Him" = John
+
+↓
+
+John = Friend
+
+↓
+
+Phone Number Exists
+
+↓
+
+Planner
+
+↓
+
+Call John
+
+The AI understands context instead of just matching words.
+
+7.1 Overall Architecture
+                  World Model
+
+                       │
+
+        ┌──────────────┼───────────────┐
+
+        ▼              ▼               ▼
+
+ Entity Graph   Context Engine   Belief System
+
+        │              │               │
+
+        ▼              ▼               ▼
+
+ Memory      Planner      Reasoner
+
+        │
+
+        ▼
+
+ Critical Thinking
+
+        │
+
+        ▼
+
+ All Capabilities
+
+The World Model becomes the single source of truth.
+
+7.2 Core Components
+world_model/
+
+├── Entity Manager
+├── Relationship Graph
+├── Context Engine
+├── Belief Engine
+├── Spatial Engine
+├── Temporal Engine
+├── Environment Model
+├── User Model
+├── Object Tracker
+├── Device Manager
+├── State Synchronizer
+└── Confidence Engine
+7.3 Entity Model
+
+Everything is an entity.
+
+User
+
+Friend
+
+Teacher
+
+Laptop
+
+Phone
+
+Coffee
+
+Kitchen
+
+Robot
+
+Car
+
+Calendar
+
+Meeting
+
+Homework
+
+Everything.
+
+Entity Object
+from dataclasses import dataclass
+
+@dataclass
+class Entity:
+
+    id:str
+
+    type:str
+
+    name:str
+
+    attributes:dict
+
+    confidence:float
+7.4 Relationship Graph
+
+Entities are connected.
+
+Example
+
+User
+
+│
+
+├── owns → Laptop
+
+├── studies_at → University
+
+├── friend → John
+
+├── likes → Coffee
+
+└── lives_in → Colombo
+
+Instead of isolated memories.
+
+7.5 Knowledge Graph
+
+Eventually it becomes
+
+John
+
+↓
+
+works_at
+
+↓
+
+Google
+
+↓
+
+located_in
+
+↓
+
+California
+
+↓
+
+Country
+
+↓
+
+USA
+
+Planner can reason over relationships.
+
+7.6 Context Engine
+
+Current context
+
+Current Conversation
+
+Current Goal
+
+Current Room
+
+Current Device
+
+Current Time
+
+Current Emotion
+
+Current User Activity
+
+Current Application
+
+Every capability reads the same context.
+
+7.7 Context Stack
+
+Think of it like programming.
+
+Conversation
+
+↓
+
+Task
+
+↓
+
+Goal
+
+↓
+
+Mission
+
+Each layer adds context.
+
+7.8 Temporal Engine
+
+Aariya understands time.
+
+Example
+
+Yesterday
+
+↓
+
+Exam
+
+↓
+
+Tomorrow
+
+↓
+
+Revision
+
+Instead of remembering isolated facts.
+
+Timeline
+
+Breakfast
+
+↓
+
+University
+
+↓
+
+Assignment
+
+↓
+
+Dinner
+
+↓
+
+Sleep
+7.9 Spatial Engine
+
+Eventually useful for robotics.
+
+Example
+
+House
+
+↓
+
+Kitchen
+
+↓
+
+Table
+
+↓
+
+Cup
+
+Robot understands locations.
+
+7.10 Object Tracking
+
+Vision detects
+
+Laptop
+
+World Model updates
+
+Laptop
+
+↓
+
+Desk
+
+↓
+
+Living Room
+
+↓
+
+Confidence 94%
+
+Planner can use it later.
+
+7.11 User Model
+
+Separate from memory.
+
+Stores
+
+Preferences
+
+Learning Style
+
+Favorite Music
+
+Daily Routine
+
+Skills
+
+Weaknesses
+
+Habits
+
+Goals
+
+Changes slowly.
+
+7.12 Environment Model
+
+Current environment
+
+Battery
+
+WiFi
+
+Camera
+
+Microphone
+
+GPS
+
+Temperature
+
+Noise
+
+Lighting
+
+Useful for planning.
+
+7.13 Device Model
+
+Track every connected device.
+
+Laptop
+
+Phone
+
+Robot
+
+Watch
+
+Smart Light
+
+Speaker
+
+Camera
+7.14 Belief System
+
+Not everything is true.
+
+Every fact has confidence.
+
+Example
+
+User likes coffee
+
+Confidence
+
+0.91
+
+Later
+
+User says
+
+"I hate coffee."
+
+Confidence
+
+0.98
+
+Belief Engine updates.
+
+7.15 Belief Revision
+
+Instead of
+
+Delete old fact
+
+Use
+
+Old Belief
+
+↓
+
+Evidence
+
+↓
+
+Recalculate Confidence
+
+↓
+
+Update
+
+Nothing is blindly overwritten.
+
+7.16 Contradiction Detection
+
+Example
+
+User Location
+
+Colombo
+
+GPS
+
+Kandy
+
+Conflict.
+
+Planner asks
+
+Which is correct?
+7.17 Confidence Engine
+
+Every observation receives
+
+Confidence
+
+Source
+
+Timestamp
+
+Evidence
+
+Planner trusts better evidence.
+
+7.18 Synchronization
+
+Whenever
+
+Vision changes
+
+↓
+
+World Model updates
+
+Whenever
+
+Memory changes
+
+↓
+
+World Model updates
+
+Whenever
+
+Conversation changes
+
+↓
+
+World Model updates
+
+Everything stays synchronized.
+
+7.19 Query API
+
+Planner can ask
+
+world.find("John")
+
+world.relationships("John")
+
+world.location("Laptop")
+
+world.current_goal()
+
+world.user_preferences()
+
+world.current_room()
+
+One API.
+
+7.20 Folder Structure
+capabilities/
+
+world_model/
+
+├── capability.py
+├── entity.py
+├── graph.py
+├── context.py
+├── beliefs.py
+├── confidence.py
+├── temporal.py
+├── spatial.py
+├── environment.py
+├── devices.py
+├── synchronizer.py
+├── query.py
+├── events.py
+└── tests/
+7.21 Event Examples
+entity.created
+
+entity.updated
+
+belief.changed
+
+context.updated
+
+room.changed
+
+device.connected
+
+device.disconnected
+
+relationship.added
+
+relationship.removed
+7.22 Integration with Other Components
+Speech
+     │
+     ▼
+World Model
+     ▲
+     │
+Vision
+
+Memory
+
+Planner
+
+Critical Thinking
+
+Reasoner
+
+Goal Manager
+
+Emotion
+
+Avatar
+
+OSINT
+
+Learning
+
+Every major capability both reads from and writes to the World Model through controlled interfaces and events.
+
+7.23 World Model Rules
+The World Model is the canonical representation of Aariya's understanding.
+Capabilities do not maintain conflicting copies of world state.
+Every fact includes provenance (where it came from), timestamp, and confidence.
+Beliefs are updated through evidence, not overwritten blindly.
+Contradictions are detected and surfaced.
+All updates are event-driven.
+The World Model is queryable but not modified directly by unrelated capabilities.
+Sensitive user information should follow the system's privacy and permission policies.
+Spatial, temporal, and social context are first-class concepts.
+The model should be resilient to incomplete or uncertain information.
+
+
+
+
+

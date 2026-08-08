@@ -1,0 +1,1829 @@
+Final Architecture: A → (B + C) Hybrid
+
+You build this in layers, not all at once.
+
+Layer 0 — Productivity Core (A)
+Layer 1 — Research Engine (B)
+Layer 2 — Controlled Desktop Operator (C)
+Layer 3 — Audit & Summary Engine (Mandatory)
+Layer 4 — Safety Governor + Kill Switch
+🔹 Layer 0 — Productivity Core (Foundation)
+
+Capabilities:
+
+Email drafting + sending (approval required)
+
+Calendar management
+
+File search
+
+Task creation
+
+App launching
+
+This becomes your stable base layer.
+
+No autonomy yet.
+Only structured action execution.
+
+🔹 Layer 1 — Research Engine (B)
+
+This is your intelligence amplifier.
+
+Pipeline:
+
+Search → Crawl → Extract → Reason → Summarize → Store
+
+Capabilities:
+
+Multi-source web research
+
+Source credibility ranking
+
+Fact comparison
+
+Knowledge graph storage
+
+Structured report generation
+
+It should output:
+
+Executive summary
+
+Bullet findings
+
+Source list
+
+Confidence score
+
+No direct OS control needed here.
+
+🔹 Layer 2 — Controlled Desktop Operator (C)
+
+This is where it acts.
+
+But with strict rules.
+
+It may:
+
+Open apps
+
+Navigate websites
+
+Fill forms
+
+Extract data from pages
+
+Execute predefined workflows
+
+It may NOT:
+
+Run arbitrary shell commands
+
+Delete files
+
+Modify system settings
+
+Install software
+
+All actions must pass through:
+
+Intent → Validator → Permission Check → Execution → Log
+🔹 Layer 3 — Audit & Summary Engine (Your Critical Requirement)
+
+This is extremely important.
+
+After ANY autonomous workflow, the system must generate:
+
+1️⃣ Action Log
+
+Chronological steps taken.
+
+2️⃣ Outcome Summary
+
+What changed? What was accomplished?
+
+3️⃣ Risk Flag
+
+Anything unusual detected?
+
+4️⃣ Optional Rollback Info
+
+What could be undone?
+
+Example Output
+
+After task:
+
+“Research best AI GPU under $2000 and draft comparison email.”
+
+It returns:
+
+🔍 Task Summary
+
+Objective: Find best AI GPU under $2000 and draft comparison email.
+
+Actions Taken:
+
+Searched 5 sources via Bing API
+
+Crawled NVIDIA, AMD official pages
+
+Extracted benchmark data
+
+Compared CUDA cores, VRAM, price/performance
+
+Drafted email (not sent — awaiting approval)
+
+Key Findings:
+
+RTX 4080 Super — best CUDA performance
+
+RX 7900 XTX — better VRAM per dollar
+
+Used 4090 — best raw power but risky
+
+Confidence: 0.82
+
+No unsafe actions executed.
+
+That summary engine gives you transparency.
+
+This is mandatory for C.
+
+🔹 Layer 4 — Safety Governor
+
+You need:
+
+1️⃣ Global Kill Switch
+
+Hotkey + UI toggle.
+
+2️⃣ Execution Watchdog
+
+Every action checks:
+
+if allow_execution == False:
+    abort
+3️⃣ Rate Limiter
+
+Max X actions per minute.
+
+4️⃣ Action Scope Restriction
+
+It cannot operate outside declared task scope.
+
+If task is:
+
+“Research GPUs”
+
+It cannot suddenly open your banking app.
+
+The Brain Upgrade Required
+
+You will need to extend your existing AI Girl brain (from 
+
+TECHNICAL_ANALYSIS
+
+) with:
+
+New modules:
+
+server/
+ ├── planner.py
+ ├── task_manager.py
+ ├── action_auditor.py
+ ├── safety_governor.py
+ ├── workflow_engine.py
+Internal Multi-Agent Design (Recommended)
+
+Instead of one LLM call:
+
+Use role separation:
+
+Planner → Executor → Auditor → Reporter
+
+Example:
+
+User Request
+   ↓
+Planner creates step plan
+   ↓
+Executor executes structured actions
+   ↓
+Auditor verifies actions
+   ↓
+Reporter generates summary
+
+This prevents chaos.
+
+The Most Important Design Rule
+
+Autonomy must be:
+
+Explicitly scoped
+
+Time bounded
+
+Action bounded
+
+Logged
+
+Reversible when possible
+
+Otherwise C becomes dangerous.
+
+The System You’re Building Is Essentially
+
+A local AI Operating Layer
+
+Research Engine
+
+Action Executor
+
+Transparent Audit Log
+
+🧠 Execution Flow (Exact Logic)
+User gives task
+↓
+Planner generates full step plan
+↓
+System shows you:
+  - Goal
+  - Planned steps
+  - Estimated risk level
+↓
+You approve once
+↓
+Execution begins
+↓
+Each action logged
+↓
+Auditor verifies
+↓
+Final structured summary returned
+1️⃣ Planner Module (New)
+
+Creates a structured plan.
+
+Example input:
+
+“Research best GPU under $2000 and prepare comparison email”
+
+Planner output:
+
+{
+  "goal": "Find best GPU under $2000 and draft email",
+  "steps": [
+    {"type": "web_search", "query": "best AI GPU under 2000 2026"},
+    {"type": "crawl", "target": "top 5 results"},
+    {"type": "extract", "fields": ["price", "VRAM", "CUDA cores", "benchmarks"]},
+    {"type": "compare"},
+    {"type": "draft_email"},
+    {"type": "open_gmail"}
+  ],
+  "risk_level": "LOW",
+  "requires_desktop_control": true
+}
+
+You approve this once.
+
+2️⃣ Execution Engine
+
+Runs steps sequentially.
+
+Every action must pass:
+
+if action.type not in ALLOWED_ACTIONS:
+    abort()
+
+Actions allowed at Level 2:
+
+open_app
+
+open_url
+
+web_search
+
+crawl
+
+extract
+
+draft_email
+
+fill_form (limited scope)
+
+read_email
+
+Not allowed:
+
+shell_command
+
+delete_file
+
+install_software
+
+system_settings
+
+3️⃣ Scoped Autonomy Rule (Critical)
+
+The system may ONLY execute actions declared in the approved plan.
+
+If new action appears:
+→ pause
+→ request new approval
+
+No scope drift allowed.
+
+4️⃣ Audit & Summary Engine (Mandatory)
+
+After execution:
+
+You receive structured report:
+
+🔎 TASK SUMMARY
+
+Goal: Find best GPU under $2000
+
+Execution Time: 2m 14s
+Actions Executed: 9
+
+Actions Performed:
+
+Opened Chrome
+
+Searched Bing API
+
+Crawled 5 websites
+
+Extracted benchmark tables
+
+Compared 12 GPUs
+
+Drafted email (not sent)
+
+Results:
+
+Best overall: RTX 4080 Super
+
+Best VRAM value: RX 7900 XTX
+
+Used option: RTX 4090 (higher risk)
+
+Safety Report:
+
+No restricted actions attempted
+
+No scope violations detected
+
+No file modifications
+
+Confidence Score:
+
+0.84
+
+That summary makes Level 2 safe.
+
+5️⃣ Safety Governor (Non-Negotiable)
+
+You need:
+
+Global Kill Switch
+
+Keyboard hotkey.
+
+Execution Timeout
+
+If task exceeds X minutes → auto pause.
+
+Action Rate Limit
+
+Max N actions per minute.
+
+Logging
+
+Every action stored in:
+
+/logs/task_YYYYMMDD_HHMM.json
+6️⃣ System Modules to Add
+
+Add these to your current Python brain:
+
+server/
+ ├── planner.py
+ ├── executor.py
+ ├── auditor.py
+ ├── safety_governor.py
+ ├── task_log.py
+7️⃣ Research Layer (B Integration)
+
+For research tasks:
+
+Search API
+↓
+Crawler (Playwright or requests + bs4)
+↓
+Extractor (LLM structured output)
+↓
+Reasoning engine
+↓
+Report generator
+
+Store extracted knowledge in:
+
+SQLite (structured)
+
+Vector DB (semantic search)
+
+8️⃣ Desktop Operator (C Integration)
+
+Use:
+
+Playwright (browser control)
+
+pyautogui (only if necessary, and sandboxed)
+
+OS-specific app launch commands
+
+Never allow raw shell execution.
+
+What You Now Have
+
+You are building:
+
+A scoped autonomous AI execution engine
+with research intelligence
+desktop control
+and mandatory transparency.
+
+This is effectively a controlled AI operating layer.
+
+🧠 Final System Architecture (Hybrid Level 2)
+User Task
+   ↓
+Planner (Cloud LLM)
+   ↓
+Plan Preview + Risk Assessment
+   ↓
+Your Approval (Single confirmation)
+   ↓
+Local Executor (Python)
+   ↓
+Auditor (Local)
+   ↓
+Cloud Summary Generator
+   ↓
+Final Report + Logs
+🔹 Component Breakdown
+1️⃣ Cloud Layer (Intelligence Layer)
+
+Runs in cloud:
+
+Planning
+
+Multi-step reasoning
+
+Structured extraction
+
+Summary writing
+
+Research synthesis
+
+Email drafting
+
+Uses:
+
+GPT (cloud API)
+
+Optional embedding API for semantic memory
+
+This layer NEVER touches your OS.
+
+It only outputs structured JSON.
+
+2️⃣ Local Layer (Control Layer)
+
+Runs on your machine:
+
+App launching
+
+Browser control
+
+File access
+
+Email sending (via API)
+
+Logging
+
+Kill switch
+
+Scope enforcement
+
+Action validation
+
+This layer NEVER trusts raw LLM output blindly.
+
+🔒 Safety Contract Between Layers
+
+Cloud can suggest:
+
+{
+  "type": "open_app",
+  "parameters": { "name": "Chrome" }
+}
+
+Local layer must verify:
+
+if action.type not in ALLOWED_ACTIONS:
+    reject()
+
+if action not in approved_plan:
+    pause_and_request_confirmation()
+
+Cloud proposes.
+Local enforces.
+
+🧭 Workflow Lifecycle (Level 2 Model)
+Step 1 — Task Input
+
+You say:
+
+“Research best AI laptop under $2500 and prepare comparison email.”
+
+Step 2 — Planner (Cloud)
+
+Returns:
+
+Goal
+
+Step sequence
+
+Risk level
+
+Estimated actions
+
+Desktop interaction required (True/False)
+
+You approve once.
+
+Step 3 — Local Execution
+
+Runs:
+
+Search
+
+Crawl
+
+Extract
+
+Compare
+
+Draft email
+
+Open Gmail
+
+Each action logged.
+
+Step 4 — Auditor
+
+Local system verifies:
+
+No restricted action executed
+
+No scope violation
+
+No system-level commands triggered
+
+No file deletion
+
+Step 5 — Final Summary (Cloud-Generated)
+
+Produces structured report:
+
+What was done
+
+What changed
+
+Key findings
+
+Confidence score
+
+Safety report
+
+🧾 Required Summary Format (Standardize This)
+
+Every task must end with:
+
+1. Objective
+2. Actions Executed (ordered list)
+3. Results / Findings
+4. System Changes (if any)
+5. Risks / Warnings
+6. Confidence Score
+7. Log File Location
+
+No exceptions.
+
+🗂 Directory Upgrade Plan
+
+Add to your existing server/ (from 
+
+TECHNICAL_ANALYSIS
+
+):
+
+server/
+ ├── planner/
+ │    ├── task_planner.py
+ │    ├── risk_assessor.py
+ │
+ ├── execution/
+ │    ├── executor.py
+ │    ├── browser_controller.py
+ │    ├── app_controller.py
+ │    ├── email_controller.py
+ │
+ ├── safety/
+ │    ├── safety_governor.py
+ │    ├── permission_matrix.py
+ │    ├── scope_enforcer.py
+ │
+ ├── audit/
+ │    ├── auditor.py
+ │    ├── summary_engine.py
+ │    ├── logger.py
+🧠 Research Engine (B Layer Details)
+
+Add:
+
+research/
+ ├── search_api.py
+ ├── crawler.py
+ ├── extractor.py
+ ├── reasoning.py
+ ├── citation_ranker.py
+
+Pipeline:
+
+Search → Crawl → Extract → Normalize → Compare → Store → Summarize
+
+🛑 Kill Switch Design
+
+You must implement both:
+
+1. UI Kill Toggle
+
+Immediate pause.
+
+2. Global Hotkey
+
+Example:
+
+keyboard.add_hotkey('ctrl+shift+x', emergency_stop)
+3. Heartbeat Watchdog
+
+Executor checks every loop:
+
+if not safety.allow_execution:
+    abort_current_task()
+🧠 Long-Term Evolution Path
+
+Once stable, you can add:
+
+Semantic file search
+
+Meeting summarization
+
+Context awareness (active window detection)
+
+Task chaining
+
+Self-reflection engine
+
+Productivity analytics dashboard
+
+But not yet.
+
+Stabilize core first.
+
+⚠️ Critical Constraint
+
+Your system must:
+
+Never execute shell commands directly from LLM
+
+Never operate outside approved plan scope
+
+Never self-modify code
+
+Never escalate privileges
+
+If it violates those rules, architecture is wrong.
+
+🧠 Storage Architecture (Hybrid B Model)
+
+You will have two data layers:
+
+[ LOCAL MACHINE ]  →  Primary storage + execution truth
+[ CLOUD STORAGE ]  →  Backup + analytics + long-term intelligence
+
+Local is always authoritative.
+Cloud is read-only backup + analysis layer.
+
+🔹 What Stays Local (Primary Truth)
+
+These must never depend on cloud availability:
+
+1️⃣ Task Logs
+
+Every action executed.
+
+/logs/task_YYYYMMDD_HHMMSS.json
+2️⃣ Execution History
+
+SQLite database:
+
+tasks
+
+actions
+
+safety flags
+
+timestamps
+
+outcome status
+
+3️⃣ Memory Store
+
+User-specific:
+
+preferences
+
+patterns
+
+workflow habits
+
+4️⃣ Permission Matrix
+
+Never stored remotely.
+
+5️⃣ Safety Flags & Kill Switch State
+
+If internet dies → system still works safely.
+
+🔹 What Goes to Cloud (Backup + Intelligence)
+
+Cloud receives:
+
+Task summaries
+
+Research reports
+
+Vector embeddings (for semantic recall)
+
+Analytics metrics (optional)
+
+Long-term compressed logs
+
+Cloud NEVER receives:
+
+Raw keystrokes
+
+Screen captures
+
+Local file content (unless explicitly requested)
+
+System paths
+
+OS-level secrets
+
+🔐 Data Flow Design
+
+After task completion:
+
+Local Execution
+↓
+Local Auditor
+↓
+Local Log File Created
+↓
+Summary Generated
+↓
+Encrypted Upload to Cloud
+↓
+Cloud stores:
+   - Summary
+   - Metadata
+   - Embeddings
+🔒 Security Requirement (Non-Negotiable)
+
+All cloud backups must be:
+
+Encrypted before upload
+
+Signed with local device key
+
+Versioned
+
+Example:
+
+encrypted_blob = encrypt(summary_json, device_private_key)
+upload(encrypted_blob)
+
+Even if cloud compromised → raw logs unreadable.
+
+🗂 Database Layout
+Local SQLite
+
+Tables:
+
+tasks
+actions
+audit_reports
+memory
+workflow_templates
+Cloud Database
+
+Tables:
+
+task_summaries
+research_reports
+analytics_metrics
+vector_index
+
+Cloud never stores raw action sequences.
+
+Only compressed structured summaries.
+
+🧠 Why This Architecture Is Powerful
+
+You get:
+
+Privacy-first execution
+
+Offline capability
+
+Disaster recovery
+
+Cross-device memory
+
+Scalable research recall
+
+Analytics potential
+
+And you avoid:
+
+Remote OS control risk
+
+Cloud dependency failures
+
+Sensitive data exposure
+
+🧾 Example End-to-End Scenario
+
+Task:
+
+“Research best AI laptop and prepare comparison email.”
+
+Locally:
+
+Browser opened
+
+Search performed
+
+Data extracted
+
+Email drafted
+
+Log saved
+
+Cloud:
+
+Summary uploaded
+
+GPU comparison stored
+
+Embeddings created
+
+Knowledge indexed
+
+Later:
+You ask:
+
+“What laptop did we decide was best last month?”
+
+Cloud semantic search answers instantly.
+
+🛡 Final Safety Model (Level 2 Hybrid)
+
+You now have:
+
+Scoped autonomy
+
+One-time approval
+
+Local execution
+
+Full action logging
+
+Auditor verification
+
+Mandatory final summary
+
+Encrypted cloud backup
+
+Global kill switch
+
+🔷 Core Architecture (Commercial-Ready)
+CLIENT APP (Local Agent)
+    - Local Executor
+    - Safety Governor
+    - Action Sandbox
+    - Local DB
+    - Encryption Module
+    - Kill Switch
+
+CLOUD CONTROL PLANE
+    - Auth & Identity
+    - Planner (LLM orchestration)
+    - Research Engine
+    - Vector Memory
+    - Encrypted Backup Store
+    - Analytics Engine
+
+Cloud NEVER executes OS-level commands.
+
+Only the local agent can do that.
+
+🔐 Identity & Key Management (Critical for Commercialization)
+
+Each installation must generate:
+
+Device ID
+
+Public/private key pair
+
+Encrypted local storage
+
+Flow:
+
+Install App
+↓
+Generate device keypair
+↓
+Register device public key with cloud
+↓
+All backups encrypted with device key
+
+Even your own company cannot read user logs without their key.
+
+That is your competitive moat.
+
+🧠 Multi-Tenant Design
+
+Design cloud from start as:
+
+User table
+
+Device table
+
+Task summary table (linked by user_id)
+
+Subscription table
+
+Rate limits per user
+
+Never design it as single-user and “refactor later”.
+That always fails.
+
+🧾 Mandatory Audit System (Enterprise Feature)
+
+Every task must produce:
+
+Execution Log
+
+Action Diff
+
+Risk Assessment
+
+Time Spent
+
+Resource Usage
+
+Summary
+
+Why?
+
+Because enterprises will require traceability.
+
+You’re building auditability into the product DNA.
+
+🛡 Security Model (Commercial Standard)
+
+You must include:
+
+Action whitelist system
+
+Scope enforcement engine
+
+Rate limiter
+
+Timeout engine
+
+Sandboxed browser automation
+
+No raw shell execution from LLM
+
+Signed cloud responses
+
+Integrity checks
+
+If you skip this, commercialization dies.
+
+💰 Monetization-Ready Features
+
+Future revenue tiers could include:
+
+Basic:
+
+Task automation
+
+Email drafting
+
+Local-only mode
+
+Pro:
+
+Research engine
+
+Workflow chaining
+
+Cloud memory sync
+
+Enterprise:
+
+Audit dashboard
+
+Policy enforcement
+
+Admin controls
+
+Team device sync
+
+Role-based permissions
+
+🧠 Product Differentiator
+
+Your edge is:
+
+Local execution safety
+
+Transparent summaries
+
+Privacy-first architecture
+
+Scoped autonomy
+
+Kill switch enforcement
+
+Most AI agents ignore this.
+That’s your advantage.
+
+⚙ Recommended Tech Stack (Commercial Path)
+
+Local App:
+
+Python core
+
+Electron or native wrapper
+
+SQLite
+
+OS-specific adapters
+
+Cloud:
+
+FastAPI backend
+
+PostgreSQL
+
+Redis
+
+Object storage (encrypted blobs)
+
+OpenAI API
+
+Vector DB (pgvector or Pinecone)
+
+Deployment:
+
+Dockerized services
+
+Cloud provider (AWS / GCP / Azure)
+
+⚠ What You Must Avoid
+
+Do NOT:
+
+Let cloud control user desktop
+
+Store raw logs unencrypted
+
+Allow unrestricted automation
+
+Build without audit layer
+
+Ignore user consent model
+
+Delay security thinking
+
+🚀 Long-Term Vision
+
+You’re essentially building:
+
+A Personal AI Operating System Layer
+that can scale to enterprise environments.
+
+That’s a real product category.
+🎯 Product Definition
+
+You are building:
+
+A privacy-first AI desktop assistant
+that can research, act on your computer (scoped),
+and always explain exactly what it did.
+
+Key pillars:
+
+Local-first control
+
+One-click task approval
+
+Full transparency summary
+
+Kill switch always available
+
+Simple UX
+
+Consumers do not tolerate complexity.
+
+🏗 Final Consumer Architecture
+Desktop App (Local Agent)
+    ├── Planner (cloud)
+    ├── Local Executor
+    ├── Safety Governor
+    ├── Action Sandbox
+    ├── Task Logger
+    ├── Summary Viewer
+    └── Kill Switch
+
+Cloud Layer
+    ├── Auth & Accounts
+    ├── LLM Planning + Reasoning
+    ├── Research Engine
+    ├── Vector Memory
+    └── Encrypted Backup
+
+Cloud suggests.
+Local decides and executes.
+
+🧠 Consumer UX Flow
+
+This is critical.
+
+User types:
+
+“Find the best noise-canceling headphones under $300 and draft a comparison email.”
+
+App shows:
+
+Proposed Plan
+
+Search web for 2026 reviews
+
+Compare top 5 models
+
+Draft email
+
+Open Gmail (not send yet)
+
+Risk Level: Low
+Estimated Time: ~2 minutes
+
+[Approve] [Edit Plan] [Cancel]
+
+User clicks Approve.
+
+Execution runs.
+
+After completion, user sees:
+
+🧾 Task Summary
+
+Objective: Compare headphones under $300
+
+Actions Taken:
+
+Opened Chrome
+
+Searched 6 sources
+
+Extracted specs & pricing
+
+Compared 5 models
+
+Drafted email (not sent)
+
+Key Results:
+
+Sony XM5 — Best ANC
+
+Bose QC Ultra — Best comfort
+
+Anker Q45 — Best value
+
+No unsafe actions performed.
+
+Log saved locally.
+Cloud backup complete.
+
+That transparency is what builds trust.
+
+🛡 Consumer Safety Model
+
+You must ship with:
+
+1. Action Whitelist
+
+Only allow:
+
+Open app
+
+Open website
+
+Read email
+
+Draft email
+
+Fill form (limited)
+
+Search
+
+File search
+
+No terminal access.
+No file deletion.
+No system modification.
+
+2. Scope Lock
+
+If approved task is:
+
+“Research headphones”
+
+It cannot suddenly:
+
+Open banking site
+
+Modify settings
+
+Access unrelated files
+
+Scope violation = auto-pause.
+
+3. Kill Switch
+
+Visible always in UI.
+
+Plus global hotkey.
+
+4. Action Timeline Viewer
+
+Consumers need to SEE what happened.
+
+Visual timeline:
+
+[✓] Opened Chrome
+[✓] Searched Google
+[✓] Extracted specs
+[✓] Drafted email
+
+Transparency reduces fear.
+
+💡 What Makes It Different From ChatGPT
+
+It can:
+
+Actually act on the desktop
+
+Actually open apps
+
+Actually prepare workflows
+
+Actually research deeply
+
+And explain itself
+
+But safely.
+
+📦 MVP Feature Set (Launch Version)
+
+You do NOT launch with everything.
+
+Launch with:
+
+Web research + comparison
+
+Email drafting
+
+App launching
+
+File search
+
+Structured summaries
+
+Cloud backup
+
+That’s enough to validate product-market fit.
+
+🔥 Growth Path After MVP
+
+After users trust it:
+
+Phase 2:
+
+Calendar integration
+
+Smart reminders
+
+Workflow chaining
+
+Phase 3:
+
+Context awareness
+
+Meeting assistant
+
+Productivity analytics
+
+Phase 4:
+
+Team sync mode
+
+💰 Monetization Model (Consumer)
+
+Free Tier:
+
+Limited tasks per day
+
+No cloud memory sync
+
+Pro Tier:
+
+Unlimited tasks
+
+Cloud sync
+
+Research engine
+
+Advanced workflows
+
+🚨 Biggest Risk in Consumer Market
+
+Fear.
+
+Users fear:
+
+Loss of control
+
+Hidden actions
+
+Data theft
+
+Background automation
+
+Your solution:
+
+Visible summaries
+
+Local-first execution
+
+Clear permission prompts
+
+Strong privacy messaging
+
+🏗 Cross-Platform Architecture (Clean Separation)
+UI Layer (Electron / Tauri)
+        ↓
+Core Engine (Platform-agnostic Python)
+        ↓
+OS Adapter Layer (macOS / Windows / Linux)
+
+Only the OS Adapter knows about platform differences.
+
+Everything else is identical.
+
+🔹 1️⃣ Desktop Shell (UI Layer)
+
+Use one of:
+
+Option A — Electron (Most mature)
+
+Node + Chromium
+
+Massive ecosystem
+
+Heavier but stable
+
+Option B — Tauri (Modern, lighter)
+
+Rust backend
+
+Smaller bundle size
+
+More complex tooling
+
+For speed and ecosystem: Electron is safer for MVP.
+
+It runs on:
+
+macOS
+
+Windows
+
+Linux
+
+🔹 2️⃣ Core Engine (Shared Across All OS)
+
+Written in Python.
+
+Contains:
+
+Planner (cloud)
+
+Executor logic
+
+Safety governor
+
+Auditor
+
+Logger
+
+Summary engine
+
+Scope enforcer
+
+This code NEVER checks if mac or windows.
+
+It calls:
+
+os_adapter.open_app("Chrome")
+
+That’s it.
+
+🔹 3️⃣ OS Adapter Layer (Critical Design)
+
+Create:
+
+os_adapters/
+ ├── base_adapter.py
+ ├── mac_adapter.py
+ ├── windows_adapter.py
+ ├── linux_adapter.py
+base_adapter.py
+class BaseAdapter:
+    def open_app(self, name): pass
+    def open_url(self, url): pass
+    def get_active_window(self): pass
+    def list_installed_apps(self): pass
+mac_adapter.py
+import subprocess
+
+class MacAdapter(BaseAdapter):
+    def open_app(self, name):
+        subprocess.Popen(["open", "-a", name])
+windows_adapter.py
+import subprocess
+
+class WindowsAdapter(BaseAdapter):
+    def open_app(self, name):
+        subprocess.Popen(["start", name], shell=True)
+linux_adapter.py
+import subprocess
+
+class LinuxAdapter(BaseAdapter):
+    def open_app(self, name):
+        subprocess.Popen([name])
+🔹 4️⃣ Platform Detection
+
+On startup:
+
+import platform
+
+def get_adapter():
+    os_name = platform.system()
+
+    if os_name == "Darwin":
+        return MacAdapter()
+    elif os_name == "Windows":
+        return WindowsAdapter()
+    elif os_name == "Linux":
+        return LinuxAdapter()
+    else:
+        raise Exception("Unsupported OS")
+
+Now everything becomes modular.
+
+🔐 Cross-Platform Security Constraints
+
+Different OS = different risks.
+
+macOS
+
+Gatekeeper
+
+Accessibility permissions required
+
+Tighter app sandboxing
+
+Windows
+
+UAC prompts
+
+PowerShell access risks
+
+Linux
+
+Environment fragmentation
+
+Different desktop environments
+
+Your rule:
+No raw shell execution from LLM.
+Only structured adapter calls.
+
+🔹 5️⃣ Browser Automation (Cross-Platform Safe Choice)
+
+Use:
+
+Playwright
+
+Playwright runs on:
+
+macOS
+
+Windows
+
+Linux
+
+It isolates browser control and avoids raw mouse automation.
+
+Avoid pyautogui unless absolutely necessary.
+
+🔹 6️⃣ Packaging Strategy
+
+For consumer distribution:
+
+macOS
+
+.dmg installer
+
+Signed + notarized
+
+Windows
+
+.exe installer
+
+Code signing certificate
+
+Linux
+
+AppImage or .deb
+
+Electron supports this via:
+
+electron-builder
+
+🔹 7️⃣ Update Mechanism
+
+Must support:
+
+Auto-updates
+
+Rollback versioning
+
+Signed update packages
+
+Consumers expect seamless updates.
+
+🔹 8️⃣ Cross-Platform Testing Requirement
+
+You must test:
+
+App launch behavior
+
+Permission prompts
+
+Browser automation
+
+File access sandbox
+
+Kill switch
+
+On all three OS before release.
+
+No shortcuts.
+
+🚨 Biggest Mistake Teams Make
+
+They write:
+
+if platform == "mac":
+    ...
+elif platform == "windows":
+    ...
+
+Inside core logic everywhere.
+
+That becomes unmaintainable.
+
+All OS logic belongs in adapters only.
+
+🧠 Final System Overview
+
+You now have:
+
+Cross-platform desktop shell
+
+Platform-agnostic core engine
+
+OS adapter abstraction
+
+Cloud intelligence layer
+
+Local execution safety
+
+Mandatory summary reporting
+
+Encrypted cloud backup
+
+Kill switch
+
+Scope enforcement
+
+🏗 MVP Phase 1 — Scope & Modules
+🎯 Goal
+
+Deliver a stable, cross-platform AI agent that can:
+
+Perform web research
+
+Extract & summarize information
+
+Draft emails
+
+Open browsers
+
+Log everything for transparency
+
+No OS-level automation outside browser
+
+✅ Allowed Actions (Phase 1)
+Action	Notes
+web_search	Bing/Google via API
+crawl	Playwright / requests + BeautifulSoup
+extract	Parse structured data / tables / facts
+compare	LLM-assisted reasoning & ranking
+draft_email	Structured email draft
+open_url	Controlled browser navigation
+read_email	Optional via API (no shell access)
+
+Disallowed:
+
+shell_command, install_software, delete_file, system_settings, OS app launch outside browser.
+
+🧩 Module Layout
+1️⃣ Planner (Cloud)
+
+Input: user task
+
+Output: structured JSON plan
+
+Includes:
+
+Goal
+
+Step sequence
+
+Risk assessment
+
+Desktop interaction flag (Phase 1 → browser only)
+
+Example:
+
+{
+  "goal": "Find best AI laptop under $2500 and draft comparison email",
+  "steps": [
+    {"type": "web_search", "query": "best AI laptop 2026 under $2500"},
+    {"type": "crawl", "target": "top 5 results"},
+    {"type": "extract", "fields": ["price", "RAM", "GPU", "reviews"]},
+    {"type": "compare"},
+    {"type": "draft_email"}
+  ],
+  "risk_level": "LOW",
+  "requires_desktop_control": true
+}
+2️⃣ Local Executor
+
+Executes approved plan step by step.
+
+Validates every action against:
+
+Allowed actions list (Phase 1)
+
+Approved plan
+
+Runs Playwright or equivalent for browser automation.
+
+Logs action start/end, errors, exceptions.
+
+3️⃣ Audit & Summary Engine
+
+Generates structured summary after every task:
+
+Objective
+
+Actions executed (chronological)
+
+Results / findings
+
+System changes (none in Phase 1)
+
+Risks / warnings
+
+Confidence score
+
+Log file location
+
+Ensures transparency & user trust before Phase 2.
+
+4️⃣ Safety Governor
+
+Kill switch (UI + global hotkey)
+
+Execution watchdog: abort if any step violates plan
+
+Action rate limiter
+
+Scope enforcement: no OS commands, no file modifications
+
+5️⃣ Research Layer (B)
+
+Pipeline: Search → Crawl → Extract → Normalize → Compare → Store → Summarize
+
+Components:
+
+search_api.py → APIs for Bing/Google
+
+crawler.py → Playwright / requests + BS4
+
+extractor.py → LLM-based structured extraction
+
+reasoning.py → Comparison, ranking
+
+summary_engine.py → Human-readable summaries
+
+citation_ranker.py → Source credibility scoring
+
+6️⃣ Storage
+
+Local: SQLite database (tasks, actions, audit logs)
+
+Cloud (optional): Encrypted summaries & embeddings only
+
+Local always authoritative
+
+Cloud is read-only backup + intelligence
+
+📦 MVP Phase 1 Flow
+
+User Input:
+“Research best AI laptop under $2500 and draft comparison email.”
+
+Planner (Cloud):
+Returns structured plan + risk estimate.
+
+User Approval:
+Single confirmation.
+
+Executor (Local):
+Runs browser automation & research tasks.
+
+Auditor:
+Verifies plan scope, safety, logs every action.
+
+Summary Engine:
+Returns structured task report.
+
+Cloud Backup (Optional):
+Encrypted summary + metadata upload.

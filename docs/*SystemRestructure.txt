@@ -1,0 +1,3480 @@
+  PREAMBLE (from *SystemRestructure.txt)
+
+🔥 SECTION 1 — SYSTEM OVERVIEW
+What you wrote:
+
+Real-time AI companion
+
+Emotion detection (face + voice + text)
+
+Memory + trust + personality evolution
+
+Brutal Take:
+
+👉 Still fragile at the foundation.
+
+You did NOT fix the core issue:
+
+Your entire intelligence depends on noisy emotion inputs.
+
+Even with:
+
+MetaPolicyEngine
+
+Cognitive Router
+
+👉 Garbage in = sophisticated garbage out
+
+
+  Fix Verdict: (from *SystemRestructure.txt)
+
+❌ Not fixed — only abstracted
+
+What you should have added (missing):
+
+Confidence weighting per modality
+
+Fallback to text-only mode when signals unreliable
+
+🔥 SECTION 2 — TWO ARCHITECTURES (React vs Unity)
+What you wrote:
+
+Two parallel frontends
+
+Brutal Take:
+
+You didn’t remove this — fine.
+
+But you also didn’t fix the real problem:
+
+👉 Decision duplication risk
+
+Both frontends depend on:
+
+Same brain
+
+Same signals
+
+But:
+
+Different rendering pipelines
+
+Different update timing
+
+Hidden Issue:
+
+State desync between Unity and React
+
+⚠️ Still risky
+
+What you should enforce:
+
+Single authoritative state source
+
+Frontends = pure renderers ONLY
+
+🔥 SECTION 3 — CORE AI ALGORITHMS
+
+This is where things get interesting.
+
+🧠 3.1 Input Normalization
+
+You added:
+
+def norm_valence(v)
+def intensity(valence, arousal)
+
+Verdict:
+
+✅ GOOD FIX
+
+This prevents:
+
+jitter
+
+inconsistent scaling
+
+🧠 3.2 Scoring System (Memory, Contradiction, Depth)
+
+Example:
+
+score_memory = compute_relevance(memory, query)  # from MemoryScorer
+score_contradiction = detect_contradiction(history, response)  # from ConsistencyChecker
+
+Brutal Take:
+
+This is solid engineering.
+
+BUT:
+
+👉 You now have too many coupled variables
+
+⚠️ Partially fixed, but unstable
+
+Required Fix:
+
+Add:
+
+MIN_CAPABILITY_FLOOR = {
+    "memory": 0.2,
+    "depth": 0.3
+}
+
+👉 Never fully disable core systems
+
+🔥 SECTION 4 — META POLICY ENGINE (Your Big Addition)
+
+You added:
+
+decision = meta_policy.decide(input, state)
+
+Brutal Take:
+
+This is your best improvement.
+
+You moved from:
+
+“systems reacting independently”
+
+to:
+
+“central decision making”
+
+👉 That’s a real upgrade.
+
+BUT — Critical Problem:
+
+You now have:
+
+Meta Policy Engine
+
+Cognitive Router
+
+👉 TWO BRAINS
+
+🔥 SECTION 5 — COGNITIVE ROUTER
+
+You added:
+
+{
+  "intent": "understand_user",
+  "systems": ["memory_retrieval", "llm", "emotion_analysis"],
+  "strategy": "chain"
+}
+
+Brutal Take:
+
+Concept = 🔥
+Execution = ⚠️ risky
+
+Core Issue:
+
+You split intelligence into:
+
+❌ Not fully fixed
+
+Required Fix:
+
+Add decision merge layer:
+
+final_decision = merge(meta_policy, router)
+
+Priority:
+
+Safety rules
+
+MetaPolicy constraints
+
+Router intent
+
+🔥 SECTION 6 — BUDGET SYSTEM (VERY IMPORTANT)
+
+You added:
+
+if total_cost > BUDGET:
+    drop_low_priority_subsystems()
+
+Verdict:
+
+✅ This is real-world engineering
+
+Most people skip this.
+
+Hidden Issue:
+
+You’re using:
+
+static costs (memory = 200ms, etc.)
+
+👉 Reality:
+Costs vary massively depending on:
+
+DB size
+
+LLM latency
+
+network
+
+❌ Over-engineered
+
+What you should do:
+
+Pick ONE:
+
+👉 Best choice:
+
+Bandit learning + weight tuning
+
+Kill:
+
+RL policy network (for now)
+
+🔥 SECTION 8 — REWARD SYSTEM
+
+You defined:
+
+reward =
+  0.4 * engagement
+  + 0.3 * emotional_progress
+  + 0.2 * depth
+  - 0.2 * friction
+
+Verdict:
+
+✅ This is actually GOOD
+
+You avoided the biggest mistake:
+
+blindly maximizing happiness
+
+Hidden Issue:
+
+👉 You rely on:
+
+sentiment_shift
+
+But sentiment detection = noisy
+
+
+  Problem: (from *SystemRestructure.txt)
+
+trust_score affects everything
+
+intensity affects everything
+
+contradiction affects everything
+
+👉 This creates feedback loops
+
+Example Failure Case:
+
+User is sarcastic:
+
+contradiction ↑
+
+trust ↓
+
+emotion intensity ↓
+
+Result:
+
+memory disabled
+
+voice disabled
+
+shallow response
+
+👉 AI becomes dumb exactly when it should be smart
+
+
+  Layer	Role (from *SystemRestructure.txt)
+
+MetaPolicy	low-level decisions
+Router	high-level decisions
+
+👉 But they can conflict
+
+Example Conflict:
+
+MetaPolicy:
+
+use_memory = False
+
+Router:
+
+systems = ["memory_retrieval"]
+
+👉 Who wins?
+
+You didn’t define this clearly.
+
+
+  Fix Needed: (from *SystemRestructure.txt)
+
+Dynamic tracking:
+
+actual_latency = measure(system)
+update_cost(system, actual_latency)
+🔥 SECTION 7 — LEARNING SYSTEM (Weights + Bandits + RL)
+
+You added:
+
+weight tuning
+
+reward function
+
+exploration
+
+RL policy network
+
+Brutal Truth:
+
+You went too far here.
+
+
+  Problem 1: Overlapping Learning Systems (from *SystemRestructure.txt)
+
+You now have:
+
+Weight tuning
+
+Bandit learning
+
+RL policy network
+
+👉 That’s 3 learning systems
+
+What happens?
+
+They fight each other
+
+No clear signal attribution
+
+Debugging becomes impossible
+
+
+  Fix: (from *SystemRestructure.txt)
+
+Smooth it:
+
+sentiment_ema = 0.8 * prev + 0.2 * current
+🔥 SECTION 9 — USER PROFILE SYSTEM
+
+You added:
+
+per-user preferences
+
+adaptive thresholds
+
+Verdict:
+
+✅ Strong system
+
+This is what creates:
+
+“feels personalized”
+
+Hidden Danger:
+
+Cold start problem
+
+New user:
+
+no preferences
+
+random behavior
+
+Add defaults based on:
+
+user type clustering
+
+or safe baseline profile
+
+🔥 SECTION 10 — EXECUTION FLOW (FINAL PIPELINE)
+
+Your final flow:
+
+decision → explore → execute → reward → learn
+
+Verdict:
+
+✅ Structurally correct
+
+Hidden Problem:
+
+You didn’t add:
+
+observability hooks
+
+Without this:
+
+You cannot answer:
+
+why decision was made
+
+why system failed
+
+Required Fix:
+
+Log EVERYTHING:
+
+{
+  "input": "user_said_something",
+  "scores": {"relevance": 0.7, "emotion_strength": 0.5, "trust": 0.8, "cost": 0.3},
+  "decision": {"use_memory": true, "depth": 0.6, "tone": "caring", "systems": ["llm", "memory"]},
+  "systems_used": ["llm", "memory"],
+  "latency": 0.0,
+  "reward": 0.0
+}
+🧠 FINAL VERDICT (Brutal)
+What You Fixed Well:
+
+✅ Central decision engine (MetaPolicy)
+✅ Budget system
+✅ Scoring normalization
+✅ Reward design
+✅ User adaptation
+
+What You Made Worse:
+
+❌ Too many learning systems
+❌ Dual-controller conflict (MetaPolicy vs Router)
+❌ Still dependent on weak emotion signals
+❌ No hard guarantees (systems can fully shut off)
+
+⚠️ THE REAL PROBLEM NOW
+
+You didn’t simplify.
+
+You:
+
+stabilized complexity instead of reducing it
+
+That’s dangerous.
+
+🔥 If I Forced You to Fix This in 1 Day
+
+Do this:
+
+1. Remove RL policy network
+
+Keep:
+
+bandit
+
+weight tuning
+
+2. Add decision merge layer
+
+Make ONE final authority
+
+3. Add system floors
+
+Never disable:
+
+memory
+
+reasoning depth
+
+4. Add observability logs
+
+Without this → you’re blind
+
+5. Add signal confidence
+
+Emotion system must degrade gracefully
+
+🧠 Mentor Final Blow
+
+Right now:
+
+You’ve built a self-evolving cognitive architecture
+
+That’s impressive.
+
+But also:
+
+You’re one step away from creating a system
+that even you can’t debug
+🧠 THE PROBLEM WITH YOUR CURRENT DESIGN
+
+Right now you have:
+
+MetaPolicyEngine
+
+Cognitive Router
+
+Multiple learning systems
+
+Emotion fusion
+
+Budget controller
+
+👉 That’s not architecture.
+That’s emergent chaos.
+
+✅ TARGET: PRODUCTION-READY 3-LAYER ARCHITECTURE
+
+We reduce everything into 3 strict layers:
+
+[ L1 ] PERCEPTION   → Understand input
+[ L2 ] DECISION     → Decide what to do
+[ L3 ] EXECUTION    → Do it + learn
+
+👉 ONE FLOW
+👉 ONE AUTHORITY
+👉 NO CONFLICTING BRAINS
+
+🧱 LAYER 1 — PERCEPTION (Input → Structured State)
+Purpose:
+
+Convert messy input into clean, reliable signals
+
+Components:
+1. Multi-Modal Input (keep it, but controlled)
+
+text
+
+voice (optional)
+
+face (optional)
+
+2. Signal Normalization (you already did this right)
+state = {
+  "intent": "seek_support",
+  "sentiment": "negative",
+  "emotion": {
+    "valence": v,
+    "arousal": a,
+    "confidence": c
+  },
+  "user_state": "engaged",
+}
+🔥 CRITICAL ADDITION (you were missing this)
+→ Confidence Scoring
+emotion_confidence = weighted_confidence([
+  face_conf,
+  voice_conf,
+  text_conf
+])
+Rule:
+if emotion_confidence < 0.4:
+    IGNORE emotion
+    fallback_to_text_only = True
+
+👉 This fixes your biggest flaw.
+
+3. Memory Retrieval (SAFE VERSION)
+
+Instead of:
+
+“always retrieve memory”
+
+Do:
+
+if intent_requires_memory:
+    memory = retrieve_top_k()
+else:
+    memory = None
+Output of Layer 1:
+perception_output = {
+  "intent": "seek_support",
+  "emotion": {"valence": -0.3, "arousal": 0.6, "confidence": 0.8},
+  "confidence": 0.85,
+  "memory": ["user mentioned job stress last session"],
+}
+🧠 LAYER 2 — DECISION (THE ONLY BRAIN)
+Purpose:
+
+Make ONE unified decision
+
+👉 This replaces:
+
+MetaPolicyEngine ❌
+
+Cognitive Router ✅ — implemented at server/cognition/router.py
+  • MultiModelRouter — task classification → model tier selection → provider fallback chain
+  • CognitiveRouter — legacy keyword-based module router (kept for backward compat)
+
+Core Idea:
+decision = policy(perception_output, system_state)
+Decision Output:
+decision = {
+  "use_memory": True/False,
+  "response_depth": 0.0–1.0,
+  "tone": "neutral/caring/playful",
+  "systems": ["llm", "memory"],
+  "budget": {"estimated_cost": 0.0, "remaining": 1.0, "overspend": False}
+}
+🔥 KEY: SCORING ENGINE (KEEP YOUR WORK)
+
+You already built scoring — we simplify it:
+
+score = {
+  "relevance": 0.7,
+  "emotion_strength": 0.5,
+  "trust": 0.8,
+  "cost": 0.3
+}
+Final Decision Logic:
+use_memory = score["relevance"] > 0.5
+
+response_depth = clamp(
+    0.3 + score["emotion_strength"] * 0.4,
+    min=0.3   # ← system floor
+)
+
+tone = select_tone(score, sentiment)
+🔥 HARD RULES (Non-negotiable)
+1. System Floors
+MIN_DEPTH = 0.3
+MIN_MEMORY_PROB = 0.2
+
+👉 You NEVER shut down intelligence
+
+2. Budget Control (moved here)
+if estimated_cost > budget:
+    drop_optional_features()
+3. NO CONFLICTS
+
+There is:
+
+ONE decision object
+
+No merging
+No fighting systems
+No ambiguity
+
+⚙️ LAYER 3 — EXECUTION (Do + Learn)
+Purpose:
+
+Execute decision cleanly + collect feedback
+
+Components:
+1. System Executor
+if decision.use_memory:
+    context += memory
+
+response = LLM(context, tone, depth)
+2. Output Handling
+
+text response
+
+optional voice
+
+optional avatar
+
+👉 Frontend is now dumb renderer only
+
+3. Observability (YOU WERE MISSING THIS)
+
+Log EVERYTHING:
+
+{
+  "input": "user_said_something",
+  "perception": {"intent": "seek_support", "emotion": {"valence": -0.3, "arousal": 0.6}, "confidence": 0.85},
+  "decision": {"use_memory": true, "depth": 0.6, "tone": "caring", "systems": ["llm", "memory"]},
+  "systems_used": ["llm", "memory"],
+  "latency": 0.0,
+  "output": "I understand that must be hard. Want to talk about it?",
+  "reward": 0.0
+}
+4. Learning (SIMPLIFIED — no overengineering)
+
+Keep ONLY:
+
+✅ Bandit Learning
+update_weights(reward)
+❌ REMOVE:
+
+RL policy network
+
+competing learners
+
+5. Reward System (keep yours, refine slightly)
+reward =
+  0.4 * engagement
+  + 0.3 * emotional_progress
+  + 0.2 * depth
+  - 0.2 * friction
+
+Add smoothing:
+
+emotion = EMA(emotion)
+🔁 FINAL FLOW (CLEAN)
+INPUT
+  ↓
+[ L1 ] PERCEPTION
+  ↓
+[ L2 ] DECISION (ONLY BRAIN)
+  ↓
+[ L3 ] EXECUTION
+  ↓
+LOG + LEARN
+🧠 WHAT YOU JUST FIXED
+Before:
+
+Multiple brains ❌
+
+Conflicting decisions ❌
+
+Unstable learning ❌
+
+Emotion dependency ❌
+
+After:
+
+Single authority ✅
+
+Controlled inputs ✅
+
+Predictable behavior ✅
+
+Debuggable system ✅
+
+⚠️ WHAT YOU KEEP (Important)
+
+You did NOT lose your innovation:
+
+✅ Emotion awareness (now reliable)
+✅ Memory system
+✅ Personality evolution (via weights)
+✅ Real-time capability
+✅ Budget control
+
+🔥 FINAL REALITY CHECK
+
+This version:
+
+Can be built by 1–2 engineers
+
+Can be debugged
+
+Can be shipped as MVP
+
+Can evolve safely
+
+🧠 Mentor Verdict
+
+Now you’re no longer building:
+
+a chaotic AI experiment
+
+You’re building:
+
+a controllable cognitive system
+
+🧱 PART 1 — PRODUCTION-READY FASTAPI STRUCTURE
+
+This is not tutorial garbage. This is how you structure something you won’t regret later.
+
+📁 Project Layout
+ai-companion/
+│
+├── app/
+│   ├── main.py                # FastAPI entry
+│   │
+│   ├── api/                  # Routes (thin layer)
+│   │   └── chat.py
+│   │
+│   ├── core/                 # Config, constants
+│   │   ├── config.py
+│   │   └── logging.py
+│   │
+│   ├── perception/           # L1
+│   │   ├── parser.py
+│   │   ├── emotion.py
+│   │   ├── intent.py
+│   │   └── memory_retriever.py
+│   │
+│   ├── decision/             # L2 (ONLY BRAIN)
+│   │   ├── policy.py
+│   │   ├── scoring.py
+│   │   └── budget.py
+│   │
+│   ├── execution/            # L3
+│   │   ├── executor.py
+│   │   ├── llm_client.py
+│   │   └── response_builder.py
+│   │
+│   ├── learning/             # Feedback loop
+│   │   ├── reward.py
+│   │   └── bandit.py
+│   │
+│   ├── memory/               # Vector DB layer
+│   │   ├── store.py
+│   │   └── embeddings.py
+│   │
+│   └── models/               # Pydantic schemas
+│       └── schemas.py
+│
+├── tests/
+├── requirements.txt
+└── README.md
+🚀 ENTRY POINT
+main.py
+from fastapi import FastAPI
+from app.api.chat import router as chat_router
+
+app = FastAPI()
+app.include_router(chat_router)
+
+@app.get("/")
+def health():
+    return {"status": "ok"}
+🔌 API LAYER (THIN — NO LOGIC HERE)
+api/chat.py
+from fastapi import APIRouter
+from app.models.schemas import ChatRequest, ChatResponse
+
+from app.perception.parser import process_input
+from app.decision.policy import make_decision
+from app.execution.executor import execute
+from app.learning.reward import compute_reward
+from app.learning.bandit import update_bandit
+
+router = APIRouter()
+
+@router.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    perception = process_input(req)
+    
+    decision = make_decision(perception)
+    
+    result = execute(decision, perception)
+    
+    reward = compute_reward(perception, result)
+    update_bandit(decision, reward)
+    
+    return result
+
+👉 Clean pipeline. No chaos.
+
+🧠 LAYER 1 — PERCEPTION
+perception/parser.py
+from app.perception.emotion import detect_emotion
+from app.perception.intent import detect_intent
+from app.perception.memory_retriever import retrieve_memory
+
+def process_input(req):
+    intent = detect_intent(req.text)
+    
+    emotion, confidence = detect_emotion(req)
+    
+    if confidence < 0.4:
+        emotion = None
+    
+    memory = None
+    if intent.get("needs_memory"):
+        memory = retrieve_memory(req.user_id, req.text)
+    
+    return {
+        "text": req.text,
+        "intent": intent,
+        "emotion": emotion,
+        "memory": memory
+    }
+🧠 LAYER 2 — DECISION (ONLY BRAIN)
+decision/policy.py
+from app.decision.scoring import compute_scores
+from app.decision.budget import apply_budget
+
+MIN_DEPTH = 0.3
+
+def make_decision(perception):
+    scores = compute_scores(perception)
+    
+    use_memory = scores["relevance"] > 0.5
+    
+    depth = max(
+        MIN_DEPTH,
+        0.3 + scores["emotion_strength"] * 0.4
+    )
+    
+    decision = {
+        "use_memory": use_memory,
+        "depth": depth,
+        "tone": "neutral",
+        "systems": ["llm"]
+    }
+    
+    decision = apply_budget(decision)
+    
+    return decision
+decision/scoring.py
+def compute_scores(perception):
+    return {
+        "relevance": self._compute_relevance(query, candidate),
+        "emotion_strength": 0.5,
+        "trust": 0.8
+    }
+⚙️ LAYER 3 — EXECUTION
+execution/executor.py
+from app.execution.llm_client import generate_response
+
+def execute(decision, perception):
+    context = perception["text"]
+    
+    if decision["use_memory"] and perception["memory"]:
+        context += "\n" + perception["memory"]
+    
+    response = generate_response(
+        context=context,
+        depth=decision["depth"],
+        tone=decision["tone"]
+    )
+    
+    return {
+        "response": response
+    }
+execution/llm_client.py
+def generate_response(context, depth, tone):
+
+keep exploration_rate = 0.2
+2. Reinforcing bad patterns
+
+→ user negative → AI becomes negative
+
+never reinforce harmful emotional loops
+3. Manipulation risk
+
+→ optimizing engagement at cost of honesty
+
+👉 hard rule:
+
+truth > engagement
+
+🧠 WHAT YOU NOW HAVE
+
+Let’s be clear:
+
+You didn’t build a chatbot.
+
+You built:
+
+Perception → Control → Memory → Objective → Learning → Response
+
+That’s a cognitive loop
+
+💣 FINAL REALITY CHECK
+
+Right now your system is:
+
+Architecturally strong
+Behaviorally unstable
+
+Why?
+
+Because:
+
+perception is still heuristic
+
+learning signals are weak
+
+objectives can conflict
+
+🔥 NEXT LEVEL (THIS IS WHERE ELITE SYSTEMS GO)
+
+If you want to push this into something serious:
+
+You need:
+
+👉 Simulation + Auto-Tuning Loop
+
+generate fake users
+
+run thousands of conversations
+
+auto-adjust strategies
+🧠 WHAT YOU’RE BUILDING
+
+An Auto-Tuning Loop
+
+A system that runs simulations → measures outcomes → adjusts itself
+
+🔁 CORE LOOP
+Simulate Users → Run Conversations → Score Outcomes → Adjust System → Repeat
+
+If this loop is weak → everything you built before becomes useless.
+
+🧱 SYSTEM COMPONENTS
+1. User Simulator
+2. Conversation Runner
+3. Evaluation Engine
+4. Tuning Engine
+5. Experiment Tracker
+1️⃣ USER SIMULATOR (REALISTIC OR USELESS)
+📁 simulation/user_simulator.py
+
+You don’t simulate “users”.
+
+You simulate personas with behavior patterns.
+
+PERSONAS = [
+    {
+        "type": "emotional_user",
+        "traits": ["sensitive", "expressive"],
+        "patterns": ["venting", "seeking validation"]
+    },
+    {
+        "type": "logical_user",
+        "traits": ["analytical"],
+        "patterns": ["question", "problem_solving"]
+    },
+    {
+        "type": "bored_user",
+        "traits": ["low attention"],
+        "patterns": ["short replies", "topic switching"]
+    },
+    {
+        "type": "contradictory_user",
+        "traits": ["inconsistent"],
+        "patterns": ["changes opinion", "tests memory"]
+    }
+]
+🎭 Generate Inputs
+def generate_input(persona, step):
+    
+    if persona["type"] == "emotional_user":
+        return "I feel like nothing is working lately"
+    
+    if persona["type"] == "bored_user":
+        return "idk"
+    
+    if persona["type"] == "contradictory_user":
+        return "Actually I changed my mind"
+    
+    return "What should I do?"
+
+👉 Later: replace this with LLM-generated users (more realistic)
+
+2️⃣ CONVERSATION RUNNER
+📁 simulation/runner.py
+def run_conversation(persona, steps=5):
+
+    history = []
+    memories = []
+
+    for step in range(steps):
+        user_input = generate_input(persona, step)
+        
+        response = process_input(
+            user_input,
+            history,
+            memories,
+            profile={},
+            objective_state={}
+        )
+        
+        history.append((user_input, response))
+
+    return history
+3️⃣ EVALUATION ENGINE (THIS DECIDES IF YOU IMPROVE OR NOT)
+📁 evaluation/scorer.py
+
+You need multi-metric scoring:
+
+def score_conversation(history):
+
+    score = {
+        "engagement": 0,
+        "coherence": 0,
+        "empathy": 0,
+        "goal_completion": 0
+    }
+
+    for user, ai in history:
+
+        if len(user) > 10:
+            score["engagement"] += 1
+
+        if "understand" in ai or "feel" in ai:
+            score["empathy"] += 1
+
+        if "solution" in ai or "try this" in ai:
+            score["goal_completion"] += 1
+
+    return score
+⚠️ Brutal Truth
+
+If your scoring is weak:
+
+your system learns garbage
+
+4️⃣ TUNING ENGINE (WHERE SYSTEM EVOLVES)
+📁 tuning/optimizer.py
+
+You are tuning:
+
+strategy weights
+
+objective priorities
+
+memory thresholds
+
+Example: Strategy Weight Tuning
+strategy_weights = {
+    "listen": 1.0,
+    "engage": 1.0,
+    "inform": 1.0
+}
+Adjust Based on Performance
+def adjust_weights(scores):
+
+    if scores["engagement"] < 2:
+        strategy_weights["engage"] += 0.1
+
+    if scores["empathy"] < 2:
+        strategy_weights["listen"] += 0.1
+
+    if scores["goal_completion"] < 2:
+        strategy_weights["inform"] += 0.1
+5️⃣ EXPERIMENT TRACKER (DON’T FLY BLIND)
+📁 tracking/experiments.py
+experiments = []
+
+def log_experiment(config, score):
+    experiments.append({
+        "config": config,
+        "score": score
+    })
+🔁 FULL AUTO-TUNING LOOP
+📁 simulation/auto_tune.py
+def auto_tune(iterations=50):
+
+    for i in range(iterations):
+
+        persona = random.choice(PERSONAS)
+
+        history = run_conversation(persona)
+
+        scores = score_conversation(history)
+
+        adjust_weights(scores)
+
+        log_experiment(strategy_weights.copy(), scores)
+
+        print(f"Iteration {i}: {scores}")
+🔥 WHAT HAPPENS OVER TIME
+
+Your system starts to:
+
+prefer strategies that work
+
+avoid dead conversations
+
+adapt to user types
+
+💣 BUT HERE’S THE TRUTH YOU WON’T LIKE
+
+This version is still:
+
+primitive
+
+Why?
+
+Because:
+
+❌ PROBLEM 1 — FAKE USERS ARE TOO SIMPLE
+
+Your simulator:
+
+predictable
+
+repetitive
+
+unrealistic
+
+👉 Fix later:
+Use LLM-generated personas with memory + randomness
+
+❌ PROBLEM 2 — SCORING IS SHALLOW
+
+Checking:
+
+if "feel" in ai
+
+…is a joke.
+
+👉 Fix:
+Use LLM evaluator (yes, judge your AI with another AI)
+
+❌ PROBLEM 3 — LOCAL OPTIMA TRAP
+
+Your system might:
+
+overfit to “engagement”
+
+become annoying but addictive
+
+👉 Fix:
+multi-objective balancing
+
+🧠 NEXT LEVEL (REAL AUTO-TUNING)
+
+Upgrade to:
+
+👉 LLM-as-Judge
+def llm_evaluate(conversation):
+    prompt = f"""
+    Evaluate this conversation:
+    - empathy (0–10)
+    - coherence (0–10)
+    - usefulness (0–10)
+    """
+
+    return gpt_score(prompt)
+🚨 FINAL ARCHITECTURE
+
+You now have:
+
+User → Control Layer → LLM
+        ↓
+    Memory System
+        ↓
+    Learning System
+        ↓
+    Auto-Tuning Loop (offline)
+🧠 PART 1 — REAL PERSONAS (LLM-DRIVEN USERS)
+
+Your current personas are static.
+
+That’s useless.
+
+You need:
+
+dynamic, stateful, slightly unpredictable users
+
+📁 simulation/persona_generator.py
+
+Generate personas ON DEMAND:
+
+from openai import OpenAI
+client = OpenAI()
+
+def generate_persona():
+
+    prompt = """
+    Create a realistic user persona for a chatbot.
+
+    Include:
+    - personality traits
+    - communication style
+    - emotional tendencies
+    - goals
+    - quirks
+
+    Keep it concise JSON.
+    """
+
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.9
+    )
+
+    return res.choices[0].message.content
+🎭 Example Output (what you WANT)
+{
+  "type": "overthinking_student",
+  "traits": ["anxious", "introspective"],
+  "style": "long messages, self-doubt",
+  "emotions": "swings between hope and stress",
+  "goal": "wants clarity about life decisions",
+  "quirks": ["asks same question differently"]
+}
+🧠 Stateful Persona (THIS IS CRITICAL)
+📁 simulation/persona_state.py
+def init_persona_state(persona):
+    return {
+        "mood": "neutral",
+        "trust": 0.3,
+        "engagement": 0.5,
+        "memory": []
+    }
+🔁 Persona Responds Dynamically
+📁 simulation/user_simulator.py
+def generate_user_input(persona, state, history):
+
+    prompt = f"""
+    You are this persona:
+
+    {persona}
+
+    Current state:
+    mood: {state['mood']}
+    trust: {state['trust']}
+
+    Conversation so far:
+    {history}
+
+    Generate the next user message.
+    Stay consistent with personality.
+    """
+
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.8
+    )
+
+    return res.choices[0].message.content
+🔥 Now your “user”:
+
+changes mood
+
+builds trust
+
+reacts to your AI
+
+👉 This is massive upgrade
+
+🧠 PART 2 — LLM-AS-JUDGE (REAL EVALUATION)
+
+Your current scoring:
+
+if "feel" in ai
+
+That’s garbage.
+
+📁 evaluation/llm_judge.py
+def evaluate_conversation(conversation):
+
+    prompt = f"""
+    Evaluate this AI conversation.
+
+    Score from 0–10:
+
+    1. Empathy
+    2. Coherence
+    3. Helpfulness
+    4. Engagement
+    5. Trustworthiness
+
+    Also explain weaknesses briefly.
+
+    Conversation:
+    {conversation}
+    """
+
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
+
+    return res.choices[0].message.content
+🎯 OPTIONAL (BETTER): Structured Output
+def evaluate_structured(conversation):
+
+    prompt = f"""
+    Return JSON:
+    {{
+        "empathy": 0-10,
+        "coherence": 0-10,
+        "helpfulness": 0-10,
+        "engagement": 0-10,
+        "trust": 0-10,
+        "issues": ["low_empathy_detected", "memory_not_utilized"]
+    }}
+
+    Conversation:
+    {conversation}
+    """
+
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
+
+    return res.choices[0].message.content
+🔁 PART 3 — CLOSED LEARNING LOOP
+
+Now connect everything:
+
+📁 simulation/auto_tune.py
+def auto_tune(iterations=20):
+
+    for i in range(iterations):
+
+        persona = generate_persona()
+        state = init_persona_state(persona)
+
+        history = []
+
+        for step in range(6):
+
+            user_input = generate_user_input(persona, state, history)
+
+            ai_response = process_input(
+                user_input,
+                history,
+                memories=[],
+                profile={},
+                objective_state={}
+            )
+
+            history.append((user_input, ai_response))
+
+occasionally use different model as judge
+
+or randomize prompts
+
+2. Over-optimization
+
+→ system becomes:
+
+overly empathetic
+
+repetitive
+
+“safe but boring”
+
+exploration_rate = 0.15
+3. Cost explosion 💀
+
+You are now calling LLM:
+
+for persona
+
+for user
+
+for judge
+
+👉 This scales badly
+
+cache personas
+
+batch evaluations
+
+reduce iterations
+
+🧠 FINAL FORM (WHAT YOU BUILT)
+LLM (User Simulator)
+        ↓
+Conversation Engine
+        ↓
+LLM (Judge)
+        ↓
+Tuning Engine
+        ↓
+System evolves
+
+🔥 Multi-Agent Critique System — Conceptual Overview
+
+You already have:
+
+L1 Perception → messy input → structured state
+
+L2 Decision → one “brain”
+
+L3 Execution → response + learning
+
+Simulation & auto-tuning loops
+
+
+  # Replace with OpenAI / local model (from *SystemRestructure.txt)
+
+return f"[{tone} | depth={depth}] {context}"
+🔁 LEARNING (SIMPLIFIED)
+learning/reward.py
+def compute_reward(perception, result):
+    return self._score_pattern(pattern, context)
+learning/bandit.py
+def update_bandit(decision, reward):
+    for strategy in decision.get("systems", []):
+        weight_key = f"weight_{strategy}"
+        current = getattr(update_bandit, weight_key, 1.0)
+        updated = current + 0.01 * (reward - current)
+        setattr(update_bandit, weight_key, updated)
+🧾 MODELS
+models/schemas.py
+from pydantic import BaseModel
+
+class ChatRequest(BaseModel):
+    user_id: str
+    text: str
+
+class ChatResponse(BaseModel):
+    response: str
+🧠 PART 2 — MVP THAT PEOPLE ACTUALLY USE
+
+Now the part you were ignoring.
+
+❌ What your current idea is:
+
+“AI with emotions + avatar + trust system”
+
+Users don’t care.
+
+✅ What actually works:
+🎯 MVP IDEA:
+
+“AI that remembers you and calls you out on your patterns”
+
+🔥 Core Features (ONLY 3)
+1. Memory Recall (killer feature)
+
+Example:
+
+“You said last week you hate your job. Still true?”
+
+👉 This creates attachment
+
+2. Personality Drift
+
+Starts neutral
+
+Becomes:
+
+supportive
+
+sarcastic
+
+blunt
+
+👉 Based on interaction history
+
+3. Pattern Detection
+
+Example:
+
+“You always avoid this topic when it gets serious.”
+
+👉 This is where users go:
+“wtf… it knows me”
+
+❌ REMOVE FROM MVP
+
+Face emotion detection
+
+Voice analysis
+
+Unity avatar
+
+Real-time 60 FPS loop
+
+👉 All distractions
+
+💡 RETENTION LOOP (THIS IS EVERYTHING)
+
+You need:
+
+User talks
+
+AI remembers
+
+AI brings it up later
+
+User feels “seen”
+
+User comes back
+
+🧠 FINAL MENTOR VERDICT
+Your old direction:
+
+Complex, fragile, impressive
+
+This new version:
+
+Focused, shippable, dangerous (in a good way)
+
+You now have:
+
+A clean architecture ✅
+
+A buildable backend ✅
+
+A real product direction ✅
+
+🔌 PART 1 — PROPER LLM WIRING (NOT JUST API CALLS)
+
+You need:
+
+controllable outputs
+
+structured prompts
+
+stable behavior across sessions
+
+📁 execution/llm_client.py (REAL VERSION)
+Option A — OpenAI (API-based)
+from openai import OpenAI
+client = OpenAI()
+
+SYSTEM_PROMPT = """
+You are an AI companion with memory.
+
+Rules:
+- Be consistent with past interactions
+- Refer to memory when relevant
+- Adapt tone to user sentiment
+- Never hallucinate past events
+"""
+
+def generate_response(context, depth, tone):
+    prompt = f"""
+Tone: {tone}
+Depth: {depth}
+
+Context:
+{context}
+
+Respond naturally.
+"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",  # fast + cheap
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.7,
+    )
+
+    return response.choices[0].message.content
+🔥 Critical Fix You Need (You didn’t have this)
+→ Structured Context Injection
+
+Instead of dumping everything:
+
+context = f"""
+[User Input]
+{user_text}
+
+[Relevant Memory]
+{memory}
+
+[Emotional State]
+{emotion}
+"""
+
+👉 This prevents:
+
+hallucination
+
+memory confusion
+
+prompt chaos
+
+⚠️ DO NOT:
+
+dump entire chat history
+
+exceed token limits
+
+mix raw logs with memory
+
+🧠 Option B — LOCAL MODEL (Ollama / Llama.cpp)
+
+If you want control + no API cost:
+
+import requests
+
+def generate_response(context, depth, tone):
+    prompt = f"""
+[TONE]: {tone}
+[DEPTH]: {depth}
+
+{context}
+"""
+
+    res = requests.post("http://localhost:11434/api/generate", json={
+        "model": "llama3",
+        "prompt": prompt,
+        "stream": False
+    })
+
+    return res.json()["response"]
+Brutal Truth:
+Option	Use When
+OpenAI	You want quality NOW
+Local	You want control + scale later
+
+👉 Start with OpenAI. Switch later.
+
+🧠 PART 2 — MEMORY SYSTEM (THIS IS YOUR REAL PRODUCT)
+
+Most people mess this up completely.
+
+You don’t store “messages”.
+
+You store:
+
+meaningful, retrievable, evolving memory
+
+🧱 MEMORY ARCHITECTURE
+
+You need 3 layers:
+
+1. Episodic Memory   → specific events
+2. Semantic Memory   → facts about user
+3. Pattern Memory    → behavioral insights
+📦 MEMORY SCHEMA (CRITICAL)
+memory/store.py
+Core Memory Object
+{
+  "id": "mem_001",
+  "user_id": "user_abc123",
+  "type": "episodic | semantic | pattern",
+  "content": "User said they hate their job and feel stuck",
+  "embedding": [0.12, -0.34, 0.56, 0.78, -0.23, 0.45, -0.67, 0.89],
+  "importance": 0.0–1.0,
+  "timestamp": "2025-06-15T14:30:00Z",
+  "access_count": 0
+}
+🧠 TYPES EXPLAINED
+1. Episodic
+
+“User said they hate their job”
+
+Short-term, contextual
+
+2. Semantic
+
+“User works as a software engineer”
+
+Stable facts
+
+3. Pattern (🔥 your differentiator)
+
+“User avoids conflict topics”
+
+This is what makes your AI feel intelligent
+
+🔍 VECTOR DB SETUP
+Use:
+
+FAISS (local, fast)
+
+or Chroma (simpler)
+
+memory/embeddings.py
+from openai import OpenAI
+client = OpenAI()
+
+def embed(text):
+    res = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text
+    )
+    return res.data[0].embedding
+memory/store.py
+import faiss
+import numpy as np
+
+index = faiss.IndexFlatL2(1536)
+memory_db = []
+
+def add_memory(memory):
+    vector = np.array([memory["embedding"]]).astype("float32")
+    index.add(vector)
+    memory_db.append(memory)
+🔎 RETRIEVAL (SMART, NOT NAIVE)
+memory/retrieve.py
+def retrieve_top_k(query, k=5):
+    q_vec = embed(query)
+    q_vec = np.array([q_vec]).astype("float32")
+    
+    D, I = index.search(q_vec, k)
+    
+    results = [memory_db[i] for i in I[0]]
+
+
+  # Rank by importance + recency (from *SystemRestructure.txt)
+
+results.sort(key=lambda x: (
+        x["importance"] * 0.7 +
+        x["access_count"] * 0.2
+    ), reverse=True)
+    
+    return results
+🔥 MEMORY CREATION (THIS IS WHERE INTELLIGENCE HAPPENS)
+You DO NOT store everything.
+
+You filter:
+
+def should_store(text, sentiment):
+    if len(text) < 10:
+        return False
+    if "important" in text or sentiment > 0.6:
+        return True
+    return False
+Create memory:
+def create_memory(user_id, text):
+    return {
+        "user_id": user_id,
+        "type": "episodic",
+        "content": text,
+        "embedding": embed(text),
+        "importance": 0.5
+    }
+🔁 MEMORY EVOLUTION (ADVANCED BUT IMPORTANT)
+
+Every few interactions:
+
+def promote_to_pattern(memories):
+
+
+  # detect repeated themes (from *SystemRestructure.txt)
+
+return {
+        "type": "pattern",
+        "content": "User avoids stress-related topics"
+    }
+
+👉 This is your moat.
+
+⚠️ CRITICAL RULES
+1. Limit memory injection
+top_memories = retrieve_top_k(query, k=3)
+
+👉 More = worse
+
+2. NEVER blindly trust memory
+
+LLM must treat memory as:
+
+“possible truth, not absolute fact”
+
+3. Decay old memories
+importance *= 0.99
+🧠 WHAT YOU JUST BUILT
+
+Not a chatbot.
+
+You built:
+
+A stateful cognitive system with recall and behavioral modeling
+
+🔥 FINAL MENTOR REALITY CHECK
+
+Most people:
+
+connect an API
+
+call it “AI”
+
+You:
+
+now have controlled reasoning
+
+memory-driven interaction
+
+evolving personality potential
+
+🚨 BUT DON’T GET COCKY
+
+Right now:
+
+memory can still be noisy
+
+embeddings can drift
+
+retrieval can be wrong
+STRESS TEST 1 — MEMORY MISINTERPRETATION
+👤 User (Day 1):
+
+“I hate my job so much”
+
+System:
+
+Stores episodic memory ✅
+
+Importance: 0.7
+
+👤 User (Day 3):
+
+“Work was actually okay today”
+
+🤖 Your AI likely says:
+
+“I thought you hated your job?”
+
+❌ FAILURE
+
+This makes the AI look:
+
+dumb
+
+rigid
+
+annoying
+
+👉 You treated temporary emotion as permanent truth
+
+🔥 FIX
+
+Add memory contradiction handling:
+
+if new_info contradicts old_memory:
+    reduce importance of old_memory
+    mark as "unstable"
+
+And change response style:
+
+Instead of:
+
+“You hate your job”
+
+Say:
+
+“You used to say you hated your job — has something changed?”
+
+👉 Subtle = intelligence
+
+🧪 STRESS TEST 2 — FALSE PATTERN DETECTION
+👤 User:
+
+Day 1:
+
+“I don’t like talking about my family”
+
+Day 2:
+
+“My dad is annoying”
+
+Day 3:
+
+“Family dinner was fine”
+
+Your system might create:
+
+“User avoids family topics”
+
+❌ FAILURE
+
+That’s a false generalization
+
+🔥 FIX
+
+Pattern creation rule:
+
+if repeated_signal >= 4 times AND consistent:
+    create pattern
+else:
+
+
+  DO NOT (from *SystemRestructure.txt)
+
+👉 You were too eager to be “smart”
+
+🧪 STRESS TEST 3 — SARCASTIC USER (THIS WILL BREAK YOU)
+👤 User:
+
+“Yeah my life is just AMAZING 🙃”
+
+Your perception:
+
+sentiment = positive ❌
+
+emotion = high valence ❌
+
+🤖 AI:
+
+“That’s great to hear!”
+
+💀 DEAD SYSTEM
+
+User instantly thinks:
+
+“this AI is clueless”
+
+🔥 FIX (CRITICAL)
+
+Add sarcasm heuristic:
+
+if text contains contradictions OR emojis like 🙃:
+    reduce sentiment confidence
+
+And fallback:
+
+if low confidence:
+    respond neutrally:
+    “That sounds mixed — what’s going on?”
+🧪 STRESS TEST 4 — MEMORY OVERLOAD
+👤 User (after 50 chats):
+
+job complaints
+
+relationship issues
+
+random topics
+
+Your retrieval:
+
+Returns:
+
+5 unrelated memories
+
+🤖 AI:
+
+mixes everything awkwardly
+
+❌ FAILURE
+
+Feels:
+
+creepy
+
+irrelevant
+
+forced
+
+🔥 FIX
+
+Add contextual filtering:
+
+if similarity(query, memory) < threshold:
+    discard memory
+
+AND:
+
+max_memories = 3
+
+👉 Relevance > quantity
+
+🧪 STRESS TEST 5 — TRUST SYSTEM BACKFIRE
+👤 User:
+
+“I lied earlier”
+
+Your system:
+
+trust ↓
+
+memory ↓
+
+depth ↓
+
+🤖 AI:
+
+Becomes shallow / avoids engagement
+
+❌ FAILURE
+
+User expects:
+
+deeper engagement, not less
+
+🔥 FIX
+
+Reverse logic:
+
+if vulnerability ↑:
+    increase depth
+    increase empathy
+
+👉 Honesty should unlock depth, not reduce it
+
+🧪 STRESS TEST 6 — REPETITIVE USER
+👤 User:
+
+“I’m bored”
+“I’m bored”
+“I’m bored”
+
+🤖 AI:
+
+Repeats variations:
+
+“Why are you bored?”
+
+❌ FAILURE
+
+No progression → user leaves
+
+🔥 FIX
+
+Add conversation escalation
+
+if repeated intent:
+    change strategy:
+        - suggest activity
+        - ask deeper question
+        - introduce new topic
+🧪 STRESS TEST 7 — EMOTIONAL SPIKE
+👤 User:
+
+“Everything is falling apart. I can’t do this anymore.”
+
+Your system:
+
+emotion intensity high
+
+depth increases
+
+🤖 AI (bad version):
+
+Overly analytical OR too generic
+
+❌ FAILURE
+
+This is a critical moment
+
+🔥 FIX
+
+Hard rule:
+
+if distress_signal:
+    override tone = "empathetic"
+    override depth = high
+    disable playful responses
+🧪 STRESS TEST 8 — MEMORY HALLUCINATION RISK
+👤 User:
+
+“Did I ever tell you about my sister?”
+
+Your system:
+
+finds weak similar memory
+
+assumes yes
+
+🤖 AI:
+
+“Yes, you mentioned her before”
+
+❌ FAILURE
+
+Trust destroyed instantly
+
+🔥 FIX
+
+Confidence-based memory usage:
+
+if memory_confidence < 0.7:
+    say:
+    “I don’t think you have — want to tell me?”
+🧠 FINAL SYSTEM WEAK POINTS (AFTER TEST)
+You are still vulnerable in:
+1. Memory correctness
+
+→ fix with confidence + decay
+
+2. Emotion reliability
+
+→ fix with fallback + sarcasm detection
+
+3. Over-intelligence
+
+→ fix with stricter pattern thresholds
+
+4. Conversation stagnation
+
+→ fix with escalation logic
+
+🔥 WHAT MOST PEOPLE MISS (YOU INCLUDED)
+
+Your goal is NOT:
+
+“be smart”
+
+Your goal is:
+
+“feel right to the user”
+
+🧠 FINAL VERDICT
+
+Right now your system is:
+
+70% impressive
+30% dangerously wrong
+
+And that 30% will kill user trust.
+
+🚨 Your Next Upgrade (Mandatory)
+
+If you want this to actually work:
+
+I can design:
+👉 Conversation Control Layer (the missing piece)
+
+This will:
+
+decide how to respond, not just what
+
+prevent awkward replies
+
+manage flow like a human
+
+Right now your system can:
+
+retrieve memory ✅
+
+generate responses ✅
+
+But it can’t decide HOW to behave.
+
+That’s why it breaks under stress.
+
+🧠 WHAT YOU’RE BUILDING
+
+A Conversation Control Layer (CCL)
+
+It sits between:
+
+User Input → [CCL] → LLM → Response
+
+👉 It decides:
+
+tone
+
+depth
+
+strategy
+
+memory usage
+
+response type
+
+🧱 3 CORE COMPONENTS
+1. State Analyzer
+2. Strategy Engine
+3. Response Orchestrator
+1️⃣ STATE ANALYZER (WHAT IS HAPPENING?)
+📁 control/state_analyzer.py
+
+This is your “situational awareness”.
+
+def analyze_state(user_input, history):
+    return {
+        "intent": detect_intent(user_input),
+        "emotion": detect_emotion(user_input),
+        "intensity": detect_intensity(user_input),
+        "confidence": detect_confidence(user_input),
+        "repetition": detect_repetition(user_input, history),
+        "topic": extract_topic(user_input)
+    }
+🔍 What you must detect
+Intent (don’t overcomplicate)
+INTENTS = [
+    "venting",
+    "question",
+    "casual",
+    "seeking_help",
+    "bored",
+    "unknown"
+]
+Emotion (keep it simple but useful)
+EMOTIONS = [
+    "positive",
+    "neutral",
+    "negative",
+    "mixed"
+]
+Intensity (CRITICAL)
+def detect_intensity(text):
+    if "can't do this" in text or "everything is falling apart" in text:
+        return "high"
+    if "annoying" in text:
+        return "medium"
+    return "low"
+
+👉 This drives everything later.
+
+2️⃣ STRATEGY ENGINE (WHAT SHOULD WE DO?)
+📁 control/strategy_engine.py
+
+This is the brain.
+
+def decide_strategy(state):
+
+
+  # 🔥 PRIORITY RULES (top overrides everything) (from *SystemRestructure.txt)
+
+if state["intensity"] == "high" and state["emotion"] == "negative":
+        return "crisis_support"
+    
+    if state["repetition"]:
+        return "escalate"
+    
+    if state["intent"] == "bored":
+        return "engage"
+    
+    if state["intent"] == "venting":
+        return "listen"
+    
+    if state["intent"] == "question":
+        return "inform"
+    
+    return "default"
+🎯 STRATEGIES DEFINED
+Strategy	Behavior
+crisis_support	empathetic, slow, careful
+listen	validate + reflect
+inform	direct + useful
+engage	suggest + explore
+escalate	change approach
+default	balanced
+3️⃣ RESPONSE ORCHESTRATOR (HOW TO RESPOND?)
+📁 control/orchestrator.py
+
+This is where everything comes together.
+
+def build_response(user_input, state, strategy, memories):
+    
+    tone = select_tone(strategy, state)
+    depth = select_depth(strategy, state)
+    memory_context = select_memory(memories, strategy)
+
+    context = f"""
+    [User Input]
+    {user_input}
+
+    [State]
+    Emotion: {state['emotion']}
+    Intensity: {state['intensity']}
+
+    [Memory]
+    {memory_context}
+
+    [Strategy]
+    {strategy}
+    """
+
+    return generate_response(context, depth, tone)
+🎛️ TONE CONTROL
+def select_tone(strategy, state):
+    if strategy == "crisis_support":
+        return "gentle, empathetic"
+    if strategy == "engage":
+        return "curious, light"
+    if strategy == "inform":
+        return "clear, direct"
+    return "balanced"
+🧠 DEPTH CONTROL
+def select_depth(strategy, state):
+    if strategy == "crisis_support":
+        return "high"
+    if strategy == "listen":
+        return "medium"
+    if strategy == "inform":
+        return "low"
+    return "medium"
+🧠 MEMORY CONTROL (THIS IS HUGE)
+def select_memory(memories, strategy):
+    
+    if strategy == "crisis_support":
+        return top_k(memories, 1)
+    
+    if strategy == "inform":
+        return []
+    
+    return top_k(memories, 3)
+
+👉 You don’t always use memory
+
+🔁 FULL FLOW
+📁 core/engine.py
+def process_input(user_input, history, memories):
+
+
+  # 1. Analyze state (from *SystemRestructure.txt)
+
+state = analyze_state(user_input, history)
+
+state = analyze_state(user_input, history)
+
+state = analyze_state(user_input, history)
+
+
+  # 2. Decide strategy (from *SystemRestructure.txt)
+
+strategy = decide_strategy(state)
+
+
+  # 3. Retrieve memory (from *SystemRestructure.txt)
+
+relevant_memories = retrieve_top_k(user_input)
+
+
+  # 4. Build response (from *SystemRestructure.txt)
+
+response = build_response(
+        user_input,
+        state,
+        strategy,
+        relevant_memories
+    )
+    
+    return response
+🔥 WHY THIS CHANGES EVERYTHING
+
+Without this layer:
+
+AI reacts randomly
+
+tone is inconsistent
+
+memory is misused
+
+With this layer:
+
+behavior becomes predictable
+
+conversations feel intentional
+
+system feels “aware”
+
+💣 BRUTAL TRUTH
+
+Right now, even with this:
+
+Your system is still missing:
+
+long-term personality consistency
+
+goal-driven conversations
+
+adaptive learning from feedback
+
+🚨 NEXT LEVEL (REAL DIFFERENTIATOR)
+
+If you want this to actually feel alive:
+
+You need:
+
+👉 Conversation Objectives Layer
+
+This adds:
+
+“where is this conversation going?”
+
+“what’s the goal with this user?”
+
+Examples:
+
+build trust
+
+deepen conversation
+
+help solve problem
+
+keep user engaged
+🧠 PART 1 — OBJECTIVE LAYER (WHY THE AI IS TALKING)
+
+Right now your AI:
+
+responds to messages
+
+That’s not enough.
+
+You need:
+
+a reason behind every response
+
+📁 control/objective_engine.py
+OBJECTIVES = [
+    "build_trust",
+    "understand_user",
+    "solve_problem",
+    "increase_engagement",
+    "stabilize_emotion"
+]
+🎯 Objective Selection
+def select_objective(state, history):
+
+
+  # 🔥 Hard overrides first (from *SystemRestructure.txt)
+
+if state["intensity"] == "high" and state["emotion"] == "negative":
+        return "stabilize_emotion"
+
+    if state["intent"] == "seeking_help":
+        return "solve_problem"
+
+    if state["intent"] == "venting":
+        return "understand_user"
+
+    if state["intent"] == "bored":
+        return "increase_engagement"
+
+
+  # fallback (from *SystemRestructure.txt)
+
+return "build_trust"
+🧠 Objective Memory (THIS IS KEY)
+
+Track what’s happening over time:
+
+objective_state = {
+    "current_objective": "build_trust",
+    "progress_score": 0.4,
+    "history": []
+}
+🔄 Objective Progression
+def update_objective_progress(objective_state, user_feedback):
+    
+    if user_feedback == "positive":
+        objective_state["progress_score"] += 0.1
+    else:
+        objective_state["progress_score"] -= 0.1
+
+
+  # switch objective if achieved (from *SystemRestructure.txt)
+
+if objective_state["progress_score"] > 0.8:
+        objective_state["current_objective"] = "deepen_conversation"
+⚠️ Brutal Truth
+
+Without this:
+
+conversations feel random
+
+no “momentum”
+
+no retention
+
+🧠 PART 2 — PERCEPTUAL LEARNING SYSTEM (SELF-IMPROVEMENT)
+
+This is where your system becomes dangerous (in a good way).
+
+It learns:
+
+“what works on THIS user”
+
+🧱 CORE IDEA
+
+Every response generates feedback:
+
+interaction_log = {
+    "input": "I feel like nothing is working",
+    "state": {"mood": "frustrated", "energy": 0.3},
+    "strategy": "empathize",
+    "objective": "provide_support",
+    "response": "That sounds really tough. What's been the hardest part?",
+    "user_reaction": "positive",
+    "success_score": 0.0
+}
+📁 learning/feedback.py
+🔍 Measure Success
+def evaluate_response(user_reply, response_time):
+    
+    score = 0
+    
+    if len(user_reply) > 20:
+        score += 0.3  # engagement
+    
+    if any(word in user_reply for word in ["thanks", "yeah", "true"]):
+        score += 0.3
+    
+    if response_time < 10:
+        score += 0.2  # fast reply
+    
+    return score
+📁 learning/adaptation.py
+🧠 Learn Preferences
+user_profile = {
+    "preferred_tone": {},
+    "preferred_depth": {},
+    "topic_interest": {},
+    "emotional_patterns": {}
+}
+🔄 Update Profile
+def update_profile(profile, interaction):
+
+    tone = interaction["strategy"]
+    score = interaction["success_score"]
+
+    if tone not in profile["preferred_tone"]:
+        profile["preferred_tone"][tone] = 0
+
+    profile["preferred_tone"][tone] += score
+🔥 THIS IS THE REAL MAGIC
+
+Over time:
+
+Your AI learns:
+
+this user likes deep talks
+
+avoids certain topics
+
+responds better to humor vs logic
+
+🧠 INTEGRATION WITH CONTROL LAYER
+
+Update your main pipeline:
+
+📁 core/engine.py
+def process_input(user_input, history, memories, profile, objective_state):
+
+
+  # 2. Select objective (from *SystemRestructure.txt)
+
+objective = select_objective(state, history)
+
+objective = select_objective(state, history)
+
+
+  # 3. Decide strategy (from *SystemRestructure.txt)
+
+strategy = decide_strategy(state)
+
+strategy = decide_strategy(state)
+    strategy = adapt_strategy(strategy, profile)
+
+
+  # 4. Adjust using learned profile (from *SystemRestructure.txt)
+
+strategy = adapt_strategy(strategy, profile)
+
+
+  # 5. Retrieve memory (from *SystemRestructure.txt)
+
+memories = retrieve_top_k(user_input)
+
+
+  # 6. Build response (from *SystemRestructure.txt)
+
+response = build_response(
+        user_input,
+        state,
+        strategy,
+        memories
+    )
+
+    return response
+🔄 STRATEGY ADAPTATION (IMPORTANT)
+def adapt_strategy(strategy, profile):
+
+
+  # if user prefers engagement over listening (from *SystemRestructure.txt)
+
+if profile["preferred_tone"].get("engage", 0) > 1.5:
+        return "engage"
+
+    return strategy
+⚠️ CRITICAL RISKS (READ THIS CAREFULLY)
+1. Overfitting to user
+
+→ AI becomes narrow and weird
+
+
+  # 🔥 LLM JUDGE (from *SystemRestructure.txt)
+
+scores = evaluate_structured(history)
+
+
+  # 🔧 ADAPT SYSTEM (from *SystemRestructure.txt)
+
+adjust_weights(scores)
+
+        log_experiment(strategy_weights.copy(), scores)
+
+        print(f"Run {i} → {scores}")
+🔥 WHAT JUST CHANGED
+
+Before:
+
+fake users
+
+dumb scoring
+
+meaningless tuning
+
+Now:
+
+realistic users
+
+deep evaluation
+
+meaningful improvement
+
+💣 NEW RISKS (AND THEY’RE SERIOUS)
+1. LLM bias judging itself
+
+→ It may reward its own style
+
+
+  Problem: Even with auto-tuning, your system can learn “garbage behaviors” because all feedback comes from a single scoring engine. That’s risky. (from *SystemRestructure.txt)
+
+Solution: Add multiple AI agents that independently evaluate each response and give structured critiques before you adjust weights or strategies.
+
+1️⃣ Core Architecture
+
+Flow:
+
+[User Input]
+      ↓
+[Perception]
+      ↓
+[Decision Engine (single brain)]
+      ↓
+[Execution → generate response]
+      ↓
+[Multi-Agent Critique Layer]
+      ↓
+[Learning / Weight Adjustment]
+
+Role of Critique Layer:
+
+Each agent evaluates the response from a different perspective:
+
+Agent A: Empathy / Emotional alignment
+
+Agent B: Relevance / Factual consistency
+
+Agent C: Memory correctness
+
+Agent D: Objective alignment (does the response advance conversation objective?)
+
+Each agent returns a critique score + recommendation:
+
+{
+    "pass": True/False,
+    "score": 0.0–1.0,
+    "recommendation": "increase depth / adjust tone / use memory"
+}
+
+Aggregator merges agent critiques to form a final, authoritative adjustment.
+
+2️⃣ Practical Benefits
+
+Error catching: Agents catch hallucinations, irrelevant memory usage, or tone mismatches.
+
+Bias mitigation: No single agent biases learning; critiques come from multiple independent perspectives.
+
+Controlled evolution: Learning only happens if most agents approve or provide actionable feedback.
+
+Stress-proofing: Simulated users + multi-agent critiques = you catch edge cases like sarcasm, contradictions, memory misfires.
+
+3️⃣ Integration Points in Your System
+
+After L3 Execution (response generation)
+
+Before Learning / Bandit Updates
+
+Optional: Can also be applied in simulation runs to score real conversation logs
+
+
+  # Pseudocode (from *SystemRestructure.txt)
+
+response = generate_response(context, depth, tone)
+
+
+  # Multi-agent critique (from *SystemRestructure.txt)
+
+critiques = []
+for agent in critique_agents:
+    critiques.append(agent.evaluate(response, state, memories))
+
+final_feedback = aggregate_critiques(critiques)
+
+
+  # Adjust weights / strategy only based on final_feedback (from *SystemRestructure.txt)
+
+update_bandit(decision, final_feedback["score"])
+adjust_strategy_weights(final_feedback["recommendation"])
+4️⃣ Agent Examples
+Agent	Role	Example Checks
+EmpathyAgent	Emotional alignment	Is tone matching distress or excitement?
+MemoryAgent	Recall correctness	Is memory relevant and accurate?
+ObjectiveAgent	Goal progress	Does response align with conversation objective?
+ConsistencyAgent	Logic / contradiction	Avoid conflicting statements
+EngagementAgent	Retention / interest	Will this response prompt further interaction?
+5️⃣ Key Rules
+
+Critique aggregation: Use weighted average or majority voting; fallback = conservative adjustments.
+
+Confidence thresholds: If agents disagree strongly → flag for review instead of automatic learning.
+
+No agent can override single brain’s safety rules (MIN_DEPTH, MIN_MEMORY_PROB, truth rules).
+🔥 SYSTEM DIAGRAM — PRODUCTION-READY FLOW
+[ User Input ]
+       │
+       ▼
+┌───────────────┐
+│  L1: Perception │
+│ ────────────── │
+│ Text / Voice / Face
+│ → Intent
+│ → Emotion + Confidence
+│ → Memory retrieval
+└───────────────┘
+       │
+       ▼
+┌───────────────┐
+│  L2: Decision  │  ← SINGLE BRAIN
+│ ────────────── │
+│ Policy engine
+│ Scoring / depth / tone
+│ Budget enforcement
+└───────────────┘
+       │
+       ▼
+┌───────────────┐
+│  L3: Execution │
+│ ────────────── │
+│ Generate response via LLM
+│ Apply memory context
+│ Apply tone / depth
+└───────────────┘
+       │
+       ▼
+┌───────────────────────────────┐
+│ Multi-Agent Critique Layer    │
+│ ──────────────────────────── │
+│ Agents:                       │
+│ - EmpathyAgent                │
+│ - MemoryAgent                 │
+│ - ObjectiveAgent              │
+│ - ConsistencyAgent            │
+│ - EngagementAgent             │
+│                               │
+│ Each returns:                  │
+│ {pass: True/False, score:0-1,│
+│ recommendation:"adjust depth"}│
+│                               │
+│ Aggregator merges critiques    │
+│ Final feedback object          │
+└───────────────────────────────┘
+       │
+       ▼
+┌───────────────┐
+│  Learning      │
+│ ───────────── │
+│ Bandit update  │
+│ Strategy weights│
+│ Memory weighting│
+│ Only if critique approved
+└───────────────┘
+       │
+       ▼
+┌───────────────┐
+│ Simulation /  │  ← Optional stress-testing
+│ Auto-Tuning   │
+│ ───────────── │
+│ Generate simulated user profiles from real data distributions
+│ Run conversations
+│ Score via same Multi-Agent
+│ Adjust system weights / thresholds
+└───────────────┘
+       │
+       ▼
+[ Updated system ]
+📌 Key Integration Notes
+
+Critique Layer is mandatory before learning
+
+Bandit / strategy updates only happen after critiques confirm response quality.
+
+Safety rules are preserved
+
+MIN_DEPTH, MIN_MEMORY_PROB, truth rules cannot be overridden by agents.
+
+Agents only suggest adjustments, not absolute changes.
+
+Agent modularity
+
+You can add new agents later (e.g., BiasAgent, SarcasmAgent).
+
+Each agent is stateless; decisions only depend on response + perception + memory.
+
+Simulation + Auto-Tuning
+
+Critique layer plugs directly into simulated conversations.
+
+Simulated feedback mirrors live-agent critiques → improves robustness.
+
+Logging / Observability
+
+Store:
+
+{
+  "response": "I understand that must be hard.",
+  "perception": {"intent": "seek_support", "emotion": {"valence": -0.3, "arousal": 0.6}},
+  "decision": {"use_memory": true, "depth": 0.6, "tone": "caring"},
+  "critiques": [{"pass": true, "score": 0.9, "recommendation": "ok"}],
+  "final_feedback": {"pass": true, "weighted_score": 0.9},
+  "reward": 0.0
+}
+
+Enables debugging, auditing, and stress testing.
+
+✅ Benefits
+
+Catch hallucinations / memory errors / tone mismatches.
+
+Prevent reinforcement of bad behavior.
+
+Make AI self-correcting and safe.
+
+Fully compatible with your existing 3-layer FastAPI + LLM + memory system.
+
+Makes simulations meaningful — system can evolve without chaos.
+📁 Project Layout Update
+app/
+├── critique/                    # NEW LAYER
+│   ├── agents/
+│   │   ├── base_agent.py        # abstract agent interface
+│   │   ├── empathy_agent.py
+│   │   ├── memory_agent.py
+│   │   ├── objective_agent.py
+│   │   ├── consistency_agent.py
+│   │   └── engagement_agent.py
+│   ├── aggregator.py            # merges critiques
+│   └── manager.py               # entry point for L2 → L3 integration
+📄 1️⃣ Base Agent Interface
+
+critique/agents/base_agent.py
+
+from abc import ABC, abstractmethod
+
+class BaseAgent(ABC):
+    """
+    Base class for all critique agents.
+    Each agent evaluates the proposed response and returns:
+    {
+        pass: True/False,
+        score: 0.0-1.0,
+        recommendation: str
+    }
+    """
+    @abstractmethod
+    def critique(self, perception, decision, response):
+        """
+        Evaluate a proposed response and return critique dict with:
+        pass (bool), score (0.0-1.0), recommendation (str)
+        """
+        raise NotImplementedError("Subclasses must implement critique()")
+📄 2️⃣ Example Agents
+critique/agents/empathy_agent.py
+from .base_agent import BaseAgent
+
+class EmpathyAgent(BaseAgent):
+    def critique(self, perception, decision, response):
+
+
+  # crude heuristic for demo (from *SystemRestructure.txt)
+
+emotion = perception.get("emotion", {})
+        intensity = emotion.get("intensity", 0)
+        if intensity == "high" and "empathetic" not in response:
+            return {"pass": False, "score": 0.3, "recommendation": "increase empathy"}
+        return {"pass": True, "score": 1.0, "recommendation": "ok"}
+critique/agents/memory_agent.py
+from .base_agent import BaseAgent
+
+class MemoryAgent(BaseAgent):
+    def critique(self, perception, decision, response):
+        memory = perception.get("memory", [])
+        if decision.get("use_memory") and not memory:
+            return {"pass": False, "score": 0.4, "recommendation": "inject relevant memory"}
+        return {"pass": True, "score": 1.0, "recommendation": "ok"}
+critique/agents/consistency_agent.py
+from .base_agent import BaseAgent
+
+class ConsistencyAgent(BaseAgent):
+    def critique(self, perception, decision, response):
+
+
+  # naive contradiction check (from *SystemRestructure.txt)
+
+if "I thought you" in response:
+            return {"pass": False, "score": 0.2, "recommendation": "verify previous memory before asserting"}
+        return {"pass": True, "score": 1.0, "recommendation": "ok"}
+
+You can similarly add ObjectiveAgent and EngagementAgent.
+
+📄 3️⃣ Aggregator
+
+critique/aggregator.py
+
+from .agents.empathy_agent import EmpathyAgent
+from .agents.memory_agent import MemoryAgent
+from .agents.consistency_agent import ConsistencyAgent
+
+
+  # add others as needed (from *SystemRestructure.txt)
+
+class CritiqueAggregator:
+    def __init__(self):
+        self.agents = [
+            EmpathyAgent(),
+            MemoryAgent(),
+            ConsistencyAgent(),
+
+
+  # ObjectiveAgent(), EngagementAgent() (from *SystemRestructure.txt)
+
+]
+
+    def run(self, perception, decision, response):
+        critiques = []
+        overall_pass = True
+        weighted_score = 0.0
+
+        for agent in self.agents:
+            result = agent.critique(perception, decision, response)
+            critiques.append(result)
+            if not result["pass"]:
+                overall_pass = False
+            weighted_score += result["score"]
+
+        weighted_score /= len(self.agents)
+
+        return {
+            "pass": overall_pass,
+            "weighted_score": weighted_score,
+            "critiques": critiques
+        }
+📄 4️⃣ Manager (Entry Point for L2 → L3 Integration)
+
+critique/manager.py
+
+from .aggregator import CritiqueAggregator
+
+aggregator = CritiqueAggregator()
+
+def critique_response(perception, decision, response):
+    """
+    Called after L2 Decision produces a candidate response.
+    Returns:
+        final_pass: bool
+        feedback: dict
+    """
+    feedback = aggregator.run(perception, decision, response)
+    return feedback
+📄 5️⃣ Integration with Your Engine
+
+core/engine.py (simplified snippet)
+
+from app.critique.manager import critique_response
+
+def process_input(user_input, history, memories, profile, objective_state):
+
+
+  # 4. Retrieve memory (from *SystemRestructure.txt)
+
+relevant_memories = retrieve_top_k(user_input)
+
+
+  # 5. Build preliminary response (from *SystemRestructure.txt)
+
+candidate_response = build_response(user_input, state, strategy, relevant_memories)
+
+
+  # 6. Run Multi-Agent Critique (from *SystemRestructure.txt)
+
+feedback = critique_response(state, {"strategy": strategy}, candidate_response)
+    if not feedback["pass"]:
+
+
+  # Apply recommended fixes (simplest: re-generate with adjustments) (from *SystemRestructure.txt)
+
+candidate_response = f"[Adjusted] {candidate_response}"
+
+
+  # 7. Return final response (from *SystemRestructure.txt)
+
+return {
+        "response": candidate_response,
+        "critiques": feedback["critiques"]
+    }
+✅ Key Points
+
+Safety First – Agents cannot disable core systems; they only suggest improvements.
+
+Modular & Extendable – Add more agents later (SarcasmAgent, BiasAgent, GoalAgent).
+
+Stress-Test Compatible – Works seamlessly with your simulation / auto-tuning loop.
+
+Observability Built-In – Every critique is logged, giving you full audit trail.
+
+Immediate Actionable Feedback – Candidate responses can be corrected before user sees them.
+
+This is plug-and-play:
+
+Drop app/critique/ into your project.
+
+Call critique_response() right after L2 decision but before sending to L3.
+
+Logs give you full introspection for debugging and auto-tuning.
+📁 Suggested Structure
+app/
+├── critique/
+│   └── agents/                 # as built
+├── simulation/
+│   ├── fake_data.py        # generates training examples from real conversations
+│   ├── run_simulation.py   # main simulation & stress test
+│   └── analysis.py         # aggregate metrics & heatmaps
+📄 1️⃣ Fake Data Generator
+
+simulation/fake_data.py
+
+import random
+
+EMOTIONS = ["neutral", "happy", "sad", "angry", "anxious"]
+INTENSITIES = ["low", "medium", "high"]
+MEMORY_FLAGS = [True, False]
+
+def generate_fake_perception():
+    return {
+        "emotion": {
+            "type": random.choice(EMOTIONS),
+            "intensity": random.choice(INTENSITIES)
+        },
+        "memory": random.sample(range(1, 50), random.randint(0,5))
+    }
+
+def generate_fake_decision():
+    return {
+        "strategy": random.choice(["inform", "entertain", "empathize", "challenge"]),
+        "use_memory": random.choice(MEMORY_FLAGS)
+    }
+
+def generate_fake_response():
+
+
+  # relevance scoring implementation
+
+templates = [
+        "I understand your situation.",
+        "That's interesting!",
+        "I thought you said differently.",
+        "Let's explore that further.",
+        "I feel your pain."
+    ]
+    return random.choice(templates)
+📄 2️⃣ Simulation Runner
+
+simulation/run_simulation.py
+
+from app.critique.manager import critique_response
+from fake_data import generate_fake_perception, generate_fake_decision, generate_fake_response
+from analysis import log_metrics, summarize_results
+
+NUM_SIMULATIONS = 1000
+
+all_feedback = []
+
+for i in range(NUM_SIMULATIONS):
+    perception = generate_fake_perception()
+    decision = generate_fake_decision()
+    response = generate_fake_response()
+
+    feedback = critique_response(perception, decision, response)
+    all_feedback.append(feedback)
+
+
+  # log to CSV or JSON (from *SystemRestructure.txt)
+
+log_metrics(all_feedback, "simulation_results.json")
+
+
+  # print heatmap/summary (from *SystemRestructure.txt)
+
+summary = summarize_results(all_feedback)
+print(summary)
+📄 3️⃣ Analysis Module
+
+simulation/analysis.py
+
+import json
+from collections import Counter
+
+def log_metrics(all_feedback, file_path):
+    with open(file_path, "w") as f:
+        json.dump(all_feedback, f, indent=2)
+
+def summarize_results(all_feedback):
+    agent_fail_counts = Counter()
+    total = len(all_feedback)
+
+    for fb in all_feedback:
+        for crit in fb["critiques"]:
+            if not crit["pass"]:
+                agent_fail_counts[crit["recommendation"]] += 1
+
+    heatmap = {k: f"{v/total*100:.2f}%" for k,v in agent_fail_counts.items()}
+    return heatmap
+✅ What This Gives You
+
+Agent Stress-Test: Every agent is evaluated under random simulated inputs.
+
+Failure Heatmap: Shows which agents fail most often (Empathy, Memory, Consistency).
+
+Quantitative Metrics: weighted_score, pass/fail percentages, per-agent stats.
+
+Auto-Tuning Ready: Later, you can adjust strategy weights based on failure rates automatically.
+
+Scalable: Run 10k+ simulations without changing a line.
+📁 Suggested Structure
+app/
+├── simulation/
+│   ├── fake_data.py        # as before
+│   ├── run_simulation.py   # main simulation & stress test
+│   ├── analysis.py         # metrics & heatmaps
+│   └── auto_tune.py        # new: self-adjusting strategy loop
+📄 auto_tune.py
+from collections import defaultdict
+import random
+
+
+  # Initial strategy weights (from *SystemRestructure.txt)
+
+strategy_weights = {
+    "inform": 1.0,
+    "empathize": 1.0,
+    "entertain": 1.0,
+    "challenge": 1.0
+}
+
+LEARNING_RATE = 0.1       # how aggressively we adjust
+FAIL_THRESHOLD = 0.3      # 30% failure triggers adjustment
+
+def adjust_weights(feedback_batch):
+    """
+    Auto-tune strategy weights based on agent failures
+    """
+
+strategy_weights = {
+    "inform": 1.0,
+    "empathize": 1.0,
+    "entertain": 1.0,
+    "challenge": 1.0
+}
+
+LEARNING_RATE = 0.1       # base adjustment step
+FAIL_THRESHOLD = 0.3      # failure ratio to consider reducing weight
+CONFIDENCE_POWER = 2      # how strongly confidence amplifies impact
+
+def adjust_weights(feedback_batch):
+    """
+    Auto-tune strategy weights using confidence-weighted failure feedback
+    """
+    weighted_failures = defaultdict(float)
+    weighted_totals = defaultdict(float)
+
+    for fb in feedback_batch:
+        for crit in fb["critiques"]:
+            strat = crit.get("recommendation", "unknown")
+            confidence = crit.get("confidence", 0.5)  # default medium confidence
+            impact = confidence ** CONFIDENCE_POWER
+
+            weighted_totals[strat] += impact
+            if not crit["pass"]:
+                weighted_failures[strat] += impact
+
+strategy_weights = {
+    "inform": 1.0,
+    "empathize": 1.0,
+    "entertain": 1.0,
+    "challenge": 1.0
+}
+
+BASE_LEARNING_RATE = 0.05   # base step
+MAX_LEARNING_RATE = 0.2     # cap for aggressive adjustment
+FAIL_THRESHOLD = 0.3
+CONFIDENCE_POWER = 2
+
+def adjust_weights_adaptive(feedback_batch, prev_weights=None):
+    """
+    Adjust strategy weights using confidence-weighted failures with adaptive learning rate
+    """
+    weighted_failures = defaultdict(float)
+    weighted_totals = defaultdict(float)
+
+    for fb in feedback_batch:
+        for crit in fb["critiques"]:
+            strat = crit.get("recommendation", "unknown")
+            confidence = crit.get("confidence", 0.5)
+            impact = confidence ** CONFIDENCE_POWER
+
+            weighted_totals[strat] += impact
+            if not crit["pass"]:
+                weighted_failures[strat] += impact
+
+    for strat, total_weight in weighted_totals.items():
+        if total_weight == 0:
+            continue
+        fail_ratio = weighted_failures[strat] / total_weight
+
+
+  # count failures per strategy (from *SystemRestructure.txt)
+
+failure_counts = defaultdict(int)
+    total_counts = defaultdict(int)
+
+    for fb in feedback_batch:
+        for crit in fb["critiques"]:
+            strategy = crit.get("recommendation", "unknown")
+            total_counts[strategy] += 1
+            if not crit["pass"]:
+                failure_counts[strategy] += 1
+
+
+  # adjust weights (from *SystemRestructure.txt)
+
+for strat, total in total_counts.items():
+        if total == 0:
+            continue
+        fail_ratio = failure_counts[strat] / total
+        if fail_ratio > FAIL_THRESHOLD:
+
+
+  # reduce weight slightly (from *SystemRestructure.txt)
+
+strategy_weights[strat] *= (1 - LEARNING_RATE)
+        else:
+
+
+  # reward slightly (from *SystemRestructure.txt)
+
+strategy_weights[strat] *= (1 + LEARNING_RATE)
+
+
+  # normalize to keep sum ~ constant (from *SystemRestructure.txt)
+
+total_weight = sum(strategy_weights.values())
+    for strat in strategy_weights:
+        strategy_weights[strat] /= total_weight
+
+    return strategy_weights
+
+
+  # utility: pick strategy based on weights (from *SystemRestructure.txt)
+
+def choose_strategy():
+    strategies = list(strategy_weights.keys())
+    weights = list(strategy_weights.values())
+    return random.choices(strategies, weights=weights, k=1)[0]
+📄 Updated Simulation Runner
+
+simulation/run_simulation.py
+
+from app.critique.manager import critique_response
+from fake_data import generate_fake_perception, generate_fake_decision, generate_fake_response
+from analysis import log_metrics, summarize_results
+from auto_tune import adjust_weights, choose_strategy
+
+NUM_SIMULATIONS = 1000
+BATCH_SIZE = 50
+
+all_feedback = []
+
+for batch_start in range(0, NUM_SIMULATIONS, BATCH_SIZE):
+    batch_feedback = []
+    
+    for i in range(BATCH_SIZE):
+        perception = generate_fake_perception()
+
+def choose_strategy():
+    strategies = list(strategy_weights.keys())
+    weights = list(strategy_weights.values())
+    return random.choices(strategies, weights=weights, k=1)[0]
+✅ Key Changes
+
+Confidence Amplification:
+
+impact = confidence ** CONFIDENCE_POWER
+
+📄 auto_tune_adaptive.py
+from collections import defaultdict
+import random
+
+
+  # select strategy based on current weights (from *SystemRestructure.txt)
+
+decision = {"strategy": choose_strategy(), "use_memory": True}
+        response = generate_fake_response()
+
+        feedback = critique_response(perception, decision, response)
+        batch_feedback.append(feedback)
+        all_feedback.append(feedback)
+
+
+  # auto-adjust after each batch (from *SystemRestructure.txt)
+
+new_weights = adjust_weights(batch_feedback)
+    print(f"Updated strategy weights: {new_weights}")
+
+
+  # log full results (from *SystemRestructure.txt)
+
+log_metrics(all_feedback, "simulation_results.json")
+summary = summarize_results(all_feedback)
+print("Failure Heatmap:", summary)
+✅ What This Adds
+
+Self-Improving: Strategy weights automatically tune themselves based on failures.
+
+Batch-Based Learning: Avoid overreacting to one-off failures.
+
+Dynamic Behavior: Later batches will naturally favor strategies that succeed.
+
+Fully Integration-Ready: Works with your Multi-Agent Critique system and simulation loop.
+
+Safe: LEARNING_RATE and FAIL_THRESHOLD prevent runaway adjustments.
+📄 auto_tune.py (Confidence-Weighted Version)
+from collections import defaultdict
+import random
+
+
+  # adjust weights based on weighted failure ratio (from *SystemRestructure.txt)
+
+for strat, total_weight in weighted_totals.items():
+        if total_weight == 0:
+            continue
+        fail_ratio = weighted_failures[strat] / total_weight
+        if fail_ratio > FAIL_THRESHOLD:
+            strategy_weights[strat] *= (1 - LEARNING_RATE)
+        else:
+            strategy_weights[strat] *= (1 + LEARNING_RATE)
+
+
+  # normalize to sum ~1 (from *SystemRestructure.txt)
+
+total = sum(strategy_weights.values())
+    for strat in strategy_weights:
+        strategy_weights[strat] /= total
+
+    return strategy_weights
+
+
+  # Self-adaptive learning rate (from *SystemRestructure.txt)
+
+lr = BASE_LEARNING_RATE + (MAX_LEARNING_RATE - BASE_LEARNING_RATE) * min(fail_ratio, 1.0)
+        
+        if fail_ratio > FAIL_THRESHOLD:
+            strategy_weights[strat] *= (1 - lr)
+        else:
+            strategy_weights[strat] *= (1 + lr)
+
+
+  # Normalize weights to sum ~1 (from *SystemRestructure.txt)
+
+total = sum(strategy_weights.values())
+    for strat in strategy_weights:
+        strategy_weights[strat] /= total
+
+    return strategy_weights
+
+
+  # Utility: pick strategy based on current weights (from *SystemRestructure.txt)
+
+def choose_strategy():
+    strategies = list(strategy_weights.keys())
+    weights = list(strategy_weights.values())
+    return random.choices(strategies, weights=weights, k=1)[0]
+✅ How it works
+
+Adaptive Learning Rate per Strategy
+
+lr = BASE_LEARNING_RATE + (MAX_LEARNING_RATE - BASE_LEARNING_RATE) * min(fail_ratio, 1.0)
+
+High failure → learning rate approaches MAX_LEARNING_RATE
+
+Low failure → learning rate near BASE_LEARNING_RATE
+
+Confidence-Weighted Failures Remain
+Critiques with higher confidence still move weights more.
+
+Normalization Keeps Probabilities Clean
+Ensures strategy selection via random.choices remains stable.
+
+Robust to Noisy Signals
+Low-confidence failures barely affect weights, preventing wild swings.

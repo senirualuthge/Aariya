@@ -1,0 +1,1929 @@
+instead of:
+
+search
+→ verify
+→ compare
+→ reason
+→ synthesize
+
+The fix is to insert a Research Cognition Layer between retrieval and reasoning.
+
+New structure:
+
+User Query
+    ↓
+Research Planner
+    ↓
+Multi-source Retrieval
+    ↓
+Source Validation Layer
+    ↓
+Evidence Graph
+    ↓
+Contradiction Detector
+    ↓
+Trust Scorer
+    ↓
+Research Synthesizer
+    ↓
+Reflection + Learning
+    ↓
+Response
+
+Build this:
+
+server/cognition/research/
+
+source_validator.py
+trust_engine.py
+evidence_graph.py
+contradiction_detector.py
+provenance_tracker.py
+research_reflection.py
+Step 1 — Source Trust Engine
+
+Raw sources should never directly enter memory.
+
+Create:
+
+class SourceScore:
+
+    url:str
+
+    authority:float
+    factual_history:float
+    recency:float
+    citation_density:float
+    agreement_score:float
+
+    trust_score:float
+
+Scoring example:
+
+trust=
+
+(
+authority*.30+
+agreement*.25+
+citation*.20+
+recency*.10+
+history*.15
+)
+
+Example:
+
+Peer-reviewed paper → .93
+Government source → .90
+Official documentation → .88
+Major news source → .75
+Random blog → .43
+Anonymous forum → .25
+
+Do not hardcode static lists forever. Start with heuristics and later learn source reliability dynamically.
+
+Step 2 — Add Provenance Tracking
+
+Every claim should carry its origin.
+
+Current dangerous flow:
+
+Fact
+↓
+Memory
+
+Replace with:
+
+Fact
+↓
+Evidence
+↓
+Sources
+↓
+Confidence
+↓
+Memory
+
+Structure:
+
+class Evidence:
+
+    statement:str
+
+    sources:list
+
+    confidence:float
+
+    timestamp:str
+
+    supporting_claims:list
+
+    contradicting_claims:list
+
+Example:
+
+Evidence(
+
+statement=
+"Model X outperforms Y",
+
+sources=[
+"paper_a",
+"benchmark_b"
+],
+
+confidence=.84
+)
+
+Now the system knows:
+
+what it knows
+where it came from
+how certain it is
+Step 3 — Build an Evidence Graph
+
+Instead of:
+
+memory:
+[
+fact1,
+fact2,
+fact3
+]
+
+Build:
+
+Claim A
+   ↓ supports
+Claim B
+
+Claim C
+   ↓ contradicts
+Claim B
+
+Claim D
+   ↓ explains
+Claim A
+
+Prototype:
+
+graph.add_edge(
+
+claim_a,
+claim_b,
+
+relation="supports"
+)
+
+graph.add_edge(
+
+claim_c,
+claim_b,
+
+relation="contradicts"
+)
+
+Now reasoning becomes structural.
+
+Step 4 — Contradiction Detection
+
+Research systems should intentionally search for disagreement.
+
+Bad:
+
+search:
+"benefits of X"
+
+Better:
+
+search:
+"benefits of X"
+
+search:
+"criticisms of X"
+
+search:
+"limitations of X"
+
+search:
+"alternative views on X"
+
+Then compare:
+
+if similarity>0.8:
+
+    if sentiment_opposite:
+
+        contradiction=True
+
+Store:
+
+Contradiction(
+
+claim_A,
+
+claim_B,
+
+severity=.72
+)
+Step 5 — Multi-Agent Research Debate
+
+Do not let one research agent decide.
+
+Create temporary specialists:
+
+ResearchCoordinator
+    ↓
+
+EvidenceAgent
+SkepticAgent
+FactCheckAgent
+SynthesisAgent
+
+Roles:
+
+EvidenceAgent
+
+Find supporting evidence
+
+SkepticAgent
+
+Find counterexamples
+
+FactCheckAgent
+
+Verify source quality
+
+SynthesisAgent
+
+Generate conclusion
+
+This reduces recursive hallucination loops.
+
+Step 6 — Confidence-Gated Memory Writes
+
+Current dangerous behavior:
+
+research result
+↓
+store memory
+
+Upgrade:
+
+research result
+↓
+verify
+↓
+score confidence
+↓
+cross-check
+↓
+memory candidate
+↓
+approval threshold
+↓
+store
+
+Example:
+
+if confidence>.85:
+
+    memory.store()
+
+else:
+
+    pending_validation.store()
+Step 7 — Add Research Reflection
+
+After every research cycle:
+
+reflection={
+
+"source_accuracy":0.82,
+
+"contradictions_found":4,
+
+"unsupported_claims":2,
+
+"confidence_calibration":0.74,
+
+"hallucination_risk":0.21
+}
+
+Track failures:
+
+Which sources repeatedly misled us?
+
+Which patterns caused false conclusions?
+
+Which domains have weak confidence?
+
+Final upgraded architecture:
+
+Query
+   ↓
+Research Planner
+   ↓
+Retriever
+   ↓
+Source Validator
+   ↓
+Evidence Graph
+   ↓
+Contradiction Detector
+   ↓
+Trust Engine
+   ↓
+Research Debate Agents
+   ↓
+Synthesizer
+   ↓
+Reflection
+   ↓
+Memory
+
+This moves the system from:
+
+web search + summarization
+
+toward:
+
+evidence-based autonomous reasoning
+
+
+But you still need:
+
+Research
+↓
+Produces beliefs
+↓
+Updates world model
+↓
+Changes goals
+↓
+Changes planning
+
+Otherwise research becomes an isolated subsystem.
+
+Build Cognitive Knowledge Integration Layer (CKI)
+
+New directory:
+
+server/cognition/knowledge/
+
+belief_integrator.py
+knowledge_reducer.py
+evidence_resolver.py
+uncertainty_manager.py
+concept_extractor.py
+
+Flow:
+
+Research Result
+      ↓
+Evidence Graph
+      ↓
+Belief Integrator
+      ↓
+World Model Update
+      ↓
+Prediction Recalculation
+      ↓
+Goal Re-evaluation
+      ↓
+Planner Update
+Step 1 — Belief Integrator
+
+Raw research should not directly update cognition.
+
+Create:
+
+class BeliefIntegrator:
+
+    def integrate(
+        self,
+        evidence,
+        cognitive_state
+    ):
+
+        existing=self.find_related_beliefs()
+
+        updated=self.merge(
+            existing,
+            evidence
+        )
+
+        return updated
+
+Example:
+
+Current belief:
+
+{
+"statement":
+"Technique A performs best",
+
+"confidence":0.88
+}
+
+New evidence:
+
+{
+"statement":
+"Technique B exceeds A on benchmark X",
+
+"confidence":0.81
+}
+
+Result:
+
+{
+"statement":
+"Technique effectiveness depends on context",
+
+"confidence":0.72
+}
+
+The system revised a belief instead of replacing one.
+
+Step 2 — Uncertainty Engine
+
+Static confidence scores are insufficient.
+
+Create:
+
+class UncertaintyState:
+
+    epistemic:float
+    observational:float
+    model:float
+
+Meaning:
+
+epistemic
+↓
+missing knowledge
+
+observational
+↓
+bad or noisy evidence
+
+model
+↓
+reasoning weakness
+
+Now planner behavior changes:
+
+if uncertainty>.75:
+
+    goal="collect_more_information"
+
+instead of:
+
+respond()
+Step 3 — Concept Extraction
+
+This starts the path toward self-generated abstractions.
+
+Input:
+
+Repeated observations:
+
+users overwhelmed
+trust declines
+uncertainty spikes
+
+Output:
+
+Concept(
+
+name=
+"confidence_pressure_instability",
+
+evidence=[{"source": "web_result", "relevance": 0.85, "content": "extracted_text"}]
+
+)
+
+Store:
+
+WorldGraph
+
+Concept
+   ↓ explains
+TrustDrop
+
+Do not use the LLM to invent names freely.
+
+Require:
+
+repeated patterns
+statistical support
+confidence threshold
+human review initially
+Step 4 — Goal Re-evaluation Trigger
+
+When beliefs change:
+
+BeliefChangedEvent()
+
+automatically run:
+
+GoalManager.recalculate()
+
+Planner.replan()
+
+Example:
+
+Old belief:
+Model A best
+
+New belief:
+Model B superior
+
+↓
+
+Current goals invalidated
+
+↓
+
+Planner generates new strategy
+Step 5 — Build the first measurable benchmark harness
+
+You now need to measure cognition, not module count.
+
+Create:
+
+server/cognition/evaluation/
+
+planning_test.py
+memory_coherence.py
+belief_accuracy.py
+prediction_accuracy.py
+contradiction_test.py
+
+Metrics:
+
+metrics={
+
+"belief_revision_accuracy":0.84,
+
+"prediction_accuracy":0.79,
+
+"goal_completion_rate":0.74,
+
+"contradiction_detection":0.87,
+
+"long_horizon_success":0.66
+}
+
+Without measurement:
+
+more architecture
+≠
+more intelligence
+
+Your updated runtime becomes:
+
+Observe
+↓
+Research
+↓
+Evidence Graph
+↓
+Belief Integration
+↓
+World Model
+↓
+Prediction
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Action
+↓
+Reflection
+↓
+Learning
+
+Sprint 3 — Experience → Strategy Formation
+
+Right now your runtime is approximately:
+
+Observe
+↓
+World Model
+↓
+Beliefs
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Action
+↓
+Reflection
+
+Missing:
+
+Experience
+↓
+Pattern extraction
+↓
+Strategy formation
+↓
+Skill creation
+↓
+Future behavior change
+
+Without this, the system keeps reacting intelligently but does not accumulate reusable competence.
+
+Build:
+
+server/cognition/learning/
+
+experience_buffer.py
+pattern_miner.py
+strategy_memory.py
+skill_library.py
+curriculum_engine.py
+Step 1 — Experience Buffer
+
+Raw logs are noisy.
+
+Create structured experiences:
+
+class Experience:
+
+    state_before:dict
+
+    action:dict
+
+    outcome:dict
+
+    reward:float
+
+    reflections:list
+
+    timestamp:str
+
+Example:
+
+Experience(
+
+state_before={
+"uncertainty":0.74
+},
+
+action={
+"type":"ask_clarifying_question"
+},
+
+outcome={
+"trust":0.82
+},
+
+reward=.68
+)
+
+Store:
+
+ExperienceBuffer
+
+not:
+
+ConversationHistory
+
+Reason:
+
+Conversation history stores events.
+
+Experience stores consequences.
+
+Step 2 — Pattern Miner
+
+Scan experiences:
+
+patterns=mine(
+
+experience_buffer
+)
+
+Detect:
+
+Repeated:
+high uncertainty
+↓
+clarifying question
+↓
+trust increase
+
+Create:
+
+Pattern(
+
+id="pattern_023",
+
+frequency=.84,
+
+reward=.79
+)
+
+Now the system learns relationships.
+
+Step 3 — Strategy Memory
+
+Convert patterns into reusable strategies.
+
+Example:
+
+Strategy(
+
+name=
+"reduce_uncertainty_first",
+
+conditions=[
+
+uncertainty>.7
+],
+
+actions=[
+
+ask_question,
+reduce_scope
+],
+
+expected_reward=.81
+)
+
+Planner now does:
+
+observe
+↓
+retrieve strategy
+↓
+adapt strategy
+↓
+plan
+
+instead of:
+
+observe
+↓
+generate from scratch
+Step 4 — Skill Formation
+
+Repeated successful strategies become skills.
+
+class Skill:
+
+    name:str
+
+    trigger_conditions:list
+
+    action_sequence:list
+
+    confidence:float
+
+Example:
+
+Research Skill
+
+Trigger:
+technical investigation
+
+Sequence:
+retrieve
+→ verify
+→ compare
+→ synthesize
+
+Skills are important because they compress repeated cognition into reusable procedures.
+
+Step 5 — Curriculum Engine
+
+Do not wait for random experiences.
+
+Generate weaknesses automatically.
+
+weaknesses=[
+
+"prediction_accuracy",
+
+"planning_depth",
+
+"belief_revision"
+]
+
+Create:
+
+Task(
+
+objective=
+"improve contradiction detection"
+)
+
+Loop:
+
+weakness detected
+↓
+generate task
+↓
+run sandbox
+↓
+measure improvement
+↓
+update strategy
+
+This is a primitive form of autonomous learning.
+
+New architecture after this sprint
+Observe
+↓
+World Model
+↓
+Beliefs
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Action
+↓
+Reflection
+↓
+Experience Buffer
+↓
+Pattern Mining
+↓
+Strategy Memory
+↓
+Skill Library
+↓
+Curriculum Engine
+↓
+Future Behavior
+
+The important shift here is:
+
+System remembers what happened
+
+becoming:
+
+System extracts reusable competence
+
+Sprint 4 — Self-Model + Meta-Cognition
+
+Current runtime:
+
+Observe
+↓
+World Model
+↓
+Beliefs
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Action
+↓
+Reflection
+↓
+Experience
+↓
+Strategies
+↓
+Skills
+
+Missing:
+
+System
+↓
+understands itself
+↓
+predicts its own failures
+↓
+adapts its own cognition
+
+Without this, your system may learn thousands of patterns but still not know:
+
+what it is good at
+what it is weak at
+when confidence is false
+when planning breaks down
+when memory is unreliable
+
+Create:
+
+server/cognition/self_model/
+
+self_model.py
+capability_tracker.py
+failure_mapper.py
+confidence_calibrator.py
+meta_controller.py
+Step 1 — Build SelfModel
+
+Add to CognitiveState:
+
+class SelfModel:
+
+    capabilities={}
+
+    weaknesses={}
+
+    confidence={}
+
+    reliability={}
+
+    strategy_effectiveness={}
+
+    learning_progress={}
+
+Example state:
+
+SelfModel(
+
+capabilities={
+
+"technical_reasoning":0.91,
+
+"planning":0.67,
+
+"social_prediction":0.42
+
+},
+
+weaknesses={
+
+"long_horizon_prediction":0.74,
+
+"contradiction_detection":0.35
+
+}
+)
+
+The world model tracks reality.
+
+The self-model tracks the system itself.
+
+Step 2 — Failure Mapper
+
+Failures should become structured knowledge.
+
+Create:
+
+Failure(
+
+type="prediction_failure",
+
+context={
+
+"goal":"maintain trust",
+
+"uncertainty":0.72
+},
+
+severity=.61
+)
+
+Then cluster:
+
+Prediction failures
+↓
+mostly occur under:
+high uncertainty
++
+long planning chains
+
+The system learns:
+
+where cognition breaks
+
+instead of only:
+
+that cognition broke
+Step 3 — Confidence Calibration
+
+Current risk:
+
+high confidence
+≠
+high accuracy
+
+Track:
+
+confidence=.94
+
+actual_accuracy=.51
+
+Calibration:
+
+calibration=
+
+actual_accuracy-confidence
+
+If repeatedly overconfident:
+
+self_model.confidence*=0.85
+
+This prevents hallucinated certainty.
+
+Step 4 — Meta Controller
+
+This becomes the cognitive supervisor.
+
+Function:
+
+class MetaController:
+
+    def evaluate(self,state):
+
+        if state.uncertainty>.8:
+
+            return "collect_more_information"
+
+        if planning_accuracy<.5:
+
+            return "increase_simulation_depth"
+
+        if confidence_bias>.3:
+
+            return "reduce_assertiveness"
+
+Instead of:
+
+planner
+→ direct action
+
+You get:
+
+planner
+↓
+meta controller
+↓
+action
+Step 5 — Self-improvement loop
+
+New loop:
+
+Observe
+↓
+Act
+↓
+Reflect
+↓
+Measure failure
+↓
+Update self-model
+↓
+Adjust cognition
+↓
+Act again
+
+Now the system starts changing how it thinks, not only what it knows.
+
+Updated architecture
+Observe
+↓
+World Model
+↓
+Beliefs
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Meta Controller
+↓
+Action
+↓
+Reflection
+↓
+Experience Buffer
+↓
+Strategy Memory
+↓
+Skill Library
+↓
+Self Model
+↓
+Learning
+
+After this, the next major jump is not another subsystem. It becomes generalization and transfer:
+
+learn pattern A
+↓
+recognize hidden similarity
+↓
+apply pattern A to problem B
+
+Sprint 5 — Transfer Engine + Abstraction Layer
+
+New structure:
+
+server/cognition/transfer/
+
+abstraction_engine.py
+analogy_engine.py
+transfer_manager.py
+concept_graph.py
+skill_adapter.py
+
+New runtime:
+
+Observe
+↓
+World Model
+↓
+Beliefs
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Action
+↓
+Reflection
+↓
+Experience
+↓
+Strategy Memory
+↓
+Abstraction Layer
+↓
+Transfer Engine
+↓
+Future Behavior
+Step 1 — Abstraction Engine
+
+Current risk:
+
+Experience:
+
+A:
+high uncertainty
+↓
+ask clarifying question
+↓
+trust improves
+
+stored as:
+
+exact situation memory
+
+Instead extract:
+
+class AbstractPattern:
+
+    id:str
+
+    description:str
+
+    conditions:list
+
+    mechanism:str
+
+    confidence:float
+
+Example:
+
+AbstractPattern(
+
+description=
+"reduce uncertainty before proposing solutions",
+
+mechanism=
+"clarification lowers decision friction"
+)
+
+Now the system learns principles instead of events.
+
+Step 2 — Analogy Engine
+
+Real transfer requires:
+
+Problem A
+≈
+Problem B
+
+even when surface details differ.
+
+Example:
+
+Domain A:
+
+debugging code
+
+↓
+
+Domain B:
+
+diagnosing system architecture
+
+Shared structure:
+
+observe anomaly
+↓
+identify causes
+↓
+test hypotheses
+↓
+choose intervention
+
+Build:
+
+class AnalogyEngine:
+
+    def find_similarity(
+        self,
+        problemA,
+        problemB
+    ):
+        return structural_similarity
+
+Now cognition becomes:
+
+I have never seen this exact problem
+
+→
+
+I have seen something structurally similar
+Step 3 — Transfer Manager
+class TransferManager:
+
+    def transfer(
+
+        self,
+
+        source_skill,
+
+        target_problem
+    ):
+
+        adapted_skill=
+            self.adapt()
+
+        return adapted_skill
+
+Example:
+
+Existing skill:
+
+Research workflow
+
+retrieve
+→ verify
+→ compare
+→ synthesize
+
+Transferred to:
+
+decision-making
+
+collect evidence
+→ verify assumptions
+→ compare options
+→ choose
+Step 4 — Build Concept Graph
+
+Extend world graph:
+
+Nodes:
+
+Concept
+Pattern
+Principle
+Skill
+Domain
+
+Relationships:
+
+implements
+generalizes
+analogous_to
+depends_on
+contradicts
+
+Example:
+
+ClarificationStrategy
+
+generalizes
+
+↓
+
+UncertaintyReductionPrinciple
+
+Now the system can reason above individual experiences.
+
+Step 5 — Transfer benchmark harness
+
+You now need intelligence tests closer to cognition than memory.
+
+Build:
+
+server/cognition/evaluation/
+
+transfer_tests.py
+analogy_tests.py
+abstraction_tests.py
+novel_problem_tests.py
+
+Metrics:
+
+metrics={
+
+"transfer_accuracy":0.71,
+
+"abstraction_quality":0.78,
+
+"novel_problem_success":0.63,
+
+"analogy_precision":0.74
+}
+
+This is a significant transition:
+
+Current:
+
+learn experience
+↓
+reuse experience
+
+Next:
+
+extract principle
+↓
+apply principle elsewhere
+Sprint 6 — Cognitive Stability + Governance Layer
+
+Create:
+
+server/cognition/governance/
+
+consistency_engine.py
+resource_allocator.py
+conflict_resolver.py
+attention_manager.py
+execution_governor.py
+
+Architecture:
+
+Observe
+↓
+World Model
+↓
+Beliefs
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Meta Controller
+↓
+Governance Layer
+↓
+Action
+Fix 1 — Belief consistency engine
+
+Current problem:
+
+Multiple beliefs can coexist and silently contradict.
+
+Example:
+
+Belief A:
+"Users prefer concise responses"
+
+Confidence=.88
+
+
+Belief B:
+"Users prefer deep explanations"
+
+Confidence=.92
+
+Build:
+
+class ConsistencyEngine:
+
+    def detect(
+        self,
+        beliefs
+    ):
+
+        contradictions=[]
+
+        return contradictions
+
+Resolution:
+
+if contradiction:
+
+    create_hypothesis()
+
+    reduce_confidence()
+
+    request_more_evidence()
+
+Now the system becomes:
+
+self-correcting
+
+instead of:
+
+internally inconsistent
+Fix 2 — Attention manager
+
+Current risk:
+
+Every subsystem attempts to process everything.
+
+Create:
+
+class AttentionManager:
+
+    def select(
+
+        self,
+        cognitive_state
+    ):
+
+        return important_items
+
+Priority score:
+
+priority=
+
+importance*
+novelty*
+urgency*
+uncertainty
+
+Example:
+
+Trust drop:
+0.91
+
+Minor memory update:
+0.23
+
+Without this:
+
+cognition overload
+
+becomes likely.
+
+Fix 3 — Resource allocation
+
+Planner depth and simulation should adapt.
+
+Bad:
+
+simulate every possibility
+
+Better:
+
+if uncertainty>.8:
+
+    simulation_depth=5
+
+else:
+
+    simulation_depth=2
+
+Resources:
+
+class ResourceBudget:
+
+    compute
+    memory
+    planning_depth
+    attention
+Fix 4 — Goal conflict resolution
+
+Current risk:
+
+Goal:
+
+maximize usefulness
+
+Goal:
+
+minimize response time
+
+Goal:
+
+maintain trust
+
+These can conflict.
+
+Build:
+
+class GoalResolver:
+
+    def resolve(
+
+        self,
+        goals
+    ):
+
+        return ranked_goals
+
+Weighted scoring:
+
+score=
+
+priority*
+expected_reward*
+risk*
+confidence
+Fix 5 — Execution governor
+
+Before actions execute:
+
+class Governor:
+
+    def approve(
+
+        self,
+        action
+    ):
+
+        risk=self.assess()
+
+        confidence=self.check()
+
+        return decision
+
+Example:
+
+Action:
+write long-term belief
+
+Risk=.74
+
+Confidence=.41
+
+Result:
+
+reject
+
+This becomes a safety gate.
+
+Fix 6 — Cognitive health metrics
+
+Right now you measure modules.
+
+Start measuring runtime behavior:
+
+metrics={
+
+"belief_consistency":0.89,
+
+"prediction_accuracy":0.82,
+
+"planning_efficiency":0.71,
+
+"goal_conflict_rate":0.17,
+
+"transfer_success":0.65,
+
+"reflection_quality":0.76,
+
+"hallucination_rate":0.09
+}
+Final near-term architecture
+Sensors
+↓
+Perception
+↓
+World Model
+↓
+Beliefs
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Meta Controller
+↓
+Governance Layer
+↓
+Action
+↓
+Reflection
+↓
+Experience
+↓
+Strategies
+↓
+Transfer
+↓
+Learning
+
+The major fix now is moving from:
+
+adding cognition
+
+to:
+
+stabilizing cognition
+
+
+That becomes Sprint 7 — Emergent Cognition & Autonomous Skill Discovery.
+
+Current architecture:
+
+Perception
+↓
+World Model
+↓
+Beliefs
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Meta Controller
+↓
+Governance
+↓
+Action
+↓
+Reflection
+↓
+Experience
+↓
+Strategies
+↓
+Transfer
+↓
+Learning
+
+Add:
+
+Emergence Layer
+↓
+Novel skill discovery
+↓
+Autonomous curriculum generation
+↓
+Self-generated abstractions
+↓
+Capability evolution
+
+Create:
+
+server/cognition/emergence/
+
+novelty_detector.py
+skill_discovery.py
+abstraction_generator.py
+curriculum_generator.py
+capability_evolver.py
+Step 1 — Novelty Detector
+
+Current learning risk:
+
+repeat
+↓
+optimize
+↓
+repeat
+
+That creates narrow optimization.
+
+Instead detect:
+
+class NovelEvent:
+
+    unexpectedness:float
+
+    uncertainty:float
+
+    reward_delta:float
+
+    pattern_difference:float
+
+Example:
+
+Expected:
+clarifying question → trust +0.1
+
+Observed:
+clarifying question → trust +0.6
+
+System response:
+
+Investigate anomaly
+
+Unexpected success and unexpected failure should both trigger learning.
+
+Step 2 — Autonomous Skill Discovery
+
+Current:
+
+Human creates skill
+
+Target:
+
+Repeated experience
+↓
+Repeated strategy
+↓
+Pattern extraction
+↓
+Candidate skill
+↓
+Sandbox evaluation
+↓
+Skill library
+
+Structure:
+
+class SkillCandidate:
+
+    sequence:list
+
+    success_rate:float
+
+    transfer_score:float
+
+    confidence:float
+
+Rule:
+
+Never directly deploy:
+
+candidate skill
+↓
+production
+
+Use:
+
+candidate skill
+↓
+simulation sandbox
+↓
+evaluation
+↓
+promotion
+Step 3 — Self-generated abstractions
+
+This is one of the hardest problems.
+
+Current:
+
+Concepts inherited from pretrained model
+
+Target:
+
+Repeated observations
+↓
+Pattern clustering
+↓
+Mechanism extraction
+↓
+New concept
+
+Example:
+
+Observed repeatedly:
+
+High uncertainty
++
+large information volume
++
+trust decline
+
+Generated abstraction:
+
+Cognitive Load Instability
+
+Represent:
+
+class Concept:
+
+    name:str
+
+    supporting_patterns:list
+
+    confidence:float
+
+    explanatory_power:float
+
+Do not allow free-form invention. Require:
+
+repeated evidence
+statistical support
+explanatory usefulness
+human review initially
+Step 4 — Autonomous Curriculum Generator
+
+Current learning:
+
+learn from whatever appears
+
+Upgrade:
+
+weakness detected
+↓
+generate challenge
+↓
+simulate task
+↓
+measure progress
+↓
+update strategies
+
+Example:
+
+Task(
+
+objective=
+"improve causal planning",
+
+difficulty=.72
+)
+
+This creates intentional self-improvement.
+
+Step 5 — Capability Evolution
+
+Track capability trajectories:
+
+capabilities={
+
+"reasoning":0.81,
+
+"planning":0.64,
+
+"social_prediction":0.51,
+
+"transfer":0.48
+}
+
+Then:
+
+if planning<0.70:
+
+    generate_training_tasks()
+
+The system starts modifying what it learns.
+
+Final architecture at this point
+Sensors
+↓
+Perception
+↓
+World Model
+↓
+Beliefs
+↓
+Goals
+↓
+Planner
+↓
+Simulator
+↓
+Meta Controller
+↓
+Governance
+↓
+Action
+↓
+Reflection
+↓
+Experience
+↓
+Strategy Memory
+↓
+Transfer Engine
+↓
+Learning
+↓
+Emergence Layer
+↓
+Capability Evolution
+
+One important correction: even after all of this, you still do not have AGI. You would have a research platform for persistent cognition experiments.

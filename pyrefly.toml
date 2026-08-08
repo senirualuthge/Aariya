@@ -1,0 +1,8 @@
+# Pyrefly type-checker config
+# search_path: directories where top-level packages live.
+#   - Project root → resolves `server.*`, `src.*` packages
+# python_interpreter: must point at the venv Python so that
+#   site-packages (fastapi, uvicorn, msgpack, psutil, etc.) are found.
+
+search_path = ["/Volumes/Volumn 1/Code Base/AI Girl"]
+python_interpreter = "/Volumes/Volumn 1/Code Base/AI Girl/server/.venv/bin/python"

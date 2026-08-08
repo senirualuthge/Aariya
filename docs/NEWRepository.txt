@@ -1,0 +1,405 @@
+Repository 1: aariya-protocol
+
+Purpose: Aariya's universal language.
+
+Think of it as:
+
+ROS 2 → Message Definitions
+Kubernetes → API Objects
+OpenAPI → API Contracts
+Protocol Buffers → Schemas
+
+No business logic.
+No AI.
+No planner.
+
+Only data contracts.
+
+Directory Structure
+aariya-protocol/
+│
+├── pyproject.toml
+├── README.md
+├── LICENSE
+│
+├── protocol/
+│   ├── __init__.py
+│   │
+│   ├── common/
+│   │   ├── ids.py
+│   │   ├── metadata.py
+│   │   ├── enums.py
+│   │   ├── permissions.py
+│   │   └── status.py
+│   │
+│   ├── events/
+│   │   ├── base_event.py
+│   │   ├── runtime_events.py
+│   │   ├── capability_events.py
+│   │   ├── memory_events.py
+│   │   ├── planner_events.py
+│   │   └── reasoning_events.py
+│   │
+│   ├── requests/
+│   │
+│   ├── responses/
+│   │
+│   ├── goals/
+│   │
+│   ├── tasks/
+│   │
+│   ├── memory/
+│   │
+│   ├── capabilities/
+│   │
+│   ├── health/
+│   │
+│   ├── reasoning/
+│   │
+│   └── world/
+│
+└── tests/
+Rule 1
+
+Every object inherits from one base model.
+
+BaseObject
+
+Everything.
+
+Memory.
+
+Events.
+
+Goals.
+
+Tasks.
+
+Capabilities.
+
+Health.
+
+Requests.
+
+Responses.
+
+BaseObject
+
+Every object automatically gets
+
+id:
+
+type:
+
+version:
+
+created_at:
+
+updated_at:
+
+source:
+
+confidence:
+
+importance:
+
+tags:
+
+metadata:
+
+No exceptions.
+
+Event Model
+
+Every event looks identical.
+
+event_id:
+
+event_type:
+
+timestamp:
+
+source:
+
+target:
+
+priority:
+
+payload:
+
+correlation_id:
+
+Every subsystem understands every event.
+
+Goal Model
+goal_id:
+
+name:
+
+priority:
+
+deadline:
+
+status:
+
+parent_goal:
+
+owner:
+
+confidence:
+
+reason:
+
+Planner only works with Goal objects.
+
+Task Model
+task_id:
+
+goal_id:
+
+dependencies:
+
+required_capabilities:
+
+estimated_cost:
+
+estimated_time:
+
+priority:
+
+Planner produces Task objects.
+
+Capability Manifest
+
+Every capability ships with
+
+name:
+
+version:
+
+description:
+
+author:
+
+permissions:
+
+events:
+
+tools:
+
+dependencies:
+
+health_endpoint:
+
+This is how the Kernel loads capabilities.
+
+Memory Object
+
+Everything stored in memory follows
+
+memory_id:
+
+type:
+
+text:
+
+embedding:
+
+confidence:
+
+importance:
+
+source:
+
+created_at:
+
+expires_at:
+
+linked_objects:
+
+Every memory looks identical.
+
+World Entity
+
+Represent everything in the world.
+
+entity_id:
+
+entity_type:
+
+properties:
+
+relationships:
+
+state:
+
+confidence:
+
+People.
+
+Files.
+
+Projects.
+
+Devices.
+
+Folders.
+
+Robots.
+
+Everything.
+
+Health Model
+
+Every subsystem reports
+
+component:
+
+status:
+
+uptime:
+
+latency:
+
+version:
+
+last_error:
+
+metrics:
+
+Dashboard reads this directly.
+
+Request Model
+
+Every request entering Aariya
+
+request_id:
+
+user:
+
+goal:
+
+context:
+
+constraints:
+
+attachments:
+
+timestamp:
+
+Whether it comes from:
+
+Voice
+Chat
+API
+Robot
+Mobile
+
+It becomes the same object.
+
+Response Model
+
+Every subsystem returns
+
+status:
+
+confidence:
+
+result:
+
+warnings:
+
+metrics:
+
+reasoning_reference:
+
+Now every component speaks the same language.
+
+Error Model
+
+Instead of random exceptions
+
+error_code:
+
+severity:
+
+component:
+
+message:
+
+recoverable:
+
+recommendation:
+Permission Model
+
+Every capability requests permissions.
+
+Example
+
+Desktop
+
+Read Screen
+
+Move Mouse
+
+Keyboard Input
+
+Clipboard
+
+Browser
+
+Internet
+
+Downloads
+
+Cookies
+
+Voice
+
+Microphone
+
+Nothing gets unrestricted access.
+
+Versioning
+
+Every protocol object includes
+
+schema_version:
+
+api_version:
+
+Future-proofing starts now.
+
+Serialization
+
+Every object supports
+
+JSON
+MessagePack
+YAML
+
+This makes future networking and distributed execution much easier.
+
+Validation
+
+Every protocol object validates itself.
+
+Invalid data never reaches the kernel.
+
+Documentation
+
+Every object has:
+
+UML diagram
+JSON schema
+Python model
+Example payload
+Version history
+Testing
+
+Every protocol model needs:
+
+Serialization tests
+Validation tests
+Backward compatibility tests
+Schema migration tests

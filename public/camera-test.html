@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Test - AI Girl</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #0a0a0a;
+            color: #fff;
+        }
+        .container {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 30px;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            border-radius: 8px;
+            margin: 20px 0;
+            background: #000;
+        }
+        button {
+            background: #ff8fa3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #ff7090;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .success { background: rgba(168, 230, 207, 0.2); border-left: 3px solid #a8e6cf; }
+        .error { background: rgba(255, 107, 107, 0.2); border-left: 3px solid #ff6b6b; }
+        .info { background: rgba(255, 179, 71, 0.2); border-left: 3px solid #ffb347; }
+        pre {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        h1 { color: #ff8fa3; margin-top: 0; }
+        h2 { color: #a8e6cf; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎥 Camera Test Tool</h1>
+        <p>Use this page to test if your camera is working before running the main app.</p>
+        
+        <div id="status"></div>
+        
+        <button onclick="testCamera()">Test Camera</button>
+        <button onclick="stopCamera()">Stop Camera</button>
+        
+        <video id="video" autoplay playsinline muted></video>
+        
+        <div id="details"></div>
+    </div>
+
+    <script>
+        let stream = null;
+        const video = document.getElementById('video');
+        const statusDiv = document.getElementById('status');
+        const detailsDiv = document.getElementById('details');
+
+        function showStatus(message, type = 'info') {
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function showDetails(data) {
+            detailsDiv.innerHTML = `
+                <h2>Camera Details</h2>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+        }
+
+        async function testCamera() {
+            try {
+                showStatus('🔄 Requesting camera permissions...', 'info');
+                
+                // Request camera and audio (same as AI Girl app)
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: 'user' },
+                    audio: true
+                });
+
+                // Display video
+                video.srcObject = stream;
+                showStatus('✅ Camera access granted! You should see your video feed below.', 'success');
+
+                // Get camera details
+                const videoTrack = stream.getVideoTracks()[0];
+                const audioTrack = stream.getAudioTracks()[0];
+                const settings = videoTrack.getSettings();
+                
+                showDetails({
+                    video: {
+                        label: videoTrack.label,
+                        enabled: videoTrack.enabled,
+                        readyState: videoTrack.readyState,
+                        settings: settings
+                    },
+                    audio: {
+                        label: audioTrack.label,
+                        enabled: audioTrack.enabled,
+                        readyState: audioTrack.readyState
+                    }
+                });
+
+            } catch (err) {
+                let errorMessage = `❌ Camera Error: ${err.name}`;
+                let solution = '';
+
+                switch(err.name) {
+                    case 'NotAllowedError':
+                        solution = `
+                            <br><br><strong>Solution:</strong>
+                            <ol>
+                                <li>Look for a camera icon in your browser's address bar</li>
+                                <li>Click it and select "Allow"</li>
+                                <li>Refresh this page and try again</li>
+                            </ol>
+                        `;
+                        break;
+                    case 'NotFoundError':
+                        solution = `
+                            <br><br><strong>Solution:</strong>
+                            <ol>
+                                <li>Make sure your camera is connected</li>
+                                <li>Check Windows Settings → Privacy → Camera</li>
+                                <li>Test camera in Windows Camera app</li>
+                            </ol>
+                        `;
+                        break;
+                    case 'NotReadableError':
+                        solution = `
+                            <br><br><strong>Solution:</strong>
+                            <ol>
+                                <li>Close other apps using the camera (Teams, Zoom, Skype)</li>
+                                <li>Refresh this page</li>
+                            </ol>
+                        `;
+                        break;
+                }
+
+                showStatus(errorMessage + '<br>Message: ' + err.message + solution, 'error');
+                showDetails({ error: err.name, message: err.message, stack: err.stack });
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                stream = null;
+                showStatus('📷 Camera stopped', 'info');
+                detailsDiv.innerHTML = '';
+            }
+        }
+
+        // Test for HTTPS requirement
+        if (window.location.protocol === 'file:') {
+            showStatus('⚠️ Warning: Camera might not work when opening as a file. Use: python -m http.server 8080', 'error');
+        }
+
+        // Check if getUserMedia is available
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showStatus('❌ Your browser does not support camera access', 'error');
+        } else {
+            showStatus('✅ Browser supports camera access. Click "Test Camera" to begin.', 'success');
+        }
+    </script>
+</body>
+</html>

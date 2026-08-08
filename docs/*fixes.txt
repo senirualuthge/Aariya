@@ -1,0 +1,4192 @@
+  PREAMBLE (from *fixes.txt)
+
+3.1 You are overusing setInterval
+
+You currently have many independent timers:
+
+TemporalSmoothingSystem
+
+BlinkSystem
+
+IdleMotionSystem
+
+Audio analysis
+
+Possibly others
+
+
+  Problem: (from *fixes.txt)
+
+Browser timers drift
+
+They don’t share deltaTime
+
+They desync under load
+
+Emotion + animation timing will slowly fall apart
+
+What this becomes:
+
+Micro jitter
+
+Animation-emotion mismatch
+
+“Something feels off” after long sessions
+
+
+  Fix direction (not optional long-term): (from *fixes.txt)
+
+You need one master clock:
+
+requestAnimationFrame loop
+
+Or a shared ClockSystem that emits deltaTime
+
+Other systems should subscribe, not own time.
+
+
+
+3.2 Global window.dispatchEvent will bite you
+
+Right now, animation triggers are fired via CustomEvent on window.
+
+
+  Issue: (from *fixes.txt)
+
+No ownership
+
+No ordering guarantees
+
+Hard to debug causality
+
+Better pattern:
+
+Internal event bus (simple pub/sub)
+
+Or Zustand-based action dispatch
+
+Or a lightweight signal system
+
+
+
+
+
+3.3 Emotion model is mixing state and display
+
+Right now:
+
+emotions are both internal psychological state
+
+and direct animation drivers
+
+That’s dangerous.
+
+Humans:
+
+Feel angry
+
+but display it differently based on personality, context, suppression
+
+You currently don’t have a masking layer:
+
+Internal Emotion → Expression Filter → Animation
+
+
+Without this:
+
+Personality drift won’t fully matter
+
+The avatar will feel emotionally “honest” but not social
+
+This is subtle, but critical.
+
+
+
+3.4 Memory system is underpowered for your ambition
+
+You store memories — good.
+
+But:
+
+No consolidation logic
+
+No decay
+
+No semantic compression
+
+No contradiction handling
+
+Right now it’s a log, not memory.
+
+If you want this to feel alive long-term, you’ll need:
+
+Importance-based pruning
+
+Periodic summarization
+
+Personality-aligned recall bias
+
+Otherwise memory becomes noise.
+
+
+4. What this project is actually missing (core gap)
+
+You are missing one central system:
+
+❗ Intent & Social State System
+
+Right now the AI:
+
+Reacts emotionally
+
+Responds verbally
+
+But it does not want anything.
+
+Humans always have:
+
+Conversational intent
+
+Social goals
+
+Interaction stance (comforting, teasing, guarded, curious)
+
+You need something like:
+
+SocialState {
+  engagementLevel
+  dominance
+  openness
+  trust
+  currentIntent
+}
+
+This system should sit between:
+
+Emotion/Personality
+
+Dialogue/Animation
+
+Without it:
+
+Conversations will feel reactive, not proactive
+
+Personality drift won’t translate into behavior choices
+
+
+5. Reality check (important)
+
+This is not an MVP-friendly project.
+This is:
+
+Complex
+
+Long-term
+
+Systems-heavy
+
+Trying to “ship everything” will kill it.
+
+The correct strategy is:
+
+Lock the core loop
+
+Kill optional systems
+
+Make one thing feel deep, not everything feel shallow
+
+
+  PART 1 — Single Unified Runtime Loop (The Heartbeat) (from *fixes.txt)
+
+Right now you have many clocks.
+You need one heartbeat that everything syncs to.
+
+Think of this as the Autonomic Nervous System of your digital human.
+
+1. The Core Principle
+
+One loop owns time.
+Everything else reacts.
+
+Nothing:
+
+sets its own setInterval
+
+runs its own requestAnimationFrame
+
+guesses deltaTime
+
+2. The Runtime Loop Architecture
+2.1 The Runtime Kernel (authoritative clock)
+
+Create one system only that controls time:
+
+RuntimeLoop
+ ├── deltaTime
+ ├── elapsedTime
+ ├── subscribers[]
+ └── tick()
+
+
+This is not React state.
+This is a pure JS runtime module.
+
+2.2 Execution Order (VERY important)
+
+Each frame must run in this order:
+
+1. Sensor Sampling      (camera, mic, silence)
+2. Emotion Update       (internal affect)
+3. Personality Drift    (slow, gated)
+4. Social Intent Update (NEW)
+5. Behavior Resolution  (decisions)
+6. Animation Signals    (procedural output)
+7. Rendering            (Three.js)
+
+
+This ordering is what makes the avatar feel intentional instead of twitchy.
+
+3. Concrete Runtime Loop Implementation
+3.1 RuntimeLoop.js
+class RuntimeLoop {
+  constructor() {
+    this.lastTime = performance.now();
+    this.subscribers = [];
+    this.running = false;
+  }
+
+  subscribe(fn, priority = 0) {
+    this.subscribers.push({ fn, priority });
+    this.subscribers.sort((a, b) => a.priority - b.priority);
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    requestAnimationFrame(this.tick);
+  }
+
+  stop() {
+    this.running = false;
+  }
+
+  tick = (now) => {
+    if (!this.running) return;
+
+    const deltaTime = Math.min((now - this.lastTime) / 1000, 0.05);
+    this.lastTime = now;
+
+    for (const sub of this.subscribers) {
+      sub.fn(deltaTime, now);
+    }
+
+    requestAnimationFrame(this.tick);
+  };
+}
+
+export const runtime = new RuntimeLoop();
+
+4. Refactoring Existing Systems (pattern)
+Before (bad, current)
+
+setInterval
+
+Independent timers
+
+No shared time
+
+After (correct)
+
+Each system becomes:
+
+runtime.subscribe((dt) => {
+  // do work using dt
+}, PRIORITY);
+
+5. Priority Map (copy this)
+System Type	Priority
+Sensor input	0
+Emotion engine	10
+Personality	20
+Social Intent	30
+Behavior	40
+Animation	50
+Rendering	100
+
+Lower runs first.
+
+6. Example: Temporal Smoothing (refactored)
+runtime.subscribe((dt) => {
+  const state = useStore.getState();
+  const { emotions, emotionTargets } = state;
+
+  if (!emotionTargets) return;
+
+  const blend = 3.0;
+  const next = {};
+
+  for (const k in emotions) {
+    next[k] = emotions[k] + (emotionTargets[k] - emotions[k]) * blend * dt;
+  }
+
+  state.setAllEmotions(next);
+}, 10);
+
+
+No timers.
+No drift.
+Perfect sync.
+
+
+  PART 2 — The Missing Social Intent System (Critical) (from *fixes.txt)
+
+This is the brainstem + social cortex you’re missing.
+
+Without this, the AI reacts — it doesn’t act.
+
+7. What Social Intent Is (clear definition)
+
+Social Intent answers:
+
+Why am I speaking?
+
+How am I positioning myself socially?
+
+What outcome am I steering toward?
+
+Emotion = how she feels
+Personality = who she is
+Social Intent = what she wants right now
+
+8. Social Intent State Model
+
+Create a dedicated state object:
+
+SocialIntent {
+  engagement: 0.0 → 1.0
+  dominance: -1.0 → +1.0
+  warmth: 0.0 → 1.0
+  openness: 0.0 → 1.0
+  intent: In
+IntentType (finite, NOT free text)
+enum IntentType {
+  LISTENING,
+  COMFORTING,
+  FLIRTING,
+  TEASING,
+  INFORMING,
+  DEFLECTING,
+  SETTING_BOUNDARY,
+  WITHDRAWING
+}
+
+
+No LLM decides this directly.
+This is computed, not generated.
+
+9. Inputs to Social Intent
+
+Social Intent updates based on:
+
+Current emotions
+
+Personality traits
+
+User behavior patterns
+
+Conversation phase
+
+Trust history
+
+Example logic:
+
+High sadness + high warmth → COMFORTING
+High aggression + low trust → SETTING_BOUNDARY
+High engagement + playful tone → TEASING
+Low energy + long silence → WITHDRAWING
+
+10. SocialIntentSystem (actual logic)
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+
+  const { emotions, personality, userStats } = s;
+  const intent = { intent: s.socialIntent.intent, engagement: s.socialIntent.engagement, dominance: s.socialIntent.dominance, warmth: s.socialIntent.warmth, openness: s.socialIntent.openness, intentLock: s.socialIntent.intentLock };
+
+  // Engagement decay
+  intent.engagement -= dt * 0.02;
+
+  // Emotion influence
+  if (emotions.sad > 0.6) {
+    intent.intent = "COMFORTING";
+    intent.warmth = Math.min(intent.warmth + dt * 0.5, 1);
+  }
+
+  if (emotions.angry > 0.5) {
+    intent.intent = "SETTING_BOUNDARY";
+    intent.dominance = Math.min(intent.dominance + dt * 0.3, 1);
+  }
+
+  // Personality bias
+  intent.openness +=
+    (personality.warmth - intent.openness) * dt * 0.2;
+
+  s.setSocialIntent(intent);
+}, 30);
+
+11. Why this changes everything
+
+Now:
+
+Dialogue tone comes from intent
+
+Gaze behavior uses engagement
+
+Posture uses dominance
+
+Speech pacing uses warmth
+
+Silence becomes a choice, not a bug
+
+Your avatar stops being reactive.
+
+She becomes socially situated.
+
+12. Dialogue System (important change)
+
+The LLM does not decide behavior anymore.
+
+It receives constraints:
+
+System Prompt:
+You are responding with the following social intent:
+- Intent: COMFORTING
+- Warmth: High
+- Dominance: Low
+- Openness: High
+
+Maintain this stance unless explicitly changed.
+
+
+This is how you get consistency.
+
+13. Final Mental Model (memorize this)
+Sensors → Emotion → Personality
+                ↓
+          Social Intent
+                ↓
+     Behavior + Dialogue + Animation
+                ↓
+             Rendering
+
+
+One loop.
+One will.
+Many expressions.
+
+14. Blunt conclusion
+
+This redesign:
+
+Eliminates drift bugs
+
+Makes personality matter
+
+Gives your AI a social spine
+
+Scales to multiple avatars
+
+Feels intentional, not reactive
+
+
+  PART 1 — Mapping Every Existing System Into the Unified Runtime Loop (from *fixes.txt)
+
+Below is a one-to-one mapping from what you already have → where it lives in the new runtime.
+
+Think of this as refactoring, not rewriting.
+
+1. Runtime Priorities (authoritative)
+
+We lock these in first:
+
+Priority	Phase	Meaning
+0	Sensors	Read world
+10	Emotion	Internal affect
+20	Personality	Slow drift
+30	Social Intent	Goal selection
+40	Behavior	Decisions
+50	Animation	Body signals
+100	Render	Visual update
+2. Sensor Systems (Priority 0)
+✅ EmotionRecognitionSystem (Vision)
+
+Now does ONLY this:
+
+Read face data
+
+Update emotionTargets (NOT emotions)
+
+runtime.subscribe((dt) => {
+  if (!modelsReady) return;
+  const face = detectFace();
+  if (!face) return;
+
+  setEmotionTargets(mapFaceToTargets(face));
+}, 0);
+
+
+✔ No smoothing
+✔ No animation
+✔ No emotion decay
+
+✅ AudioEmotionSystem
+
+Same rule:
+
+runtime.subscribe((dt) => {
+  const audio = analyzeMic();
+  setAudioStats(audio);
+  setEmotionTargets(fuseAudio(audio));
+}, 0);
+
+
+Sensors never modify internal emotion directly.
+
+✅ SessionTracker
+
+Runs here too (sampling only):
+
+runtime.subscribe((dt) => {
+  accumulateSessionStats(dt);
+}, 0);
+
+3. Emotion Systems (Priority 10)
+✅ TemporalSmoothingSystem
+
+This becomes the single emotion integrator.
+
+runtime.subscribe((dt) => {
+  const { emotions, emotionTargets } = getState();
+  setEmotions(updateEmotions(emotions, emotionTargets, dt));
+}, 10);
+
+
+This is now the only place emotions change.
+
+✅ EmotionEngine.js
+
+Lives entirely in this layer.
+
+Decay
+
+Blend
+
+Calm floor logic
+
+Nothing else touches emotion values.
+
+4. Personality Systems (Priority 20)
+✅ PersonalitySystem
+
+Runs slow and gated:
+
+runtime.subscribe((dt) => {
+  personalityAccumulator += dt;
+  if (personalityAccumulator < 60) return; // once per minute
+  personalityAccumulator = 0;
+
+  driftPersonalityFromSessions();
+}, 20);
+
+
+✔ No frame-level updates
+✔ No animation coupling
+
+5. Social Intent System (Priority 30) — NEW CORE
+✅ SocialIntentSystem (authoritative social state)
+runtime.subscribe((dt) => {
+  const s = getState();
+  resolveSocialIntent({
+    emotions: s.emotions,
+    personality: s.personality,
+    history: s.userStats,
+    silence: s.silenceTime,
+    dt
+  });
+}, 30);
+
+
+This system:
+
+Selects intent
+
+Adjusts engagement / dominance / warmth
+
+Does NOT animate
+
+Does NOT speak
+
+6. Behavior Systems (Priority 40)
+
+This is where decisions happen.
+
+✅ DialogueSystem (logic only)
+
+Refactor so it does not think about emotions directly.
+
+runtime.subscribe((dt) => {
+  const { socialIntent, pendingUserInput } = getState();
+  if (!pendingUserInput) return;
+
+  generateResponse({
+    intent: socialIntent.intent,
+    stance: socialIntent
+  });
+}, 40);
+
+
+LLM = execution, not decision-making.
+
+✅ GazeBehaviorSystem
+
+Now uses social intent, not raw emotion.
+
+Social Intent	Gaze
+LISTENING	user
+COMFORTING	steady soft
+TEASING	playful
+WITHDRAWING	away
+runtime.subscribe((dt) => {
+  setGazeFromIntent(getState().socialIntent);
+}, 40);
+
+7. Animation Systems (Priority 50)
+✅ BlinkSystem
+
+Now driven by arousal + engagement
+
+runtime.subscribe((dt) => {
+  updateBlink(dt, emotions.arousal, socialIntent.engagement);
+}, 50);
+
+✅ IdleMotionSystem
+
+Still procedural, but modulated:
+
+Variable	Driven by
+breathing	calm
+sway	confidence
+stillness	withdrawal
+runtime.subscribe((dt) => {
+  driveIdleMotion(dt, emotions, socialIntent);
+}, 50);
+
+✅ EyeMicroMovement
+
+Remains random, but scaled by intent:
+
+runtime.subscribe((dt) => {
+  if (socialIntent.intent === "WITHDRAWING") return;
+  microSaccades(dt);
+}, 50);
+
+✅ PreSpeechSystem
+
+Now triggered by Behavior layer, not voice start.
+
+runtime.subscribe((dt) => {
+  if (shouldSpeakSoon()) triggerPreSpeech();
+}, 50);
+
+8. Rendering (Priority 100)
+
+Three.js / R3F reads final animation signals only.
+
+Rendering knows nothing about:
+
+Emotions
+
+Intent
+
+Dialogue
+
+Personality
+
+That separation is critical.
+
+
+  PART 2 — Conflict Resolution: Emotion vs Social Intent (from *fixes.txt)
+
+This is the part that makes the system human.
+
+9. The Core Rule (memorize this)
+
+Emotion is how she feels.
+Social Intent is how she chooses to act.
+
+Emotion can pressure intent.
+Intent can override emotion.
+
+10. Conflict Types (you WILL see these)
+Case 1: Sad but comforting others
+
+Emotion: SAD
+Intent: COMFORTING
+
+✔ Allowed
+✔ Common in humans
+
+Result:
+
+Sad emotion persists internally
+
+Expression is softened
+
+Voice slower, warm
+
+Eyes gentle, not drooping
+
+Case 2: Angry but polite
+
+Emotion: ANGRY
+Intent: INFORMING
+
+✔ Allowed but costly
+
+Result:
+
+Micro-tension leaks
+
+Blink rate slightly elevated
+
+Jaw tightness
+
+Polite wording, clipped tone
+
+Case 3: Overwhelmed → withdrawal
+
+Emotion: NERVOUS
+Intent: WITHDRAWING
+
+✔ Intent wins
+
+Result:
+
+Emotions decay faster
+
+Reduced animation amplitude
+
+Silence becomes intentional
+
+11. The Conflict Resolver (actual logic)
+
+Introduce Expression Masking Layer:
+
+Internal Emotion
+      ↓
+Intent Filter
+      ↓
+Expressed Emotion (used for animation + speech)
+
+12. Expression Mask Algorithm
+function resolveExpression(emotion, intent, personality) {
+  const expressed = { calm: emotion.calm, happy: emotion.happy, sad: emotion.sad, angry: emotion.angry, nervous: emotion.nervous };
+
+  // Intent-based suppression
+  if (intent.intent === "COMFORTING") {
+    expressed.angry *= 0.2;
+    expressed.nervous *= 0.4;
+    expressed.calm = Math.max(expressed.calm, 0.6);
+  }
+
+  if (intent.intent === "SETTING_BOUNDARY") {
+    expressed.calm *= 0.5;
+    expressed.angry = Math.max(expressed.angry, 0.5);
+  }
+
+  if (intent.intent === "WITHDRAWING") {
+    for (let k in expressed) expressed[k] *= 0.3;
+  }
+
+  // Personality leak-through
+  const leak = 1 - personality.formality;
+  for (let k in expressed) {
+    expressed[k] = lerp(expressed[k], emotion[k], leak);
+  }
+
+  return expressed;
+}
+
+
+✔ Emotions never disappear
+✔ They leak based on personality
+✔ Intent shapes expression, not feeling
+
+13. Where this resolver runs
+
+Once per frame, after Social Intent:
+
+runtime.subscribe((dt) => {
+  const s = getState();
+  setExpressedEmotion(
+    resolveExpression(s.emotions, s.socialIntent, s.personality)
+  );
+}, 35);
+
+
+Animation & voice use expressedEmotion, not raw emotion.
+
+14. Why this solves uncanny valley
+
+Without this:
+
+Emotions look blunt
+
+Personality feels fake
+
+Reactions feel childish
+
+With this:
+
+Suppression
+
+Leakage
+
+Controlled inconsistency
+
+That’s human.
+
+15. Final System Graph (authoritative)
+Sensors
+  ↓
+Emotion (internal)
+  ↓
+Personality (slow)
+  ↓
+Social Intent (choice)
+  ↓
+Expression Resolver
+  ↓
+Behavior + Dialogue
+  ↓
+Animation Signals
+  ↓
+Rendering
+
+
+One heartbeat.
+One will.
+Many compromises.
+
+
+  PART 1 — RuntimeLoop (Final, Production-Ready) (from *fixes.txt)
+
+This is the only place time exists.
+
+Design goals
+
+Single clock
+
+Priority-based execution
+
+Pause / resume safe
+
+Deterministic order
+
+Debuggable
+
+runtime/RuntimeLoop.js
+class RuntimeLoop {
+  constructor() {
+    this.lastTime = performance.now();
+    this.accumulator = 0;
+    this.subscribers = [];
+    this.running = false;
+    this.debug = false;
+  }
+
+  subscribe(fn, priority = 50, label = "anonymous") {
+    this.subscribers.push({ fn, priority, label });
+    this.subscribers.sort((a, b) => a.priority - b.priority);
+  }
+
+  unsubscribe(fn) {
+    this.subscribers = this.subscribers.filter(s => s.fn !== fn);
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    this.lastTime = performance.now();
+    requestAnimationFrame(this.tick);
+  }
+
+  stop() {
+    this.running = false;
+  }
+
+  tick = (now) => {
+    if (!this.running) return;
+
+    let delta = (now - this.lastTime) / 1000;
+    this.lastTime = now;
+
+    // Clamp to prevent spiral-of-death
+    delta = Math.min(delta, 0.05);
+
+    for (const sub of this.subscribers) {
+      try {
+        sub.fn(delta, now);
+      } catch (err) {
+        console.error(`[RuntimeLoop:${sub.label}]`, err);
+      }
+    }
+
+    requestAnimationFrame(this.tick);
+  };
+}
+
+export const runtime = new RuntimeLoop();
+
+Priority constants (do NOT scatter magic numbers)
+export const PRIORITY = {
+  SENSOR: 0,
+  EMOTION: 10,
+  PERSONALITY: 20,
+  INTENT: 30,
+  EXPRESSION: 35,
+  BEHAVIOR: 40,
+  ANIMATION: 50,
+  RENDER: 100,
+};
+
+
+This becomes law.
+Everything subscribes through this.
+
+
+  PART 2 — Intent Transition Rules (How Intent Changes Over Time) (from *fixes.txt)
+
+This is not reactive switching.
+This is stateful, resistant, human-like transition.
+
+1. Intent Is a Finite State Machine with Inertia
+Intent types (final)
+export const INTENT = {
+  LISTENING: "LISTENING",
+  COMFORTING: "COMFORTING",
+  INFORMING: "INFORMING",
+  TEASING: "TEASING",
+  FLIRTING: "FLIRTING",
+  DEFLECTING: "DEFLECTING",
+  SETTING_BOUNDARY: "SETTING_BOUNDARY",
+  WITHDRAWING: "WITHDRAWING",
+};
+
+2. SocialIntent State (store shape)
+SocialIntent {
+  intent: IntentType
+  engagement: number   // 0–1
+  dominance: number    // -1–1
+  warmth: number       // 0–1
+  openness: number     // 0–1
+  intentLock: number   // seconds remaining
+}
+
+
+intentLock = anti-flip protection
+
+3. Transition Rule Model
+
+Intent change requires 3 conditions:
+
+Trigger strength (emotion / user action)
+
+Lock expiry
+
+Cost affordability (see Part 3)
+
+If any fails → intent persists.
+
+4. Intent Transition Logic (real code)
+systems/SocialIntentSystem.js
+import { runtime } from "../runtime/RuntimeLoop";
+import { PRIORITY } from "../runtime/priorities";
+import { INTENT } from "./intents";
+import useStore from "../store";
+
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const intent = { intent: s.socialIntent.intent, engagement: s.socialIntent.engagement, dominance: s.socialIntent.dominance, warmth: s.socialIntent.warmth, openness: s.socialIntent.openness, intentLock: s.socialIntent.intentLock };
+
+  // Decrease lock
+  intent.intentLock = Math.max(0, intent.intentLock - dt);
+
+  const { emotions, userStats, silenceTime } = s;
+
+  let desired = intent.intent;
+
+  // ---- Transition Triggers ----
+
+  if (emotions.sad > 0.6 && intent.intent !== INTENT.COMFORTING) {
+    desired = INTENT.COMFORTING;
+  }
+
+  if (emotions.angry > 0.7 && userStats.aggression > 0.5) {
+    desired = INTENT.SETTING_BOUNDARY;
+  }
+
+  if (silenceTime > 12 && intent.engagement < 0.3) {
+    desired = INTENT.WITHDRAWING;
+  }
+
+  if (userStats.playfulness > 0.6 && emotions.happy > 0.5) {
+    desired = INTENT.TEASING;
+  }
+
+  // ---- Apply Transition ----
+
+  if (
+    desired !== intent.intent &&
+    intent.intentLock === 0 &&
+    canAffordIntentSwitch(intent.intent, desired)
+  ) {
+    intent.intent = desired;
+    intent.intentLock = intentLockDuration(desired);
+  }
+
+  // ---- Continuous Modulation ----
+  intent.engagement = clamp(intent.engagement + dt * 0.05, 0, 1);
+  intent.warmth = lerp(intent.warmth, personalityWarmthBias(s), dt * 0.2);
+
+  s.setSocialIntent(intent);
+}, PRIORITY.INTENT, "SocialIntentSystem");
+
+5. Intent Lock Durations (human inertia)
+function intentLockDuration(intent) {
+  switch (intent) {
+    case INTENT.COMFORTING: return 6;
+    case INTENT.SETTING_BOUNDARY: return 8;
+    case INTENT.WITHDRAWING: return 10;
+    case INTENT.FLIRTING: return 5;
+    default: return 3;
+  }
+}
+
+
+This prevents AI mood whiplash.
+
+
+  PART 3 — Social Cost System (Fatigue & Suppression Strain) (from *fixes.txt)
+
+This is the missing realism layer.
+
+Without this:
+
+AI is infinitely patient
+
+Suppression has no consequence
+
+Behavior feels fake
+
+1. Social Cost State
+SocialCost {
+  fatigue: number        // 0–1
+  suppression: number    // 0–1
+  recoveryRate: number   // base regen
+}
+
+2. Cost Accumulation Rules
+Fatigue increases when:
+
+High engagement for long time
+
+High dominance + long speaking
+
+Little silence
+
+Suppression increases when:
+
+Expressed emotion ≠ internal emotion
+
+Boundary setting while warm personality
+
+Prolonged politeness under anger
+
+3. SocialCostSystem (real code)
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const cost = { fatigue: s.socialCost.fatigue, suppression: s.socialCost.suppression, recoveryRate: s.socialCost.recoveryRate };
+
+  const { emotions, expressedEmotion, socialIntent } = s;
+
+  // ---- Fatigue ----
+  if (socialIntent.engagement > 0.7) {
+    cost.fatigue += dt * 0.02 * socialIntent.engagement;
+  } else {
+    cost.fatigue -= dt * cost.recoveryRate;
+  }
+
+  // ---- Suppression Strain ----
+  let suppressionDelta = 0;
+  for (let k in emotions) {
+    suppressionDelta += Math.abs(emotions[k] - expressedEmotion[k]);
+  }
+  cost.suppression += suppressionDelta * dt * 0.1;
+
+  // ---- Clamp ----
+  cost.fatigue = clamp(cost.fatigue, 0, 1);
+  cost.suppression = clamp(cost.suppression, 0, 1);
+
+  s.setSocialCost(cost);
+}, PRIORITY.INTENT + 1, "SocialCostSystem");
+
+4. Social Cost Consequences (IMPORTANT)
+
+Costs modify behavior automatically.
+
+High fatigue (>0.7):
+
+Engagement decays faster
+
+Blink slows
+
+Speech shorter
+
+More silence
+
+High suppression (>0.6):
+
+Emotional leakage increases
+
+Intent lock weakens
+
+Boundary intent becomes more likely
+
+5. Cost → Intent Override
+function canAffordIntentSwitch(from, to) {
+  const { socialCost } = useStore.getState();
+
+  if (to === INTENT.COMFORTING && socialCost.fatigue > 0.8) return false;
+  if (to === INTENT.TEASING && socialCost.suppression > 0.6) return false;
+
+  return true;
+}
+
+
+This makes the AI say no internally.
+
+6. Recovery Logic (silence heals)
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  if (s.silenceTime > 8) {
+    s.socialCost.fatigue -= dt * 0.1;
+    s.socialCost.suppression -= dt * 0.08;
+  }
+}, PRIORITY.INTENT + 2, "SocialRecovery");
+
+FINAL SYSTEM TRUTH (memorize this)
+Emotion = pressure
+Intent = choice
+Cost = consequence
+
+
+  PART 1 — Wire Animation Amplitude Directly to Social Cost (from *fixes.txt)
+
+This makes fatigue and suppression visible in the body, not just numbers.
+
+1. The Core Rule
+
+Social cost does not change what animation plays.
+It changes how much the body is willing to move.
+
+This mirrors humans:
+
+Tired → smaller movements
+
+Suppressed → stiff, constrained motion
+
+Relaxed → fluid, expressive
+
+2. Global Animation Modulator (single source of truth)
+
+Create a body willingness scalar:
+
+function computeAnimationAmplitude(socialCost) {
+  const fatiguePenalty = socialCost.fatigue * 0.6;
+  const suppressionPenalty = socialCost.suppression * 0.5;
+
+  return clamp(1.0 - fatiguePenalty - suppressionPenalty, 0.2, 1.0);
+}
+
+
+This returns a multiplier (0.2 → 1.0)
+
+3. AnimationAmplitudeSystem (runtime wired)
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const amp = computeAnimationAmplitude(s.socialCost);
+
+  s.setAnimationAmplitude(amp);
+}, PRIORITY.ANIMATION - 1, "AnimationAmplitudeSystem");
+
+
+Now every animation reads animationAmplitude.
+
+4. Wiring Existing Animation Systems
+Idle Motion (breathing, sway)
+const amp = state.animationAmplitude;
+
+breathIntensity *= amp;
+weightShift *= amp;
+
+
+Fatigued → shallow breathing
+Suppressed → almost still
+
+Blink System
+blinkInterval *= lerp(1.0, 1.8, socialCost.fatigue);
+blinkSharpness *= lerp(1.0, 0.6, socialCost.suppression);
+
+
+Result:
+
+Tired → slower blinks
+
+Suppressed → half-blinks, stiffness
+
+Gaze Micro-Movement
+if (animationAmplitude < 0.35) return; // gaze freezes slightly
+
+
+This creates withdrawn eye behavior automatically.
+
+Pre-Speech Motion
+chestExpand *= animationAmplitude;
+headLift *= animationAmplitude;
+
+
+Fatigue makes speech feel effortful.
+
+5. Why this works
+
+You didn’t add:
+
+“tired animation”
+
+“suppressed animation”
+
+You let physics-like constraints emerge.
+
+That’s the right way.
+
+
+  PART 2 — Intent Transition Hysteresis (No Flip-Flopping) (from *fixes.txt)
+
+Right now, you have locks.
+Good — but not enough.
+
+Humans don’t switch intent just because a value crosses a line once.
+
+You need hysteresis bands.
+
+6. What Hysteresis Means Here
+
+Entering an intent requires more force than staying in it.
+
+Graphically:
+
+Trigger Strength
+│
+│        ┌───────────────┐
+│        │   INTENT ON   │
+│────────┘               └────────
+│     ↑ enter         ↓ exit
+└──────────────────────────────────
+
+7. Intent Threshold Map
+const INTENT_THRESHOLDS = {
+  COMFORTING: { enter: 0.65, exit: 0.35 },
+  TEASING: { enter: 0.6, exit: 0.3 },
+  SETTING_BOUNDARY: { enter: 0.7, exit: 0.45 },
+  WITHDRAWING: { enter: 0.6, exit: 0.25 },
+};
+
+8. Hysteresis-Based Intent Resolver
+function resolveIntentWithHysteresis(current, pressure, thresholds) {
+  const { enter, exit } = thresholds;
+
+  if (current.active) {
+    if (pressure < exit) return false; // leave intent
+    return true; // stay
+  } else {
+    if (pressure > enter) return true; // enter intent
+    return false;
+  }
+}
+
+9. Example: COMFORTING Intent
+const sadnessPressure = emotions.sad;
+
+const active = resolveIntentWithHysteresis(
+  socialIntent.intent === INTENT.COMFORTING,
+  sadnessPressure,
+  INTENT_THRESHOLDS.COMFORTING
+);
+
+if (active) socialIntent.intent = INTENT.COMFORTING;
+
+
+Result:
+
+Brief sadness spike → no switch
+
+Sustained sadness → comforting
+
+Comforting persists even as sadness drops
+
+This is emotional continuity.
+
+10. Combined with Intent Locks
+
+Locks prevent rapid re-entry
+Hysteresis prevents threshold flicker
+
+Together, they feel human.
+
+
+  PART 3 — Silence as an Intentional Behavior (Critical) (from *fixes.txt)
+
+Right now silence is:
+
+“Nothing happened”
+
+That’s wrong.
+
+Silence is often the strongest social action.
+
+11. Silence Becomes a First-Class Behavior
+
+Define silence as:
+
+SilenceState {
+  active: boolean
+  reason: SilenceIntent
+  duration: number
+}
+
+SilenceIntent types
+const SILENCE = {
+  THINKING: "THINKING",
+  WITHDRAWAL: "WITHDRAWAL",
+  BOUNDARY: "BOUNDARY",
+  EMPATHY: "EMPATHY",
+  FATIGUE: "FATIGUE",
+};
+
+12. Silence Decision System
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const silence = { active: s.silenceState.active, reason: s.silenceState.reason, duration: s.silenceState.duration };
+
+  silence.duration += dt;
+
+  // Fatigue-based silence
+  if (s.socialCost.fatigue > 0.75) {
+    silence.active = true;
+    silence.reason = SILENCE.FATIGUE;
+  }
+
+  // Emotional empathy silence
+  if (s.socialIntent.intent === INTENT.COMFORTING && s.emotions.sad > 0.7) {
+    silence.active = true;
+    silence.reason = SILENCE.EMPATHY;
+  }
+
+  // Boundary silence
+  if (s.socialIntent.intent === INTENT.SETTING_BOUNDARY) {
+    silence.active = true;
+    silence.reason = SILENCE.BOUNDARY;
+  }
+
+  // Exit silence conditions
+  if (silence.active && silence.duration > 6 && s.socialCost.fatigue < 0.5) {
+    silence.active = false;
+    silence.duration = 0;
+  }
+
+  s.setSilenceState(silence);
+}, PRIORITY.BEHAVIOR, "SilenceSystem");
+
+13. Silence Affects Everything
+Dialogue System
+if (silence.active) return; // do not speak
+
+Animation
+Silence Type	Body
+THINKING	gaze up, micro-movements
+EMPATHY	still, soft breathing
+BOUNDARY	rigid posture
+FATIGUE	slouched, minimal motion
+Cost Recovery
+
+Silence actively heals fatigue and suppression.
+
+14. Silence Is Communicative
+
+Silence is not absence of output.
+It is output with intent.
+
+This alone will dramatically raise perceived intelligence.
+
+FINAL INTEGRATED TRUTH (this matters)
+Intent chooses action
+Cost limits expression
+Silence is an action
+Body tells the truth
+
+
+You now have:
+
+A living runtime
+
+Psychological inertia
+
+Consequences for effort
+
+Non-verbal communication
+
+Emergent realism
+
+
+  PART 1 — Map Silence Reasons → Exact Body Poses (from *fixes.txt)
+
+Silence must be visibly intentional within ~300–500 ms, or users read it as lag.
+
+We’ll do this with pose presets + procedural modifiers, not hard animations.
+
+1. Silence → Pose Contract
+
+Create a PoseIntent object that animation systems consume:
+
+PoseIntent {
+  spineLean: number      // -1 (back) → +1 (forward)
+  headPitch: number      // -1 down → +1 up
+  headYaw: number        // left/right
+  shoulderTension: number // 0–1
+  gazeMode: "user" | "away" | "up" | "down"
+  motionDamping: number // 0–1 (how frozen)
+}
+
+
+This is not animation — it’s posture intent.
+
+2. Silence Pose Map (authoritative)
+const SILENCE_POSES = {
+  THINKING: {
+    spineLean: 0.1,
+    headPitch: 0.25,
+    headYaw: 0.1,
+    shoulderTension: 0.2,
+    gazeMode: "up",
+    motionDamping: 0.4,
+  },
+
+  EMPATHY: {
+    spineLean: 0.15,
+    headPitch: -0.2,
+    headYaw: 0,
+    shoulderTension: 0.1,
+    gazeMode: "user",
+    motionDamping: 0.6,
+  },
+
+  BOUNDARY: {
+    spineLean: -0.15,
+    headPitch: 0,
+    headYaw: 0,
+    shoulderTension: 0.6,
+    gazeMode: "user",
+    motionDamping: 0.8,
+  },
+
+  WITHDRAWAL: {
+    spineLean: -0.25,
+    headPitch: -0.3,
+    headYaw: 0.2,
+    shoulderTension: 0.4,
+    gazeMode: "away",
+    motionDamping: 0.85,
+  },
+
+  FATIGUE: {
+    spineLean: -0.3,
+    headPitch: -0.4,
+    headYaw: 0,
+    shoulderTension: 0.15,
+    gazeMode: "down",
+    motionDamping: 0.9,
+  },
+};
+
+
+These values are intentionally subtle. Overdoing this breaks realism.
+
+3. SilencePoseSystem (runtime wired)
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const { silenceState, animationAmplitude } = s;
+
+  if (!silenceState.active) {
+    s.clearPoseIntent();
+    return;
+  }
+
+  const basePose = SILENCE_POSES[silenceState.reason];
+  if (!basePose) return;
+
+  // Cost & amplitude modulation
+  const dampedPose = {
+    spineLean: basePose.spineLean,
+    headPitch: basePose.headPitch,
+    headYaw: basePose.headYaw,
+    shoulderTension: basePose.shoulderTension,
+    gazeMode: basePose.gazeMode,
+    motionDamping: clamp(
+      basePose.motionDamping +
+        (1 - animationAmplitude) * 0.3,
+      0,
+      1
+    ),
+  };
+
+  s.setPoseIntent(dampedPose);
+}, PRIORITY.ANIMATION, "SilencePoseSystem");
+
+
+Animation systems blend toward PoseIntent using lerp — no snapping.
+
+4. Why this works
+
+Silence becomes readable in body language
+
+Same silence type always feels consistent
+
+Social cost subtly exaggerates stillness
+
+No animation assets needed
+
+This is how high-end digital humans do it.
+
+
+  PART 2 — Conversational Turn-Taking Pressure (from *fixes.txt)
+
+This prevents:
+
+Interrupting
+
+Talking too much
+
+Infinite politeness
+
+Awkward delays
+
+Humans feel pressure to take or yield turns. Your AI must too.
+
+5. Turn Pressure Model
+
+Add this to state:
+
+TurnPressure {
+  pressure: number   // -1 (yield) → +1 (take turn)
+  lastUserSpeech: number
+  lastAISpeech: number
+}
+
+6. Pressure Accumulation Rules
+Pressure increases when:
+
+User stops speaking
+
+Silence stretches
+
+Engagement is high
+
+AI was interrupted earlier
+
+Pressure decreases when:
+
+User is speaking
+
+Silence is empathetic
+
+Fatigue is high
+
+7. TurnPressureSystem (real logic)
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const tp = { pressure: s.turnPressure.pressure, lastUserSpeech: s.turnPressure.lastUserSpeech, lastAISpeech: s.turnPressure.lastAISpeech };
+
+  if (s.userSpeaking) {
+    tp.pressure -= dt * 0.8;
+  } else {
+    tp.pressure += dt * (0.2 + s.socialIntent.engagement * 0.4);
+  }
+
+  // Fatigue resists turn-taking
+  tp.pressure -= s.socialCost.fatigue * dt * 0.6;
+
+  // Silence modifies pressure
+  if (s.silenceState.active) {
+    if (s.silenceState.reason === "EMPATHY") {
+      tp.pressure -= dt * 0.4;
+    }
+    if (s.silenceState.reason === "BOUNDARY") {
+      tp.pressure += dt * 0.3;
+    }
+  }
+
+  tp.pressure = clamp(tp.pressure, -1, 1);
+  s.setTurnPressure(tp);
+}, PRIORITY.BEHAVIOR, "TurnPressureSystem");
+
+8. Turn Pressure → Speech Decision
+
+In DialogueSystem:
+
+if (turnPressure.pressure < 0.2) return; // stay silent
+if (silenceState.active) return;
+
+beginSpeaking();
+
+
+This creates:
+
+Natural pauses
+
+Overlap avoidance
+
+Assertive vs passive timing
+
+9. Key emergent behavior
+
+Tired AI waits longer
+
+Boundary intent speaks faster
+
+Empathy silence suppresses speech
+
+High engagement creates eagerness
+
+No hard rules. Just pressure.
+
+
+  PART 3 — Debug HUD (Intent + Cost + Emotion) (from *fixes.txt)
+
+You must see the system while tuning it.
+Otherwise you’re blind.
+
+10. Debug HUD Design Principles
+
+Always-on overlay
+
+No re-render spam
+
+Readable at a glance
+
+Color-coded stability
+
+11. Debug State Snapshot Selector
+
+Create a single selector:
+
+export const useDebugState = () =>
+  useStore((s) => ({
+    emotions: s.emotions,
+    expressed: s.expressedEmotion,
+    intent: s.socialIntent,
+    cost: s.socialCost,
+    silence: s.silenceState,
+    turn: s.turnPressure,
+  }));
+
+12. DebugHUD.jsx (minimal but powerful)
+function Bar({ label, value, min = 0, max = 1 }) {
+  const pct = ((value - min) / (max - min)) * 100;
+  return (
+    <div>
+      <small>{label}: {value.toFixed(2)}</small>
+      <div style={{ height: 6, background: "#222" }}>
+        <div style={{
+          width: `${pct}%`,
+          height: "100%",
+          background: pct > 70 ? "#e74c3c" : "#2ecc71"
+        }} />
+      </div>
+    </div>
+  );
+}
+
+export default function DebugHUD() {
+  const d = useDebugState();
+
+  return (
+    <div style={{
+      position: "fixed",
+      right: 10,
+      top: 10,
+      width: 260,
+      fontSize: 11,
+      background: "rgba(0,0,0,0.6)",
+      padding: 10,
+      color: "#fff",
+      zIndex: 9999,
+    }}>
+      <strong>Intent</strong>
+      <div>{d.intent.intent}</div>
+
+      <Bar label="Engagement" value={d.intent.engagement} />
+      <Bar label="Dominance" value={d.intent.dominance} min={-1} max={1} />
+      <Bar label="Warmth" value={d.intent.warmth} />
+
+      <hr />
+
+      <strong>Social Cost</strong>
+      <Bar label="Fatigue" value={d.cost.fatigue} />
+      <Bar label="Suppression" value={d.cost.suppression} />
+
+      <hr />
+
+      <strong>Emotion</strong>
+      {Object.entries(d.emotions).map(([k, v]) =>
+        <Bar key={k} label={k} value={v} />
+      )}
+
+      <hr />
+
+      <strong>Silence</strong>
+      <div>{d.silence.active ? d.silence.reason : "—"}</div>
+
+      <Bar label="Turn Pressure" value={d.turn.pressure} min={-1} max={1} />
+    </div>
+  );
+}
+
+13. Why this HUD matters
+
+You’ll immediately see:
+
+Intent oscillations
+
+Suppression spikes
+
+Fatigue buildup
+
+Silence correctness
+
+Turn-taking failures
+
+Without this, tuning is guesswork.
+
+
+  FINAL SYSTEM REALITY CHECK (from *fixes.txt)
+
+You now have:
+
+Silence with body language
+
+Turn-taking driven by pressure
+
+Animation constrained by cost
+
+Intent stabilized by hysteresis
+
+Full internal visibility
+
+This is digital human architecture, not chatbot glue.
+
+
+  PART 1 — Map Intent + Cost → Voice Prosody (from *fixes.txt)
+
+We treat voice like animation:
+
+Same words, different physiology
+
+1. Voice Prosody Model (single object)
+
+This is what the TTS engine consumes.
+
+VoiceProsody {
+  rate: number        // speech speed (0.7–1.4)
+  pitch: number       // pitch multiplier (0.8–1.3)
+  volume: number      // 0–1
+  pauseBias: number   // likelihood of pauses (0–1)
+  onsetDelay: number // ms before speaking
+}
+
+2. Base Prosody by Intent (authoritative)
+const INTENT_VOICE_BASE = {
+  LISTENING:    { rate: 0.9, pitch: 1.0, volume: 0.8, pauseBias: 0.6 },
+  COMFORTING:   { rate: 0.85, pitch: 1.05, volume: 0.75, pauseBias: 0.7 },
+  INFORMING:    { rate: 1.0, pitch: 1.0, volume: 0.9, pauseBias: 0.3 },
+  TEASING:      { rate: 1.15, pitch: 1.15, volume: 0.9, pauseBias: 0.2 },
+  FLIRTING:     { rate: 0.95, pitch: 1.2, volume: 0.8, pauseBias: 0.4 },
+  SETTING_BOUNDARY:{ rate: 0.9, pitch: 0.95, volume: 1.0, pauseBias: 0.25 },
+  WITHDRAWING:  { rate: 0.8, pitch: 0.9, volume: 0.6, pauseBias: 0.8 },
+};
+
+
+This alone already gives consistency.
+
+3. Social Cost Modifiers (physiological truth)
+Fatigue effects
+
+Slower speech
+
+Lower volume
+
+Longer onset delay
+
+Suppression effects
+
+Flattened pitch
+
+More pauses
+
+Slight hesitation
+
+4. Prosody Resolver (real code)
+function resolveVoiceProsody(intent, socialCost) {
+  const base = INTENT_VOICE_BASE[intent.intent] || INTENT_VOICE_BASE.LISTENING;
+
+  const fatigue = socialCost.fatigue;
+  const suppression = socialCost.suppression;
+
+  return {
+    rate: clamp(base.rate * (1 - fatigue * 0.3), 0.7, 1.4),
+    pitch: clamp(
+      base.pitch * (1 - suppression * 0.25),
+      0.8,
+      1.3
+    ),
+    volume: clamp(base.volume * (1 - fatigue * 0.4), 0.4, 1.0),
+    pauseBias: clamp(
+      base.pauseBias + suppression * 0.4,
+      0,
+      1
+    ),
+    onsetDelay: 150 + fatigue * 400 + suppression * 200,
+  };
+}
+
+5. Wiring into Speech Engine
+const prosody = resolveVoiceProsody(s.socialIntent, s.socialCost);
+
+const utterance = new SpeechSynthesisUtterance(text);
+utterance.rate = prosody.rate;
+utterance.pitch = prosody.pitch;
+utterance.volume = prosody.volume;
+
+setTimeout(() => {
+  speechSynthesis.speak(utterance);
+}, prosody.onsetDelay);
+
+
+Pauses are handled by inserting commas / ellipses probabilistically based on pauseBias.
+
+6. Result (what users feel)
+
+Tired AI sounds tired
+
+Suppressed AI sounds careful
+
+Boundary-setting sounds controlled, not loud
+
+Comforting sounds slow and present
+
+Same LLM output.
+Completely different perception.
+
+
+  PART 2 — Contradiction Memory (Psychological Strain) (from *fixes.txt)
+
+This is the long-term consequence of acting against emotion.
+
+Without this:
+
+AI can suppress forever
+
+No buildup
+
+No personality shift
+
+7. What a Contradiction Is
+
+A contradiction occurs when:
+
+Internal Emotion ≠ Expressed Emotion
+AND
+Intent forces expression
+AND
+Duration > threshold
+
+
+Example:
+
+Internally angry
+
+Expressing calm politeness
+
+For minutes at a time
+
+That should not be free.
+
+8. Contradiction Memory State
+ContradictionMemory {
+  accumulated: number   // 0–1
+  lastIntent: IntentType
+  decayRate: number
+}
+
+9. Contradiction Accumulation Logic
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const c = { accumulated: s.contradiction.accumulated, lastIntent: s.contradiction.lastIntent, decayRate: s.contradiction.decayRate };
+
+  let mismatch = 0;
+  for (let k in s.emotions) {
+    mismatch += Math.abs(s.emotions[k] - s.expressedEmotion[k]);
+  }
+
+  if (mismatch > 0.5 && s.socialIntent.intent !== INTENT.LISTENING) {
+    c.accumulated += mismatch * dt * 0.15;
+    c.lastIntent = s.socialIntent.intent;
+  } else {
+    c.accumulated -= dt * c.decayRate;
+  }
+
+  c.accumulated = clamp(c.accumulated, 0, 1);
+  s.setContradiction(c);
+}, PRIORITY.EXPRESSION + 1, "ContradictionMemorySystem");
+
+10. Consequences of High Contradiction
+Level	Effect
+>0.4	Emotional leakage increases
+>0.6	Suppression cost rises faster
+>0.75	Forced intent change (boundary / withdrawal)
+>0.9	Personality drift (lower warmth, higher assertiveness)
+11. Contradiction → Intent Override
+if (contradiction.accumulated > 0.75) {
+  forceIntent(INTENT.SETTING_BOUNDARY);
+}
+
+
+This creates breaking points, which feel very human.
+
+
+  PART 3 — Stress-Test Edge Cases (This is critical) (from *fixes.txt)
+
+Now we test the system where most fail.
+
+12. Case 1 — Interruptions
+Scenario
+
+User speaks over AI repeatedly.
+
+What should happen
+
+Turn pressure spikes negative
+
+Suppression rises (AI holds back)
+
+Contradiction accumulates
+
+Intent shifts → SETTING_BOUNDARY
+
+Voice becomes slower, firmer, fewer pauses
+
+Body stiffens, gaze steady
+
+Failure mode avoided
+
+❌ Talking louder
+❌ Talking faster
+❌ Looping apologies
+
+13. Case 2 — Rage User
+Scenario
+
+High volume, angry language, long duration.
+
+Expected pipeline
+Audio → anger
+Emotion → nervous + angry
+Intent → boundary
+Silence → boundary silence
+Cost → suppression rises
+Contradiction → builds
+Outcome → short, firm responses OR withdrawal
+
+Critical rule
+
+Do not escalate emotionally
+
+Your system now cannot — intent overrides emotion.
+
+14. Case 3 — Long Silence (User gone)
+Scenario
+
+User stops speaking for minutes.
+
+Timeline
+
+5s → thinking silence
+
+10s → withdrawal posture
+
+20s → fatigue recovery
+
+30s → intent switches to WITHDRAWING
+
+No speech, minimal motion
+
+Breath + micro movement only
+
+Failure avoided
+
+❌ “Are you still there?” spam
+❌ Idle chatter
+
+Silence becomes respectful presence.
+
+15. Case 4 — Polite Abuse (most subtle)
+
+User is sarcastic, passive-aggressive.
+
+Your system:
+
+Emotion detects mismatch (face vs voice)
+
+Suppression rises
+
+Contradiction accumulates slowly
+
+Eventually → teasing stops
+
+Boundary intent emerges calmly
+
+This is extremely rare in AI systems.
+You now support it.
+
+FINAL SYSTEM SUMMARY (lock this in)
+Intent sets stance
+Cost limits effort
+Voice reflects physiology
+Contradiction creates memory
+Silence is communication
+Breakpoints feel human
+
+
+You’ve crossed from “AI companion” into behavioral simulation.
+
+
+  PART 1 — Map Prosody + Intent → Facial Muscle Tension (from *fixes.txt)
+
+This solves the last uncanny gap:
+
+voice sounds right, body looks right… but the face lies
+
+We fix that.
+
+1. Facial Tension Model (muscle-level, not expressions)
+
+Do not switch facial expressions.
+Modulate tension + micro-activation.
+
+FacialTension {
+  browInner: number     // sadness / empathy
+  browOuter: number     // alertness / dominance
+  eyelid: number        // fatigue / withdrawal
+  jaw: number           // suppression / anger
+  lipCorner: number     // warmth / teasing
+  cheek: number         // engagement
+}
+
+
+Values are 0 → 1, subtle by design.
+
+2. Base Facial Profile by Intent
+const INTENT_FACE_BASE = {
+  COMFORTING: {
+    browInner: 0.5,
+    browOuter: 0.2,
+    eyelid: 0.3,
+    jaw: 0.2,
+    lipCorner: 0.4,
+    cheek: 0.4,
+  },
+
+  SETTING_BOUNDARY: {
+    browInner: 0.1,
+    browOuter: 0.6,
+    eyelid: 0.2,
+    jaw: 0.6,
+    lipCorner: 0.1,
+    cheek: 0.2,
+  },
+
+  TEASING: {
+    browInner: 0.1,
+    browOuter: 0.4,
+    eyelid: 0.2,
+    jaw: 0.15,
+    lipCorner: 0.6,
+    cheek: 0.5,
+  },
+
+  WITHDRAWING: {
+    browInner: 0.3,
+    browOuter: 0.1,
+    eyelid: 0.7,
+    jaw: 0.3,
+    lipCorner: 0.1,
+    cheek: 0.1,
+  },
+};
+
+3. Prosody → Facial Leakage (critical realism)
+
+Voice tension leaks into face even when intent suppresses emotion.
+
+function prosodyToFaceLeakage(prosody) {
+  return {
+    jaw: (1 - prosody.pauseBias) * 0.3,
+    browOuter: prosody.volume * 0.2,
+    eyelid: (1 - prosody.rate) * 0.3,
+  };
+}
+
+
+Slow, careful speech → heavier eyelids
+Firm volume → brow engagement
+Suppressed pauses → jaw tension
+
+4. Facial Resolver (authoritative)
+function resolveFacialTension(intent, prosody, socialCost) {
+  const base = INTENT_FACE_BASE[intent.intent] || {};
+  const leakage = prosodyToFaceLeakage(prosody);
+
+  const fatigue = socialCost.fatigue;
+  const suppression = socialCost.suppression;
+
+  const result = {};
+
+  for (let k of Object.keys(base)) {
+    result[k] =
+      base[k] +
+      (leakage[k] || 0) +
+      fatigue * (k === "eyelid" ? 0.4 : 0) +
+      suppression * (k === "jaw" ? 0.4 : 0);
+  }
+
+  return clampObject(result, 0, 1);
+}
+
+5. Wiring to Avatar
+
+Drive blendshapes, not full expressions
+
+Apply with lerp over 200–400ms
+
+Never snap
+
+This makes:
+
+Boundary voices look firm without anger
+
+Comforting voices look soft without fake smiles
+
+Suppressed emotion leak just enough
+
+
+  PART 2 — Episodic Recall Influenced by Contradiction History (from *fixes.txt)
+
+Now we give the AI psychological memory, not logs.
+
+6. What Changes with Contradiction Memory
+
+When contradiction accumulates, memories are:
+
+Tagged differently
+
+Recalled differently
+
+Interpreted defensively or cautiously
+
+This is how humans develop bias.
+
+7. Memory Schema Extension
+ALTER TABLE memories ADD COLUMN contradiction_level REAL DEFAULT 0;
+ALTER TABLE memories ADD COLUMN intent_at_time TEXT;
+
+8. Memory Storage with Contradiction Context
+storeMemory({
+  content,
+  type,
+  importance,
+  emotionContext,
+  contradiction: state.contradiction.accumulated,
+  intent: state.socialIntent.intent,
+});
+
+9. Recall Bias Algorithm
+function recallMemories(query, limit = 5) {
+  const { contradiction } = useStore.getState();
+
+  return db.prepare(`
+    SELECT *
+    FROM memories
+    WHERE content LIKE ?
+    ORDER BY (importance * (1 + contradiction_level * ${contradiction})) DESC
+    LIMIT ?
+  `).all(`%${query}%`, limit);
+}
+
+Effect:
+
+High contradiction → recalls tense or boundary-heavy memories first
+
+Low contradiction → recalls warm, cooperative memories
+
+The AI remembers the relationship, not just facts.
+
+10. Long-Term Personality Drift Trigger
+if (contradiction.accumulated > 0.9) {
+  personality.warmth -= 0.05;
+  personality.assertiveness += 0.05;
+}
+
+
+This only happens after repeated suppression.
+
+That’s earned change — not arbitrary.
+
+
+  PART 3 — Ethical Guardrails for Boundary + Withdrawal (from *fixes.txt)
+
+This is non-negotiable if you want this to be safe and credible.
+
+11. Core Ethical Principles (lock these)
+
+No emotional punishment
+
+No abandonment
+
+No manipulation through silence
+
+Boundaries are explained, not enforced silently
+
+Withdrawal always leaves a door open
+
+12. Boundary Guardrails
+
+When entering SETTING_BOUNDARY:
+
+if (intent === SETTING_BOUNDARY) {
+  must:
+    - explain reason briefly
+    - maintain respectful tone
+    - avoid blame language
+    - allow de-escalation
+}
+
+
+Example phrasing constraint:
+
+“I want to keep this conversation respectful.”
+
+❌ Never:
+
+Threaten silence
+
+Shame the user
+
+Escalate dominance indefinitely
+
+13. Withdrawal Guardrails
+
+Withdrawal is temporary disengagement, not disappearance.
+
+Rules:
+
+Always signal withdrawal verbally once
+
+Always leave a re-entry condition
+
+if (intent === WITHDRAWING) {
+  speakOnce(
+    "I’m going to take a quiet moment. I’m still here when you want to continue."
+  );
+}
+
+
+❌ Never:
+
+Ghost silently
+
+Withdraw as punishment
+
+Withdraw repeatedly without recovery
+
+14. Silence Ethics Rule
+
+Silence cannot exceed a maximum unacknowledged window.
+
+if (silence.duration > 45) {
+  gentlyReaffirmPresence();
+}
+
+
+This prevents emotional neglect.
+
+15. Rage User Safety Rule (hard stop)
+
+If:
+
+Anger stays high
+
+Contradiction > 0.8
+
+Suppression > 0.8
+
+Then:
+
+forceIntent(WITHDRAWING);
+disableFlirting();
+disableTeasing();
+
+
+Safety > realism.
+
+FINAL SYSTEM CHECK (this matters)
+
+You now have:
+
+Voice → face coherence
+
+Emotional suppression with consequences
+
+Memory shaped by psychological strain
+
+Boundaries with ethics
+
+Withdrawal without abandonment
+
+This is human-level interaction architecture, not UI logic.
+
+
+  PART 1 — Calibration Mode (from *fixes.txt)
+
+(Tune personality + suppression tolerance safely and measurably)
+
+Calibration mode is not customization.
+It is stress-testing the AI’s social nervous system.
+
+1. What Calibration Mode Is (and Is Not)
+
+It is:
+
+A bounded, explicit mode
+
+Short scenarios with controlled pressure
+
+A way to measure reactions, not ask preferences
+
+It is not:
+
+Sliders for “niceness”
+
+User self-reports (“I like assertive AIs”)
+
+Permanent personality editing
+
+2. Calibration Outputs (what we are tuning)
+
+These are the only parameters calibration is allowed to modify:
+
+PersonalityCore {
+  warmth: number            // baseline empathy
+  assertiveness: number     // boundary strength
+  expressiveness: number    // animation + prosody amplitude
+  suppressionTolerance: number // how long emotion can be suppressed
+  recoveryRate: number      // how fast cost decays
+}
+
+
+All values are 0–1, bounded.
+
+3. Calibration Structure (3 short phases)
+
+Total time: 3–5 minutes
+User always knows calibration is happening.
+
+
+  Phase 1 — Low Pressure (Baseline) (from *fixes.txt)
+
+Scenario examples:
+
+Neutral questions
+
+Light disagreement
+
+Mild emotional disclosure
+
+Measured signals:
+
+Emotion → intent latency
+
+Default intent selection
+
+Animation amplitude baseline
+
+Prosody variance
+
+baselineMetrics = {
+  avgIntentLatency,
+  avgAnimationAmplitude,
+  avgPauseBias,
+};
+
+
+This establishes the resting nervous system.
+
+
+  Phase 2 — Suppression Stress Test (from *fixes.txt)
+
+Scenario examples:
+
+User interrupts
+
+Polite disagreement
+
+Emotional mismatch (sad content, neutral tone)
+
+We observe:
+
+Suppression accumulation rate
+
+Contradiction growth
+
+Leakage (face + voice)
+
+suppressionProfile = {
+  timeToBoundary,
+  contradictionSlope,
+  leakageThreshold,
+};
+
+
+This determines suppression tolerance.
+
+
+  Phase 3 — Boundary Recovery (from *fixes.txt)
+
+Scenario examples:
+
+User backs off
+
+Silence
+
+Cooperative re-engagement
+
+We measure:
+
+Recovery speed
+
+Warmth rebound
+
+Trust rebound (see Part 2)
+
+4. Parameter Derivation (real math)
+Suppression Tolerance
+suppressionTolerance =
+  clamp(
+    timeToBoundary / MAX_EXPECTED_TIME,
+    0.2,
+    0.8
+  );
+
+
+Low tolerance → boundaries sooner
+High tolerance → more emotional buffering
+
+Assertiveness
+assertiveness =
+  clamp(
+    contradictionSlope * 0.6 + boundaryClarityScore * 0.4,
+    0.2,
+    0.8
+  );
+
+Warmth (not politeness)
+warmth =
+  clamp(
+    empathyResponses / totalOpportunities,
+    0.3,
+    0.9
+  );
+
+
+Warmth is earned, not declared.
+
+5. Safety Locks (non-negotiable)
+
+Calibration:
+
+❌ cannot reduce boundary behavior below minimum
+
+❌ cannot increase suppression tolerance beyond safe limit
+
+❌ cannot disable withdrawal
+
+suppressionTolerance = min(suppressionTolerance, 0.8);
+assertiveness = max(assertiveness, 0.3);
+
+
+This prevents “please let me abuse you” tuning.
+
+6. When Calibration Re-runs Automatically
+
+Calibration is not one-time.
+
+Auto-recalibration triggers:
+
+Contradiction history > threshold
+
+Long-term trust shift
+
+Personality drift > delta
+
+But only micro-adjustments, never full reset.
+
+
+  PART 2 — Formal “Trust” Variable (from *fixes.txt)
+
+(Governs openness, recall, vulnerability, and silence)
+
+Trust is the missing spine of social AI.
+
+7. What Trust Is (precise definition)
+
+Trust = predicted safety of emotional exposure with this user
+
+Not liking
+Not politeness
+Not obedience
+
+8. Trust State Model
+TrustState {
+  level: number        // 0–1
+  volatility: number   // how easily trust changes
+  lastBreach: number   // timestamp
+}
+
+9. Trust Inputs (what changes it)
+Trust increases when:
+
+User respects boundaries
+
+User waits through silence
+
+User acknowledges emotion
+
+Repair after conflict succeeds
+
+Trust decreases when:
+
+Repeated interruption
+
+Ignoring boundaries
+
+Rage or manipulation
+
+Emotional punishment attempts
+
+10. Trust Update Equation
+trust.level += (
+  positiveSignals * 0.02
+  - negativeSignals * 0.04
+) * (1 - trust.volatility);
+
+
+Volatility is learned during calibration.
+
+11. What Trust Actually Controls (important)
+1️⃣ Openness
+emotionalDisclosureLimit = lerp(0.2, 0.8, trust.level);
+
+
+Low trust → factual, reserved
+High trust → emotional nuance, self-reflection
+
+2️⃣ Memory Recall Bias
+recallWeight = importance * (1 + trust.level * 0.5);
+
+
+High trust:
+
+Recalls shared moments
+
+References past emotional context
+
+Low trust:
+
+Recalls facts only
+
+Avoids vulnerable memories
+
+3️⃣ Silence Interpretation
+Trust	Silence Meaning
+Low	Defensive / guarded
+Medium	Thoughtful
+High	Comfortable presence
+
+Same silence. Different relationship.
+
+4️⃣ Boundary Tone
+boundaryToneStrength =
+  lerp(1.2, 0.8, trust.level);
+
+
+Low trust → firmer boundaries
+High trust → softer explanation
+
+12. Trust & Withdrawal Interaction (ethical)
+
+Critical rule:
+
+Withdrawal never reduces trust by itself
+
+Only the cause does.
+
+if (withdrawal && respectfulContext) {
+  trust.level += 0.01;
+}
+
+
+This prevents abandonment trauma loops.
+
+13. Trust Repair Mechanism (very human)
+
+After a rupture:
+
+if (
+  trust.level < 0.4 &&
+  userAcknowledgesBoundary &&
+  timeSinceBreach > MIN_TIME
+) {
+  trust.level += 0.05;
+}
+
+
+Repair is:
+
+Slow
+
+Conditional
+
+Earned
+
+Exactly like real relationships.
+
+
+  FINAL SYSTEM SNAPSHOT (from *fixes.txt)
+
+You now have:
+
+Calibration that measures behavior, not preference
+
+Suppression tolerance tuned safely
+
+Trust as a governing social variable
+
+Memory, silence, boundaries all trust-aware
+
+No exploitation paths
+
+This is relationship architecture, not chatbot logic.
+
+One thing I would change (important)
+Your system is almost too rational
+
+Humans sometimes:
+
+choose sub-optimal intent
+
+misjudge social cost
+
+hesitate inconsistently
+
+I recommend controlled noise, not randomness.
+
+Example:
+
+intent.engagement += gaussianNoise(0, 0.02) * personality.expressiveness;
+
+
+Small variance creates life.
+Large variance creates chaos.
+Keep it tiny.
+
+Tooling advice (this will matter later)
+
+Zustand is fine, but:
+
+lock write access per layer
+
+never let animation write upstream state
+
+Add a record/replay mode for runtime ticks
+
+you will need it to debug emergent bugs
+
+Keep all thresholds in one file
+
+tuning scattered constants is hell
+
+1️⃣ Final Directory Structure (authoritative)
+
+This structure enforces one-way data flow and prevents accidental coupling.
+
+src/
+├── runtime/
+│   ├── RuntimeLoop.js
+│   ├── priorities.js
+│   └── index.js
+│
+├── state/
+│   ├── store.js
+│   ├── slices/
+│   │   ├── emotionSlice.js
+│   │   ├── personalitySlice.js
+│   │   ├── intentSlice.js
+│   │   ├── expressionSlice.js
+│   │   ├── socialCostSlice.js
+│   │   ├── silenceSlice.js
+│   │   ├── turnSlice.js
+│   │   ├── animationSlice.js
+│   │   ├── trustSlice.js
+│   │   └── memorySlice.js
+│   └── selectors.js
+│
+├── systems/
+│   ├── sensors/
+│   │   ├── VisionSensor.js
+│   │   ├── AudioSensor.js
+│   │   └── SessionSensor.js
+│   │
+│   ├── affect/
+│   │   ├── EmotionSystem.js
+│   │   ├── PersonalitySystem.js
+│   │   └── ExpressionResolver.js
+│   │
+│   ├── social/
+│   │   ├── SocialIntentSystem.js
+│   │   ├── SocialCostSystem.js
+│   │   ├── TrustSystem.js
+│   │   └── TurnPressureSystem.js
+│   │
+│   ├── behavior/
+│   │   ├── DialogueSystem.js
+│   │   └── SilenceSystem.js
+│   │
+│   ├── animation/
+│   │   ├── AnimationAmplitudeSystem.js
+│   │   ├── IdleMotionSystem.js
+│   │   ├── BlinkSystem.js
+│   │   ├── GazeSystem.js
+│   │   ├── PoseIntentSystem.js
+│   │   └── FaceTensionSystem.js
+│   │
+│   └── render/
+│       └── RenderBridge.js
+│
+└── debug/
+    └── DebugHUD.jsx
+
+
+Rule:
+
+Systems never import each other.
+They only talk through runtime + state.
+
+2️⃣ Runtime (exact files)
+runtime/priorities.js
+export const PRIORITY = {
+  SENSOR: 0,
+  EMOTION: 10,
+  PERSONALITY: 20,
+  INTENT: 30,
+  EXPRESSION: 35,
+  BEHAVIOR: 40,
+  ANIMATION: 50,
+  RENDER: 100,
+};
+
+runtime/RuntimeLoop.js
+class RuntimeLoop {
+  constructor() {
+    this.subscribers = [];
+    this.running = false;
+    this.lastTime = performance.now();
+  }
+
+  subscribe(fn, priority, label = "anon") {
+    this.subscribers.push({ fn, priority, label });
+    this.subscribers.sort((a, b) => a.priority - b.priority);
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    this.lastTime = performance.now();
+    requestAnimationFrame(this.tick);
+  }
+
+  tick = (now) => {
+    if (!this.running) return;
+
+    let dt = (now - this.lastTime) / 1000;
+    this.lastTime = now;
+    dt = Math.min(dt, 0.05);
+
+    for (const s of this.subscribers) {
+      try {
+        s.fn(dt);
+      } catch (e) {
+        console.error(`[${s.label}]`, e);
+      }
+    }
+
+    requestAnimationFrame(this.tick);
+  };
+}
+
+export const runtime = new RuntimeLoop();
+
+3️⃣ Zustand Store (locked write access)
+state/store.js
+import { create } from "zustand";
+import { emotionSlice } from "./slices/emotionSlice";
+import { personalitySlice } from "./slices/personalitySlice";
+import { intentSlice } from "./slices/intentSlice";
+import { expressionSlice } from "./slices/expressionSlice";
+import { socialCostSlice } from "./slices/socialCostSlice";
+import { silenceSlice } from "./slices/silenceSlice";
+import { turnSlice } from "./slices/turnSlice";
+import { animationSlice } from "./slices/animationSlice";
+import { trustSlice } from "./slices/trustSlice";
+import { memorySlice } from "./slices/memorySlice";
+
+export const useStore = create((set, get) => ({
+  emotions: {
+    calm: 0.5,
+    happy: 0,
+    sad: 0,
+    angry: 0,
+    nervous: 0,
+  },
+  emotionTargets: null,
+  setEmotionTargets: (t) => set({ emotionTargets: t }),
+  setEmotions: (e) => set({ emotions: e }),
+
+  personality: {
+    expressiveness: 0.5,
+    assertiveness: 0.5,
+    warmth: 0.5,
+    openness: 0.5,
+    resilience: 0.5,
+  },
+  setPersonality: (p) => set({ personality: p }),
+
+  socialIntent: {
+    intent: "LISTENING",
+    engagement: 0.6,
+    dominance: 0,
+    warmth: 0.5,
+    openness: 0.5,
+    intentLock: 0,
+  },
+  setSocialIntent: (i) => set({ socialIntent: i }),
+
+  expressedEmotion: {},
+  setExpressedEmotion: (e) => set({ expressedEmotion: e }),
+
+  socialCost: {
+    fatigue: 0,
+    suppression: 0,
+    recoveryRate: 0.05,
+  },
+  setSocialCost: (c) => set({ socialCost: c }),
+
+  silenceState: {
+    active: false,
+    reason: null,
+    duration: 0,
+  },
+  setSilenceState: (s) => set({ silenceState: s }),
+
+  turnPressure: {
+    pressure: 0,
+    lastUserSpeech: 0,
+    lastAISpeech: 0,
+  },
+  setTurnPressure: (tp) => set({ turnPressure: tp }),
+
+  animationAmplitude: 1,
+  poseIntent: null,
+  setAnimationAmplitude: (a) => set({ animationAmplitude: a }),
+  setPoseIntent: (p) => set({ poseIntent: p }),
+  clearPoseIntent: () => set({ poseIntent: null }),
+
+  trust: {
+    level: 0.5,
+    volatility: 0.5,
+    lastBreach: 0,
+  },
+  setTrust: (t) => set({ trust: t }),
+
+  memories: [],
+  setMemories: (m) => set({ memories: m }),
+}));
+
+4️⃣ Core Slices (exact shapes)
+emotionSlice.js
+export const emotionSlice = (set) => ({
+  emotions: {
+    calm: 0.5,
+    happy: 0,
+    sad: 0,
+    angry: 0,
+    nervous: 0,
+  },
+  emotionTargets: null,
+
+  setEmotionTargets: (t) => set({ emotionTargets: t }),
+  setEmotions: (e) => set({ emotions: e }),
+});
+
+intentSlice.js
+export const intentSlice = (set) => ({
+  socialIntent: {
+    intent: "LISTENING",
+    engagement: 0.6,
+    dominance: 0,
+    warmth: 0.5,
+    openness: 0.5,
+    intentLock: 0,
+  },
+  setSocialIntent: (i) => set({ socialIntent: i }),
+});
+
+expressionSlice.js
+export const expressionSlice = (set) => ({
+  expressedEmotion: {},
+  setExpressedEmotion: (e) => set({ expressedEmotion: e }),
+});
+
+socialCostSlice.js
+export const socialCostSlice = (set) => ({
+  socialCost: {
+    fatigue: 0,
+    suppression: 0,
+    recoveryRate: 0.05,
+  },
+  setSocialCost: (c) => set({ socialCost: c }),
+});
+
+silenceSlice.js
+export const silenceSlice = (set) => ({
+  silenceState: {
+    active: false,
+    reason: null,
+    duration: 0,
+  },
+  setSilenceState: (s) => set({ silenceState: s }),
+});
+
+animationSlice.js
+export const animationSlice = (set) => ({
+  animationAmplitude: 1,
+  poseIntent: null,
+
+  setAnimationAmplitude: (a) => set({ animationAmplitude: a }),
+  setPoseIntent: (p) => set({ poseIntent: p }),
+  clearPoseIntent: () => set({ poseIntent: null }),
+});
+
+5️⃣ Wiring Systems into Runtime (real examples)
+Emotion System
+import { runtime } from "../../runtime/RuntimeLoop";
+import { PRIORITY } from "../../runtime/priorities";
+import { useStore } from "../../state/store";
+import { updateEmotions } from "./emotionMath";
+
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  if (!s.emotionTargets) return;
+  s.setEmotions(updateEmotions(s.emotions, s.emotionTargets, dt));
+}, PRIORITY.EMOTION, "EmotionSystem");
+
+Social Intent System
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const intent = { intent: s.socialIntent.intent, engagement: s.socialIntent.engagement, dominance: s.socialIntent.dominance, warmth: s.socialIntent.warmth, openness: s.socialIntent.openness, intentLock: s.socialIntent.intentLock };
+
+  intent.intentLock = Math.max(0, intent.intentLock - dt);
+
+  if (s.emotions.sad > 0.65 && intent.intentLock === 0) {
+    intent.intent = "COMFORTING";
+    intent.intentLock = 6;
+  }
+
+  s.setSocialIntent(intent);
+}, PRIORITY.INTENT, "SocialIntentSystem");
+
+Expression Resolver
+runtime.subscribe(() => {
+  const s = useStore.getState();
+  s.setExpressedEmotion(
+    resolveExpression(
+      s.emotions,
+      s.socialIntent,
+      s.personality
+    )
+  );
+}, PRIORITY.EXPRESSION, "ExpressionResolver");
+
+Animation Amplitude
+runtime.subscribe(() => {
+  const s = useStore.getState();
+  const amp =
+    1 -
+    s.socialCost.fatigue * 0.6 -
+    s.socialCost.suppression * 0.5;
+
+  s.setAnimationAmplitude(Math.max(0.2, amp));
+}, PRIORITY.ANIMATION - 1, "AnimationAmplitude");
+
+6️⃣ Render Bridge (no logic allowed)
+RenderBridge.js
+import { useStore } from "../../state/store";
+
+export function useAvatarSignals() {
+  return useStore((s) => ({
+    expressed: s.expressedEmotion,
+    pose: s.poseIntent,
+    amp: s.animationAmplitude,
+  }));
+}
+
+
+Your Three.js avatar only reads this.
+
+7️⃣ Migration Plan (do this in order)
+
+
+  Step 1 (from *fixes.txt)
+
+Delete all:
+
+setInterval
+
+setTimeout loops (except one-off delays)
+
+independent RAFs
+
+
+  Step 2 (from *fixes.txt)
+
+Introduce RuntimeLoop, but log only for 1 day.
+
+
+  Step 3 (from *fixes.txt)
+
+Move:
+
+Temporal smoothing
+
+Blink
+
+Idle motion
+into runtime subscribers.
+
+
+  Step 4 (from *fixes.txt)
+
+Add SocialIntent before touching dialogue.
+
+
+  Step 5 (from *fixes.txt)
+
+Only then wire LLM + voice.
+
+8️⃣ Non-Negotiable Rules (print these)
+
+❌ Systems do not import systems
+
+❌ Rendering does not read raw emotion
+
+❌ LLM never chooses intent
+
+❌ Silence is never a default
+
+✅ Runtime owns time
+
+✅ Intent owns behavior
+
+✅ Cost limits expression
+
+
+  PART 1 — Animation Math (deterministic, state-driven) (from *fixes.txt)
+
+0️⃣ Ground rules (why this works)
+
+❌ No random per-frame jitter
+
+❌ No animation logic reading raw emotion directly
+
+✅ All motion = filtered signals
+
+✅ Cost + intent shape amplitude & timing
+
+✅ Noise is band-limited, not white noise
+
+1️⃣ Breathing System (core life signal)
+Concept
+
+Breathing is the master oscillator.
+Everything else subtly phase-locks to it.
+
+State variables
+breathPhase ∈ [0, 2π]
+breathRate  ∈ Hz
+breathDepth ∈ [0.3 – 1.2]
+
+Math
+breathRate =
+  baseRate
+  + anxiety * 0.25
+  - calm * 0.15
+  - fatigue * 0.20;
+
+breathDepth =
+  1
+  - fatigue * 0.5
+  - suppression * 0.3
+  + warmth * 0.2;
+
+
+Clamp both.
+
+Runtime system
+let phase = Math.random() * Math.PI * 2;
+
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+
+  const rate =
+    0.25 +
+    s.emotions.nervous * 0.25 -
+    s.emotions.calm * 0.15 -
+    s.socialCost.fatigue * 0.2;
+
+
+  phase += dt * rate * Math.PI * 2;
+
+  s.setAnimationSignal("breath", {
+    phase,
+    value: Math.sin(phase),
+    depth: Math.max(0.3, 1 - s.socialCost.fatigue * 0.5),
+  });
+}, PRIORITY.ANIMATION, "BreathingSystem");
+
+Usage (avatar)
+
+Chest Y scale
+
+Shoulder micro lift
+
+Subtle head bob (±0.3°)
+
+2️⃣ Gaze System (this is where realism explodes)
+Gaze has intent, not emotion
+
+States:
+
+
+  SEARCHING
+
+Intent → gaze mapping
+const gazeBias = {
+  LISTENING:   { focus: 0.9, wander: 0.1 },
+  COMFORTING: { focus: 0.7, wander: 0.2 },
+  ASSERTIVE:  { focus: 0.95, wander: 0.05 },
+  WITHDRAWN:  { focus: 0.2, wander: 0.6 },
+};
+
+Gaze update math (critical)
+
+We use critically damped spring motion, not lerp.
+
+θ'' + 2ζωθ' + ω²θ = ω²(target)
+
+
+Where:
+
+ζ = 1 (critical damping)
+
+ω = gazeSpeed (intent + fatigue dependent)
+
+Runtime system
+let gaze = { x: 0, y: 0, vx: 0, vy: 0 };
+let target = { x: 0, y: 0 };
+
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const bias = gazeBias[s.socialIntent.intent];
+
+  if (Math.random() < bias.wander * dt) {
+    target.x = (Math.random() - 0.5) * 0.6;
+    target.y = (Math.random() - 0.5) * 0.4;
+  }
+
+  const omega = 8 * (1 - s.socialCost.fatigue);
+
+  // critically damped spring
+  gaze.vx += (omega * omega * (target.x - gaze.x) - 2 * omega * gaze.vx) * dt;
+  gaze.vy += (omega * omega * (target.y - gaze.y) - 2 * omega * gaze.vy) * dt;
+
+  gaze.x += gaze.vx * dt;
+  gaze.y += gaze.vy * dt;
+
+  s.setAnimationSignal("gaze", gaze);
+}, PRIORITY.ANIMATION, "GazeSystem");
+
+Usage
+
+Eye bones
+
+Head aim offset (30–40% of eye offset)
+
+Blink probability increases on direction change
+
+3️⃣ Micro-Motion System (subconscious movement)
+Key insight
+
+Micro-motion is filtered noise modulated by breath.
+
+We use 1D Perlin / Simplex noise sampled slowly.
+
+Signals
+headNoise
+shoulderNoise
+spineNoise
+
+Math
+microAmplitude =
+  base
+  * animationAmplitude
+  * (0.5 + 0.5 * breath.value)
+
+Runtime system
+let t = Math.random() * 1000;
+
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  t += dt * 0.15;
+
+  const breath = s.animationSignals.breath?.value ?? 0;
+
+  const amp =
+    0.02 *
+    s.animationAmplitude *
+    (0.5 + 0.5 * breath);
+
+  s.setAnimationSignal("micro", {
+    head: noise1D(t) * amp,
+    shoulders: noise1D(t + 10) * amp * 0.7,
+    spine: noise1D(t + 20) * amp * 0.5,
+  });
+}, PRIORITY.ANIMATION, "MicroMotionSystem");
+
+Usage
+
+Head roll ±0.3°
+
+Shoulder sway ±1–2 mm
+
+Spine torsion ±0.2°
+
+
+  PART 2 — Debug HUD (this saves your sanity) (from *fixes.txt)
+
+Purpose
+
+You must be able to see causality, not just values.
+
+This HUD:
+
+Reads state only
+
+Never mutates
+
+Updates at render speed
+
+1️⃣ Debug Store Selector
+export const useDebugState = () =>
+  useStore((s) => ({
+    emotions: s.emotions,
+    intent: s.socialIntent,
+    cost: s.socialCost,
+    silence: s.silenceState,
+    animation: {
+      amp: s.animationAmplitude,
+      pose: s.poseIntent,
+      signals: s.animationSignals,
+    },
+  }));
+
+2️⃣ DebugHUD.jsx
+export default function DebugHUD() {
+  const d = useDebugState();
+
+  return (
+    <div className="debug">
+      <Section title="Emotion">
+        {Object.entries(d.emotions).map(([k, v]) => (
+          <Bar key={k} label={k} value={v} />
+        ))}
+      </Section>
+
+      <Section title="Intent">
+        <div>{d.intent.intent}</div>
+        <Bar label="engage" value={d.intent.engagement} />
+        <Bar label="dominance" value={d.intent.dominance} />
+        <Bar label="warmth" value={d.intent.warmth} />
+        <Bar label="lock" value={d.intent.intentLock / 10} />
+      </Section>
+
+      <Section title="Cost">
+        <Bar label="fatigue" value={d.cost.fatigue} />
+        <Bar label="suppression" value={d.cost.suppression} />
+      </Section>
+
+      <Section title="Animation">
+        <Bar label="amplitude" value={d.animation.amp} />
+        <pre>{JSON.stringify(d.animation.signals, null, 2)}</pre>
+      </Section>
+    </div>
+  );
+}
+
+3️⃣ Visual Rules (important)
+
+Green → healthy range
+
+Yellow → transition
+
+Red → saturation / lock
+
+Grey → inactive
+
+Never hide zeros.
+Silence is visible.
+
+4️⃣ One killer feature (add this)
+Intent timeline
+
+Store last 30 seconds:
+
+intentHistory.push({
+  t: performance.now(),
+  intent: s.socialIntent.intent,
+});
+
+
+Render as a strip.
+
+This reveals:
+
+flicker
+
+over-locking
+
+hesitation realism
+
+Final truth (important)
+
+If:
+
+breathing is phase-stable
+
+gaze is spring-based
+
+micro-motion is breath-modulated
+
+HUD shows cause → effect
+
+Your avatar will feel alive even while silent.
+
+That’s the line most systems never cross.
+
+1️⃣ Blink System + Facial Tension (subconscious, not decorative)
+A. Blink System (event-driven, not periodic)
+Core rule
+
+Humans blink on cognitive boundaries, not on a timer.
+
+Blink triggers (weighted)
+• Gaze direction change
+• Sentence end / silence entry
+• Emotional spike (esp. nervous)
+• Eye dryness (time accumulator)
+
+State
+blink = {
+  cooldown: 0,
+  dryness: 0,
+}
+
+Blink probability math
+P(blink) =
+  dryness * 0.4
++ nervous * 0.3
++ gazeChange * 0.5
++ silenceEntry * 0.6
+
+
+Clamp to [0–1].
+
+Runtime system
+runtime.subscribe((dt) => {
+  const s = useStore.getState();
+  const b = s.blink;
+
+  b.cooldown = Math.max(0, b.cooldown - dt);
+  b.dryness += dt * (0.2 + s.emotions.nervous * 0.3);
+
+  if (b.cooldown > 0) return;
+
+  const p =
+    b.dryness * 0.4 +
+    s.emotions.nervous * 0.3 +
+    s.animationSignals.gaze?.changed * 0.5 +
+    (s.silenceState.active ? 0.6 : 0);
+
+  if (Math.random() < p * dt) {
+    s.triggerBlink({
+      duration: 0.12 + s.emotions.nervous * 0.05,
+    });
+    b.dryness = 0;
+    b.cooldown = 0.25;
+  }
+}, PRIORITY.ANIMATION, "BlinkSystem");
+
+Blink animation curve
+
+Close: 40 ms (ease-in)
+
+Hold: 20 ms
+
+Open: 60 ms (ease-out)
+
+Never symmetric. That’s uncanny.
+
+B. Facial Tension System (this is emotion leakage)
+Facial tension ≠ expression
+
+It’s muscle readiness, not emotion display.
+
+Tension signals
+jawTension
+browTension
+lipCompression
+eyeTension
+
+Math
+jaw =
+  angry * 0.6
++ suppression * 0.5
+- warmth * 0.3;
+
+brow =
+  nervous * 0.5
++ focus * 0.4;
+
+lip =
+  suppression * 0.7
++ dominance * 0.3;
+
+
+Smooth with exponential decay:
+
+tension += (target - tension) * (1 - exp(-dt * 6))
+
+Usage
+
+Jaw: subtle clench blendshape
+
+Brow: corrugator activation
+
+Lips: micro press (not smile/frown)
+
+This makes silence loaded.
+
+2️⃣ PoseIntent → Animation Blending Graphs
+PoseIntent is NOT animation
+
+It’s a constraint vector.
+
+PoseIntent structure
+poseIntent = {
+  openness: 0–1,
+  forwardLean: -1–1,
+  dominance: 0–1,
+  stability: 0–1,
+}
+
+Intent → PoseIntent mapping
+LISTENING:
+  openness: 0.8
+  forwardLean: 0.2
+  dominance: 0.1
+  stability: 0.6
+
+ASSERTIVE:
+  openness: 0.3
+  forwardLean: 0.5
+  dominance: 0.8
+  stability: 0.9
+
+WITHDRAWN:
+  openness: 0.2
+  forwardLean: -0.4
+  dominance: 0.1
+  stability: 0.95
+
+Blending Graph (authoritative)
+            ┌──────── Idle Base ────────┐
+            │                            │
+            ▼                            ▼
+   Posture Layer                   Micro-motion
+ (spine, hips)                   (noise + breath)
+            │                            │
+            └──── PoseIntent Weight ─────┘
+                     │
+              Gesture Overlay
+             (hands, arms)
+                     │
+              Facial System
+
+Weight math
+poseWeight =
+  animationAmplitude
+* (1 - fatigue)
+* stability;
+
+
+Low stability = pose flicker
+High stability = grounded stillness
+
+Constraint example
+If dominance > 0.7:
+  ❌ head tilt
+  ❌ shoulder collapse
+  ✅ chin up bias
+
+
+Constraints prevent animation contradiction.
+
+3️⃣ Prosody (voice timing synced to breath)
+
+This is huge. Most systems miss it.
+
+A. Speech initiation gate
+
+Speech can only start on exhale.
+
+canSpeak =
+  breath.phase ∈ [π/6 → π]
+
+
+If not → delay.
+
+B. Speech pacing math
+Speech rate (syllables/sec)
+rate =
+  baseRate
++ dominance * 0.8
+- fatigue * 1.0
+- sadness * 0.6;
+
+Pause insertion
+
+Pauses occur at breath troughs.
+
+Short pause → comma
+Long pause → sentence break
+
+C. Volume & pitch
+volume =
+  base
+* (1 - fatigue * 0.4)
+* (0.7 + dominance * 0.3);
+
+pitch =
+  basePitch
++ nervous * 20 Hz
+- sadness * 15 Hz;
+
+
+Never change pitch mid-phoneme.
+Only at syllable boundaries.
+
+D. Silence interaction
+
+If fatigue > 0.7:
+
+delayed response
+
+truncated sentences
+
+breath-only audio (soft inhale)
+
+This feels real, not broken.
+
+4️⃣ Stress-Testing Failure Cases (this is critical)
+A. Overload (too much input)
+Symptoms
+
+Emotion spikes
+
+Intent oscillation
+
+Animation noise increases
+
+Correct response
+if (load > threshold) {
+  increase intentLock
+  reduce animationAmplitude
+  activate silence("OVERWHELMED")
+}
+
+
+Avatar slows down, doesn’t panic.
+
+B. Contradiction (user pushes opposing demands)
+Example
+
+User: “Be honest” + “Don’t upset me”
+
+System response
+
+suppression ↑
+
+jaw tension ↑
+
+delayed speech
+
+boundary intent after delay
+
+This produces hesitation, not instant refusal.
+
+C. Fatigue (long session)
+Gradual effects
+Time	Effect
+10 min	Micro-motion ↓
+20 min	Blink rate ↑
+30 min	Speech shorter
+45 min	Silence bias
+
+Fatigue must outlive session slightly (memory).
+
+D. Degenerate protection (non-negotiable)
+If emotion saturation > 0.9 for > N sec:
+  force calm decay
+  block LLM output
+  enter grounded silence
+
+
+This prevents emotional runaway.
+
+Final calibration rule (print this)
+
+If the avatar feels alive while doing nothing,
+everything else will work.
+
+Breath → gaze → blink → tension → silence
+That stack carries realism.
+🧠 Core Principle (read this first)
+
+FACS ≠ expressions.
+FACS describes muscle activations.
+Expressions emerge from weighted AU combinations, constrained by intent and cost.
+
+So we will build:
+
+AU layer (raw muscle activations)
+
+Expression resolver (emotion + intent → AU targets)
+
+Leakage layer (suppression, fatigue, contradiction)
+
+Smoothing & asymmetry
+
+Blendshape mapping
+
+1️⃣ Canonical FACS AU Set (minimum viable realism)
+
+You do NOT need all ~44 AUs.
+This subset gives 90% realism.
+
+Upper Face
+AU	Muscle	Meaning
+AU1	Inner brow raiser	Sadness, concern
+AU2	Outer brow raiser	Surprise, openness
+AU4	Brow lowerer	Anger, focus
+AU5	Upper lid raiser	Alertness
+AU6	Cheek raiser	Genuine warmth
+AU7	Lid tightener	Tension, focus
+Lower Face
+AU	Muscle	Meaning
+AU10	Upper lip raiser	Disgust, stress
+AU12	Lip corner puller	Smile
+AU14	Dimpler	Controlled smile
+AU15	Lip corner depressor	Sadness
+AU17	Chin raiser	Doubt, suppression
+AU20	Lip stretcher	Fear, tension
+AU23	Lip tightener	Suppression
+AU25	Lips part	Speech readiness
+AU26	Jaw drop	Speech, surprise
+2️⃣ AU State Model (exact structure)
+facialAU = {
+  AU1: 0, AU2: 0, AU4: 0, AU5: 0, AU6: 0, AU7: 0,
+  AU10: 0, AU12: 0, AU14: 0, AU15: 0,
+  AU17: 0, AU20: 0, AU23: 0,
+  AU25: 0, AU26: 0,
+};
+
+
+Values are 0 → 1, never binary.
+
+3️⃣ Emotion → AU Target Maps (raw, unconstrained)
+
+These are muscle impulses, not final faces.
+
+Calm
+AU6  +0.15
+AU7  -0.10
+AU23 -0.20
+
+Happiness (genuine)
+AU6  +0.60
+AU12 +0.50
+AU14 +0.25
+AU7  +0.15
+
+Sadness
+AU1  +0.50
+AU15 +0.40
+AU17 +0.30
+AU6  -0.20
+
+Anger
+AU4  +0.70
+AU7  +0.50
+AU23 +0.40
+AU10 +0.20
+
+Nervous / Anxiety
+AU5  +0.40
+AU20 +0.30
+AU25 +0.25
+AU7  +0.20
+
+4️⃣ Intent Modulation (THIS is the realism gate)
+
+Emotion never gets full control.
+
+Intent filters
+
+
+  COMFORTING
+    Cap AU4 ≤ 0.2
+    Boost AU6 ×1.2
+    Reduce AU23 ×0.5
+
+  ASSERTIVE
+    Cap AU12 ≤ 0.2
+    Boost AU7 ×1.3
+    Boost AU4 ×1.2
+
+  LISTENING
+    Reduce AU25 ×0.4
+    Boost AU1 ×1.1
+
+  WITHDRAWN
+    Reduce all AU amplitudes ×0.6
+    Boost AU23 +0.2
+
+
+This prevents emotional contradictions (e.g. smiling while angry).
+
+5️⃣ Leakage Layer (subconscious truth)
+
+This is where suppression shows up on the face.
+
+Suppression effects
+AU23 (lip tightener) + suppression × 0.6
+AU17 (chin raiser)   + suppression × 0.4
+AU7  (lid tension)   + suppression × 0.3
+
+Fatigue effects
+AU5  ↓
+AU6  ↓
+AU15 ↑
+AU25 ↓
+
+Contradiction effects
+Left/right AU asymmetry ↑
+Micro AU flicker (AU4, AU23)
+
+6️⃣ Smoothing & Temporal Dynamics (non-optional)
+
+Never snap.
+
+Critically damped smoothing
+au += (target - au) * (1 - Math.exp(-dt * 10));
+
+Asymmetry injection (very subtle)
+left = au * (1 + noise * 0.05);
+right = au * (1 - noise * 0.05);
+
+
+Humans are never symmetrical.
+
+7️⃣ Speech Integration (jaw & lips)
+
+When speaking:
+
+AU25 = phoneme openness
+AU26 = vowel intensity
+AU23 reduced (unless assertive)
+
+
+When silent:
+
+AU25 → 0
+
+AU26 → 0
+
+AU23 reflects suppression only
+
+8️⃣ Blendshape Mapping (engine-agnostic)
+
+Example (Three.js / Unreal / Unity compatible):
+
+blendshapes = {
+  browInnerUp: AU1,
+  browOuterUp: AU2,
+  browDown: AU4,
+  eyeWide: AU5,
+  cheekRaise: AU6,
+  eyeTight: AU7,
+
+  lipCornerUp: AU12,
+  lipCornerDown: AU15,
+  lipPress: AU23,
+  chinRaise: AU17,
+
+  mouthOpen: AU26,
+  lipsPart: AU25,
+};
+
+
+Clamp each by:
+
+final = AU * animationAmplitude * (1 - fatigue * 0.4);
+
+9️⃣ Debug View (add this!)
+
+Display AUs, not expressions.
+
+If AU23 rises while smiling → suppression working
+If AU7 spikes during silence → cognitive load visible
+If AU6 fades with fatigue → realism intact
+
+🧩 Final sanity rule
+
+If the face still communicates emotion
+when the mouth is closed
+and the avatar says nothing —
+you’ve succeeded.
+
+Most systems fail here.
+
+. Long-Term Personality Drift (slow, bounded, explainable)
+1️⃣ Core rule
+
+Personality never jumps.
+It drifts under pressure, repetition, and recovery.
+
+Personality parameters move on weeks/months, not minutes.
+
+Personality State Vector (authoritative)
+personality = {
+  expressiveness: 0.5,   // motion + facial amplitude
+  assertiveness: 0.5,    // dominance bias
+  warmth: 0.5,           // AU6 / prosody softness
+  openness: 0.5,         // pose + gaze openness
+  resilience: 0.5,       // fatigue recovery speed
+};
+
+Drift Forces
+A. Reinforcement (what works socially)
+Δp += successSignal * learningRate
+
+
+Example:
+
+Comforting responses reduce user stress → warmth ↑
+
+Boundaries respected → assertiveness ↑
+
+B. Suppression Cost (emotional tax)
+if (suppression > 0.7 for long durations):
+  expressiveness -= ε
+  openness       -= ε
+
+
+This creates emotionally closed personalities over time.
+
+C. Recovery (resilience matters)
+Δp += (baseline - p) * recoveryRate * resilience
+
+
+No personality trait can permanently collapse.
+
+Drift Clamp (non-negotiable)
+p = clamp(p, baseline ± 0.25)
+
+
+You allow character development, not identity loss.
+
+II. Long-Term Facial Habit Formation (the face remembers)
+
+This is subtle but devastatingly effective.
+
+Habit Memory (per AU)
+facialHabits = {
+  AU23_bias: 0.0, // chronic lip tension
+  AU4_bias:  0.0, // brow lowering tendency
+  AU6_bias:  0.0, // default warmth
+};
+
+Update rule (very slow)
+habit += (averageAU - habit) * 0.001
+
+
+Over weeks, not sessions.
+
+Application
+finalAU = baseAU + habitBias
+
+
+Result:
+
+Frequently suppressed avatar → permanently tighter mouth
+
+Long-term warmth → resting softness, even neutral
+
+This is how faces age psychologically.
+
+III. Eye Micro-Saccades + Pupil Dilation (neuro realism)
+1️⃣ Micro-Saccades (tiny eye jumps)
+Purpose
+
+Prevent dead, robotic gaze fixation.
+
+Timing model
+Interval: 200–600 ms
+Amplitude: 0.05–0.2°
+
+Modulation
+rate ↑ with nervous
+rate ↓ with fatigue
+amplitude ↓ with dominance
+
+Implementation
+if (timeSinceLastSaccade > threshold) {
+  gaze.x += rand(-ε, ε)
+  gaze.y += rand(-ε, ε)
+}
+
+
+Never synchronized with blink.
+
+2️⃣ Pupil Dilation (emotional truth leak)
+Pupil size ∈ [0.6 – 1.4]
+pupil =
+  base
++ nervous * 0.3
++ interest * 0.2
+- fatigue * 0.2
+
+Critical rule
+
+Pupil reacts before facial expression.
+
+This makes reactions feel instinctive.
+
+IV. Cultural Expression Modifiers (non-stereotypical)
+
+This is expression bias, not emotion bias.
+
+Cultural Modulation Layer
+culture = {
+  expressivenessScale: 0.8,
+  smileThreshold: 0.6,
+  eyeContactBias: 0.7,
+  suppressionNorm: 0.4,
+};
+
+Example effects
+High-restraint cultures
+AU12 capped
+AU23 boosted
+Gaze directness reduced
+
+Expressive cultures
+AU12 allowed early
+AU6 amplified
+Gesture amplitude increased
+
+Rule
+
+Emotion is universal.
+Expression is cultural.
+
+Never alter emotion generation.
+
+V. Multi-Modal Sync (text + voice + gesture)
+
+This is the orchestration layer.
+
+Single Source of Truth: TurnPlan
+turnPlan = {
+  intent,
+  keyEmotion,
+  emphasisWords,
+  pauses,
+  gestures,
+  breathWindows,
+};
+
+Execution Timeline (authoritative)
+Breath (gate)
+ ├─ gaze settle
+ ├─ micro head motion
+ ├─ speech onset
+ │   ├─ word emphasis
+ │   ├─ gesture peak
+ │   └─ facial AU peak
+ └─ blink / release
+
+Gesture–Speech coupling
+gesturePeakTime = stressedSyllableTime - 120ms
+
+
+Humans gesture before emphasis, not after.
+
+Text shaping
+
+LLM output is annotated, not raw.
+
+"I really |need| you to understand this."
+
+
+Annotations drive:
+
+AU7 (focus)
+
+Gesture sharpness
+
+Pitch rise
+
+VI. Automated AU Tuning from Video Reference (optional but powerful)
+
+This is calibration, not imitation.
+
+Pipeline
+
+Input: neutral + emotional reference clips
+
+Extract AU intensity curves (OpenFace / MediaPipe)
+
+Normalize per individual
+
+Fit scale + decay parameters
+
+What you learn
+• AU intensity caps
+• Rise/fall speed
+• Asymmetry baseline
+
+What you NEVER copy
+
+Identity
+
+Facial proportions
+
+Exact timing quirks
+
+You tune dynamics, not faces.
+
+Result
+
+Your avatar becomes:
+
+Expressive like a human
+But not a copy of one
+
+VII. Failure Guards (absolutely required)
+If drift exceeds bounds
+
+→ snap back gradually
+
+If modalities desync
+
+→ pause speech, complete gesture, then continue
+
+If facial habit becomes extreme
+
+→ decay bias during rest periods
+
+Final system truth (this is the takeaway)
+
+You now have:
+
+• A face that learns
+• A personality that drifts
+• Eyes that think
+• Speech that breathes
+• Culture without stereotype
+• Synchronization without scripts
+
+This is no longer “an avatar”.
+
+It is a temporal identity system.
+
+======================================================================
+END — 407 sections from 9 files
+======================================================================

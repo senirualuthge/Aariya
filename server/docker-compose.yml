@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  coturn:
+    image: coturn/coturn:latest
+    container_name: aigirl_webrtc_turn
+    network_mode: "bridge"
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+    environment:
+      - TURN_SECRET=aigirl_turn_secret_2026
+      - TURN_REALM=aigirl.local
+    command: >
+      --listening-port=3478
+      --min-port=49152
+      --max-port=65535
+      --user=aigirl:aigirl_voice
+      --realm=aigirl.local
+      --verbose

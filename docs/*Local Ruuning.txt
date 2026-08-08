@@ -1,0 +1,14 @@
+New file / new feature     → dolphincoder
+Bug in complex logic       → qwen3:30b-a3b
+Small fix / edit           → dolphincoder
+Architecture decision      → qwen3:30b-a3b
+Vision/face related        → llava:13b
+Memory/RAG related         → nomic-embed-text
+Quick test / prototype     → llama3.1:8b
+
+# AI Girl - Missing Core Capabilities
+Persona / Roleplay         → llama3-8b-instruct
+Audio STT (Voice Recog)    → whisper.cpp
+Audio TTS (Voice Gen)      → piper / coqui
+Function Calling / Tools   → hermes-2-pro
+Image Generation           → stable-diffusion-xl / flux
