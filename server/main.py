@@ -17,7 +17,7 @@ from server.db import get_db_connection, init_db
 from server.systems.brain_v2 import BrainV2
 from server.infrastructure.session_manager import SessionManager
 from server.infrastructure.signal_bus import SignalBus
-from server.systems.signal_bus import bus as admin_signal_bus, emit_test_signals
+from server.systems.signal_bus import bus as admin_signal_bus
 from server.autonomy.daemon import get_daemon
 from server.autonomy.learning import BackgroundLearner
 from server.autonomy.state import AutonomyStore
@@ -32,6 +32,10 @@ from server.routers.build_summary_router import router as build_summary_router
 from server.routers.obsidian_router import router as obsidian_router
 from server.routers.emotion_predictor_router import router as emotion_predictor_router
 from server.routers.analytics_ws import router as analytics_ws_router
+from server.routers.prediction_router import router as prediction_router
+from server.routers.system_health_router import router as system_health_router
+from server.routers.compliance import router as compliance_router
+from server.routers.events_router import router as events_router
 from server.infrastructure.agent_watcher import get_watcher
 from server.systems.security.mobile_authority import is_mobile_allowed, denied_frame
 from server.systems.security.dashboard_authority import execute_authority_command
@@ -85,6 +89,34 @@ async def lifespan(app: FastAPI):
     daemon = get_daemon(broadcast=session_manager.broadcast)
     daemon.start()
 
+    # ── SYSTEM HEALTH MONITOR ────────────────────────────────────────────────
+    # Broadcasts a full health snapshot (server perf + subsystem checks +
+    # auto-discovered functions + mobile telemetry) to /ws/brain_metrics every
+    # 2 s so the dashboard's System Health tab stays live with zero extra
+    # connections. Also serves GET /api/system/health as a fetch fallback.
+    try:
+        from server.systems.system_health import get_system_health
+        get_system_health().start()
+    except Exception as exc:
+        logger.warning("System health monitor start skipped: %s", exc)
+
+    # ── MOBILE TELEMETRY AGENTS ─────────────────────────────────────────────
+    # The gateway / analytics / dashboard agents maintain live mobile health
+    # (connected clients, command throughput, latency, payload rates) and
+    # broadcast mobile_*_health pings over /ws/brain_metrics. Start them here
+    # so their 1 s tick loops run from boot (they were defined but never
+    # started, so the dashboard never received their health pings).
+    try:
+        from server.systems.agent.mobile_gateway_agent import get_mobile_gateway
+        from server.systems.agent.mobile_analytics_agent import get_mobile_analytics
+        from server.systems.agent.mobile_dashboard_agent import get_mobile_dashboard
+        get_mobile_gateway().start()
+        get_mobile_analytics().start()
+        get_mobile_dashboard().start()
+        logger.info("[MobileTelemetry] gateway + analytics + dashboard agents started")
+    except Exception as exc:
+        logger.warning("Mobile telemetry agents start skipped: %s", exc)
+
     # Surface any pending startup brief (things learned while away) after a
     # short delay so clients connecting right at boot receive it.
     async def _brief_broadcaster():
@@ -108,6 +140,21 @@ async def lifespan(app: FastAPI):
 
     await daemon.stop()
     watcher.stop()
+    try:
+        from server.systems.system_health import get_system_health
+        await get_system_health().stop()
+    except Exception:
+        pass
+    # Stop the mobile telemetry agents' tick loops (started above).
+    try:
+        from server.systems.agent.mobile_gateway_agent import get_mobile_gateway
+        from server.systems.agent.mobile_analytics_agent import get_mobile_analytics
+        from server.systems.agent.mobile_dashboard_agent import get_mobile_dashboard
+        get_mobile_gateway().stop()
+        get_mobile_analytics().stop()
+        get_mobile_dashboard().stop()
+    except Exception:
+        pass
     logger.info("Aariya Brain shutting down.")
 
 app = FastAPI(title="Aariya AI Brain - FIXV4", lifespan=lifespan)
@@ -135,11 +182,22 @@ app.include_router(build_summary_router)   # Provides /api/build/summary (produc
 app.include_router(obsidian_router)        # Provides /api/obsidian/search + /api/obsidian/runtime/latest
 app.include_router(emotion_predictor_router)  # Provides /api/emotion/predictor (LSTM training status + forecast)
 app.include_router(analytics_ws_router)       # Provides /ws/mobile/analytics (mobile telemetry stream)
+app.include_router(prediction_router)         # Provides /api/prediction/* (unified prediction engine)
+app.include_router(system_health_router)      # Provides /api/system/health (System Health tab snapshot)
+app.include_router(compliance_router)         # Provides /api/compliance/* (consent matrix + governance + GDPR)
+app.include_router(events_router)              # Provides /api/events/latest (real event-log ring for mobile)
+from server.routers.synoptics_ws import router as synoptics_router
+app.include_router(synoptics_router)          # Provides /ws/synoptics (synoptics v2 frame stream)
 
 # BUG #15 FIX: mount the WebRTC voice router so the mobile app's /offer
 # negotiation actually reaches the AI voice pipeline (was defined but unmounted).
 from server.realtime.webrtc_server import router as webrtc_router
 app.include_router(webrtc_router)            # Provides POST /offer + POST /interrupt
+
+# AccessFIles §14/§31: mount the voice router so the /ws/voice streaming
+# pipeline (VAD → ASR → TurnPredictor → brain → TTS) is reachable.
+from server.routers.voice import router as voice_router
+app.include_router(voice_router)             # Provides /ws/voice (streaming voice)
 
 from server.routers.autonomy_router import router as autonomy_router
 app.include_router(autonomy_router)        # Provides /api/autonomy/* (inner world, approvals, gaps)
@@ -223,6 +281,57 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
             await session_manager.broadcast_state(user_id, brain.get_state())
             signal_bus.emit("response", {"user_id": user_id}, "info")
 
+            # Avatar motion bridge (AI Girl 2 §"AVATAR RENDERER"): broadcast the
+            # real trait-engine avatar floats (Smile, HeadTilt, EyeFocus,
+            # Posture, BlinkRate, MicroMovement) after every turn so the Unity
+            # avatar + any web embodiment consume the same live motion state.
+            # These are measured values from this turn — never synthetic.
+            try:
+                _te = (brain.get_state().synoptic or {}).get("trait_engine") or {}
+                if _te.get("avatar"):
+                    await session_manager.broadcast({
+                        "type": "avatar.update",
+                        "avatar": _te["avatar"],
+                        "mode": _te.get("mode"),
+                        "traits": [t["id"] for t in (_te.get("active_traits") or [])],
+                        "voice": _te.get("voice"),
+                        "ui": _te.get("ui"),
+                        "timestamp": time.time(),
+                    })
+            except Exception:
+                pass
+
+            # Real event log: emit a REAL telemetry signal carrying the actual
+            # brain state + turn measurements (no synthetic data). The
+            # dashboard's Event Log renders these as live events — trust /
+            # emotion / reply length are measured this turn, never fabricated.
+            try:
+                _bs = brain.get_state()
+                await admin_signal_bus.emit_signal(
+                    "telemetry", "info", "BRAIN",
+                    {
+                        "title": f"Turn complete — trust {_bs.trust:.2f} · {_bs.emotion}",
+                        "trust": round(_bs.trust, 2),
+                        "valence": round(_bs.valence, 2),
+                        "emotion": _bs.emotion,
+                        "reply_chars": len(output.text),
+                    },
+                )
+            except Exception:
+                pass
+
+            # Synoptics v2 frame (Agents Swarm Visualize §238): predictive
+            # ghost layer + anomaly overlay streamed to /ws/synoptics clients.
+            try:
+                from server.routers.synoptics_ws import (
+                    build_synoptics_frame,
+                    broadcast_synoptics_frame,
+                )
+                frame = build_synoptics_frame(brain.get_state().synoptic)
+                await broadcast_synoptics_frame(frame)
+            except Exception:
+                pass
+
             # Feed the real brain state to the 24/7 autonomy daemon
             daemon.record_snapshot(brain.get_state())
 
@@ -261,22 +370,21 @@ async def _run_gap_detection(learner, user_text: str, response_text: str):
 async def _handle_control_command(raw_input: dict, daemon, websocket: WebSocket):
     """Route UI control commands to the autonomy daemon."""
     action = raw_input.get("action")
+    plan_id = raw_input.get("plan_id", "")
     try:
         if action == "approve_plan":
-            result = await daemon.approve_plan(raw_input.get("plan_id", ""))
-            await websocket.send_text(json.dumps({"type": "plan.ack", **result}))
+            result = await daemon.approve_plan(plan_id)
         elif action == "reject_plan":
-            result = await daemon.reject_plan(raw_input.get("plan_id", ""))
-            await websocket.send_text(json.dumps({"type": "plan.ack", **result}))
+            result = await daemon.reject_plan(plan_id)
         elif action == "autonomy_enabled":
             result = daemon.set_enabled(bool(raw_input.get("enabled", True)))
-            await websocket.send_text(json.dumps({"type": "autonomy.ack", **result}))
         else:
-            await websocket.send_text(json.dumps({
-                "type": "plan.ack",
-                "ok": False,
-                "error": f"unknown action: {action}",
-            }))
+            result = {"ok": False, "error": f"unknown action: {action}"}
+        # build_control_ack echoes plan_id into plan.ack frames so the frontend's
+        # live plan-status chip can update after approve/reject (the executor
+        # result doesn't carry it). Pure helper — testable without server.main.
+        from server.autonomy.daemon import build_control_ack
+        await websocket.send_text(json.dumps(build_control_ack(action, plan_id, result)))
     except Exception as exc:
         logger.warning(f"Control command {action} failed: {exc}")
 
@@ -285,7 +393,15 @@ async def _handle_control_command(raw_input: dict, daemon, websocket: WebSocket)
 
 @app.websocket("/ws/dashboard/stream")
 async def websocket_dashboard_stream(websocket: WebSocket):
-    """React frontend cognitive loop."""
+    """React frontend cognitive loop.
+
+    This is the ONLY registration for /ws/dashboard/stream. It previously
+    duplicated the route mounted by server.routers.dashboard_ws (a 10 Hz swarm
+    snapshot that never read incoming frames); Starlette matched that router
+    first, so the full chat pipeline here was shadowed and web chat inputs were
+    silently dropped. The swarm helpers still live in dashboard_ws.py (used by
+    /ws/mobile/analytics) — only the duplicate mount was removed.
+    """
     await _run_cognitive_loop(websocket, "dashboard/stream")
 
 
@@ -346,6 +462,14 @@ async def websocket_mobile_chat(websocket: WebSocket):
     session_manager.add_surface("mobile", user_id, websocket)
     signal_bus.emit("session", {"endpoint": "mobile", "user_id": user_id}, "info")
 
+    # Mobile gateway telemetry: this chat socket counts as a connected client.
+    try:
+        from server.systems.agent.mobile_gateway_agent import get_mobile_gateway
+        _mobile_gateway = get_mobile_gateway()
+        _mobile_gateway.on_client_connected()
+    except Exception:
+        _mobile_gateway = None
+
     try:
         while True:
             data = await websocket.receive_text()
@@ -361,6 +485,8 @@ async def websocket_mobile_chat(websocket: WebSocket):
             if message.get("type") == "interrupt":
                 # Client-side barge-in: acknowledge and reset
                 await websocket.send_text(json.dumps({"type": "interrupt_ack"}))
+                if _mobile_gateway:
+                    _mobile_gateway.on_command("interrupt")
                 continue
 
             # Map mobile protocol → MultimodalInput
@@ -393,6 +519,21 @@ async def websocket_mobile_chat(websocket: WebSocket):
             # (BUG #5 FIX) so the datetime timestamp serializes to an ISO string.
             await session_manager.broadcast_state(user_id, brain.get_state())
 
+            # Real event log: real mobile turn telemetry (no synthetic data).
+            try:
+                _bs = brain.get_state()
+                await admin_signal_bus.emit_signal(
+                    "telemetry", "info", "MOBILE",
+                    {
+                        "title": f"Mobile turn — trust {_bs.trust:.2f} · {_bs.emotion}",
+                        "trust": round(_bs.trust, 2),
+                        "emotion": _bs.emotion,
+                        "reply_chars": len(output.text),
+                    },
+                )
+            except Exception:
+                pass
+
             # Visible inner life: broadcast her private thought so ALL surfaces
             # (phones, dashboard, Unity) see she's thinking — matches the shared
             # cognitive loop, so thoughts flow from any surface, not just the
@@ -407,9 +548,13 @@ async def websocket_mobile_chat(websocket: WebSocket):
 
     except WebSocketDisconnect:
         session_manager.remove_surface("mobile", user_id, websocket)
+        if _mobile_gateway:
+            _mobile_gateway.on_client_disconnected()
         logger.info(f"Mobile chat disconnected for {user_id}")
     except Exception as e:
         session_manager.remove_surface("mobile", user_id, websocket)
+        if _mobile_gateway:
+            _mobile_gateway.on_client_disconnected()
         logger.error(f"Mobile chat error: {e}")
         try:
             await websocket.close()
@@ -422,6 +567,14 @@ async def websocket_mobile_control(websocket: WebSocket):
     await websocket.accept()
     session_id = str(uuid4())
     logger.info(f"Mobile Control connected: {session_id}")
+
+    # Mobile gateway telemetry: control sockets count as connected clients.
+    try:
+        from server.systems.agent.mobile_gateway_agent import get_mobile_gateway
+        _control_gateway = get_mobile_gateway()
+        _control_gateway.on_client_connected()
+    except Exception:
+        _control_gateway = None
 
     try:
         while True:
@@ -445,6 +598,19 @@ async def websocket_mobile_control(websocket: WebSocket):
                 await websocket.send_text(json.dumps({"type": "pong"}))
                 continue
 
+            # ── Phone-reported device metrics ───────────────────────────────
+            # The mobile app pushes battery / CPU / memory / model every few
+            # seconds. This is telemetry, not a command — it bypasses the
+            # authority gate and is stored on the gateway agent so the System
+            # Health tab's Mobile App panel can show the phone's own perf.
+            if msg_type == "device_metrics":
+                if _control_gateway:
+                    _control_gateway.record_device_metrics(
+                        message.get("device") or {},
+                        message.get("ts") or 0.0,
+                    )
+                continue
+
             if msg_type == "command":
                 action = message.get("action") or ""
 
@@ -461,8 +627,12 @@ async def websocket_mobile_control(websocket: WebSocket):
                     continue
 
                 logger.info(f"Command received (allowed): {action}")
+                if _control_gateway:
+                    _control_gateway.on_command(action)
 
     except WebSocketDisconnect:
+        if _control_gateway:
+            _control_gateway.on_client_disconnected()
         logger.info(f"Mobile Control disconnected: {session_id}")
 
 
@@ -473,11 +643,11 @@ async def websocket_brain_metrics(websocket: WebSocket):
     session_manager.add_surface("dashboard", user_id, websocket)
     logger.info(f"Dashboard metrics link established for {user_id}")
     
-    # Register socket with Admin Signal Bus
+    # Register socket with Admin Signal Bus. Only REAL signals from the
+    # cognitive loop / observability layer are broadcast — no synthetic
+    # test signals are injected on connect (the dashboard shows live data only).
     if websocket not in admin_signal_bus._connected_sockets:
         admin_signal_bus._connected_sockets.append(websocket)
-        
-    await emit_test_signals()
 
     try:
         while True:

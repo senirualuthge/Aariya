@@ -17,12 +17,15 @@ import { eventBus } from '../core/EventBus';
 import { BRAIN_RAG_EVENT } from '../systems/brainClient';
 import { subscribeMetrics, sendMetricsCommand } from '../systems/metricsClient';
 import { isBuildSummaryFresh, BUILD_WARN_MAX_AGE_HOURS } from '../utils/buildFreshness.js';
+import { apiBase, apiWsBase } from '../utils/apiHost';
 import CveScannerPanel from './security/CveScannerPanel';
 import { useSignalsStore } from '../admin/store/useSignalsStore';
 import { useAdminUIStore } from '../admin/store/useAdminUIStore';
 import AgentDiscoveryPanel from './AgentDiscoveryPanel';
 import AgentVisualizer from './AgentVisualizer';
 import RAGDashboard from './rag/RAGDashboard';
+import SystemHealthTab from './SystemHealthTab';
+import BrainScene from './BrainScene';
 import './AnalyticsDashboard.css';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -40,11 +43,14 @@ const PERSONALITY_MODES = [
 
 const TABS = [
   { id: 'overview',      label: 'Overview',       icon: '📊' },
+  { id: 'companion',     label: 'Companion',      icon: '🎭' },
+  { id: 'health',        label: 'System Health',  icon: '🖥️' },
   { id: 'control',       label: 'Control',        icon: '🎛️' },
   { id: 'signals',       label: 'Signals',        icon: '🐞' },
   { id: 'agents',        label: 'Agent Registry', icon: '🤖' },
   { id: 'log',           label: 'Event Log',      icon: '📋' },
   { id: 'personality3d', label: 'Personality 3D', icon: '🔮' },
+  { id: 'brain3d',       label: 'Brain 3D',        icon: '🧬' },
   { id: 'security',      label: 'Security',       icon: '🔐' },
   { id: 'build',         label: 'Build',          icon: '📦' },
   { id: 'rag',           label: 'RAG Pipeline',   icon: <span style={{ fontSize: '0.85em' }}>🧠</span> },
@@ -59,12 +65,35 @@ const SEV_COLOR = {
 };
 
 const LOG_TAG_COLOR = {
+  // Real cognitive-loop + daemon sources (server-emitted signals).
+  DAEMON:    '#ffd93d',   // proactive actions / stream of consciousness
+  PLANNER:   '#a78bfa',   // goals, plans, approvals
+  LEARNING:  '#34d399',   // background research cycles
+  MODEL:     '#6bcbef',   // LSTM emotion predictor retrains
+  BRAIN:     '#ff8fa3',   // brain turns
+  MOBILE:    '#00e5ff',   // mobile app turns
+  HEALTH:    '#fb923c',   // health check flips / score crossings
+  GOVERNANCE: '#a3e635',  // consent / age-band / personality control changes
+  FUNCTIONS: '#e879f9',   // newly auto-discovered functions
+  EVOLUTION: '#f59e0b',   // Darwin engine: spawns / retires / rewrites agents
+  SYSTEM:    '#94a3b8',
+  // Legacy tags (kept for back-compat with old frames).
   SENSORS: '#00bcd4',
   SWARM:   '#ffd93d',
-  BRAIN:   '#ff8fa3',
   LLM:     '#a78bfa',
   VOICE:   '#34d399',
-  SYSTEM:  '#94a3b8',
+};
+
+// Canonical chip order for the Event Log filter bar (ALL first). Any tag seen
+// in the live log that isn't listed here still gets a chip (auto-appended).
+const LOG_TAG_ORDER = ['BRAIN', 'MOBILE', 'DAEMON', 'PLANNER', 'LEARNING', 'MODEL', 'HEALTH', 'GOVERNANCE', 'FUNCTIONS', 'EVOLUTION', 'SYSTEM', 'SENSORS', 'SWARM', 'LLM', 'VOICE'];
+
+// Human-friendly short labels for the chips.
+const LOG_TAG_LABEL = {
+  DAEMON: 'Daemon', PLANNER: 'Planner', LEARNING: 'Learning', MODEL: 'Model',
+  BRAIN: 'Brain', MOBILE: 'Mobile', HEALTH: 'Health', GOVERNANCE: 'Governance', FUNCTIONS: 'Functions',
+  EVOLUTION: 'Evolution', SYSTEM: 'System', SENSORS: 'Sensors', SWARM: 'Swarm',
+  LLM: 'LLM', VOICE: 'Voice',
 };
 
 // ── BroadcastChannel bridge ──────────────────────────────────────────────────
@@ -131,55 +160,28 @@ function useLiveEventLog({ onSignal } = {}) {
   return [log, () => setLog([]), isOnline, pingMs];
 }
 
-// ── Hook: synthetic demo log generator (when offline) ────────────────────────
-function useSyntheticLog(isOnline) {
-  const [demoLog, setDemoLog] = useState([]);
-
-  useEffect(() => {
-    if (isOnline) return;
-    const DEMO = [
-      { tag: 'SENSORS', text: 'Audio energy spike detected — VAD triggered', severity: 'info' },
-      { tag: 'SWARM',   text: 'EmotionAgent summoned — fusing multimodal inputs', severity: 'info' },
-      { tag: 'BRAIN',   text: 'State transition: NEUTRAL → WARM (trust=0.71)', severity: 'low' },
-      { tag: 'LLM',     text: 'Token stream started — 42 tokens generated', severity: 'info' },
-      { tag: 'VOICE',   text: 'TTS synthesis complete — 1.2s playback', severity: 'info' },
-      { tag: 'SWARM',   text: 'RiskAgent: no boundary violations', severity: 'low' },
-      { tag: 'BRAIN',   text: 'Memory L2 write — significance score: 0.74', severity: 'low' },
-      { tag: 'SENSORS', text: 'Face detected — valence: +0.62, arousal: 0.48', severity: 'info' },
-    ];
-    let i = 0;
-    const timer = setInterval(() => {
-      const item = DEMO[i % DEMO.length];
-      setDemoLog(prev => [{
-        id: Date.now() + Math.random(),
-        ts: Date.now() / 1000,
-        tag: item.tag,
-        text: item.text,
-        severity: item.severity,
-      }, ...prev].slice(0, 200));
-      i++;
-    }, 1800);
-    return () => clearInterval(timer);
-  }, [isOnline]);
-
-  return demoLog;
-}
-
 // ── Hook: live security stream from /ws/brain (reads state_update.security) ──
-function useSecurityStream() {
+// Lazy by default: the main window mounts <AnalyticsDashboard /> as a hidden
+// background listener, and this hook must NOT open a dedicated
+// /api/security/stream socket while the dashboard isn't visible (each open
+// popup would otherwise add a second connection). The Security tab is
+// dashboard-only, so there is nothing to collect while hidden — pass
+// `enabled` only when the dashboard is actually on the analytics route.
+function useSecurityStream(enabled = true) {
   const [secData, setSecData] = React.useState(null);
   const wsRef = React.useRef(null);
   const retryRef = React.useRef(null);
   const unmountedRef = React.useRef(false);
 
   React.useEffect(() => {
+    if (!enabled) return; // lazy — no socket while the dashboard isn't visible
+
     unmountedRef.current = false;
 
     function connect() {
       if (unmountedRef.current) return;
-      const host = window.location.hostname || 'localhost';
       // Connect to the dedicated 2-second background polling endpoint
-      const ws = new WebSocket(`ws://${host}:8000/api/security/stream`);
+      const ws = new WebSocket(`${apiWsBase()}/api/security/stream`);
       wsRef.current = ws;
 
       ws.onmessage = (e) => {
@@ -203,8 +205,9 @@ function useSecurityStream() {
       unmountedRef.current = true;
       clearTimeout(retryRef.current);
       wsRef.current?.close();
+      wsRef.current = null;
     };
-  }, []);
+  }, [enabled]);
 
   return secData;
 }
@@ -213,17 +216,20 @@ function useSecurityStream() {
 // Also listens on ws/brain_metrics for the daemon's `autonomy.model_trained`
 // event and refetches immediately, so the card flips to TRAINED the moment a
 // retrain completes instead of waiting for the next poll.
-function usePredictorStatus(pollMs = 15000) {
+function usePredictorStatus(pollMs = 15000, enabled = true) {
   const [payload, setPayload] = useState(null);
   const [online, setOnline] = useState(false);
   const inFlightRef = useRef(false);
   const pendingRefreshRef = useRef(false); // event arrived while polling
 
   useEffect(() => {
+    // Lazy: the hidden main-window mount renders this card off-route, so it
+    // must not fire the 15s predictor REST poll (nor the initial fetch). Only
+    // when the analytics surface is actually visible does polling run.
+    if (!enabled) return undefined;
     let mounted = true;
-    const host = window.location.hostname || 'localhost';
-    const url = `http://${host}:8000/api/emotion/predictor`;
-    const fallbackUrl = `http://${host}:8000/api/autonomy/state`;
+    const url = `${apiBase()}/api/emotion/predictor`;
+    const fallbackUrl = `${apiBase()}/api/autonomy/state`;
 
     async function fetchPrimary() {
       try {
@@ -318,7 +324,7 @@ function usePredictorStatus(pollMs = 15000) {
       clearInterval(timer);
       unsubModelTrained();
     };
-  }, [pollMs]);
+  }, [pollMs, enabled]);
 
   return { payload, online };
 }
@@ -329,6 +335,7 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   const {
     trust, personality, emotions, userEmotion, userAudioStats,
     personalityPreset,
+    synoptic, planetary, valence, arousal,
     signals: legacySignals, addSignal: addLegacySignal,
     setPersonalityPreset, clearSignals,
     thinking, speaking, listening, faceDetected,
@@ -348,10 +355,18 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   // Authority-layer feedback: the last authority.ack frame from the server
   // (executed on /ws/brain_metrics), so the UI confirms server-side success.
   const [authStatus, setAuthStatus] = useState(null);
+  // A log line the Autonomy panel's live strip asked us to focus
+  // ({ tag, text, ts, nonce } — nonce re-triggers the focus effect).
+  const [logFocus, setLogFocus] = useState(null);
   const mountTimeRef = useRef(0);
 
-  // Security stream
-  const securityData = useSecurityStream();
+  // ── Route guard (computed early so effects can gate on it) ────────────────
+  const urlParams = new URLSearchParams(window.location.search);
+  const isAnalyticsRoute = isPopup || urlParams.get('route') === 'analytics' || window.location.hash.includes('analytics');
+
+  // Security stream — opened only when the dashboard is actually visible so
+  // the hidden main-window mount doesn't hold a dedicated socket.
+  const securityData = useSecurityStream(isAnalyticsRoute);
 
   // Meeting Mode state
   const [meetingMode, setMeetingMode] = useState({
@@ -363,7 +378,7 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   const toggleMeeting = async () => {
     try {
       const res = await fetch(
-        `http://${window.location.hostname || 'localhost'}:8000/api/meeting/toggle`,
+        `${apiBase()}/api/meeting/toggle`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ active: null }) }
       );
@@ -374,7 +389,7 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   const setMeetingWindow = async (secs) => {
     try {
       await fetch(
-        `http://${window.location.hostname || 'localhost'}:8000/api/meeting/window`,
+        `${apiBase()}/api/meeting/window`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ seconds: secs }) }
       );
@@ -386,7 +401,7 @@ export default function AnalyticsDashboard({ isPopup = false }) {
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch(`http://${window.location.hostname || 'localhost'}:8000/api/meeting/status`);
+        const res = await fetch(`${apiBase()}/api/meeting/status`);
         if (res.ok && mounted) setMeetingMode(await res.json());
       } catch { /* offline */ }
     })();
@@ -397,8 +412,8 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   const [liveLog, clearLog, isOnline, pingMs] = useLiveEventLog({
     onSignal: (s) => { addSignal(s); addLegacySignal(s); },
   });
-  const demoLog = useSyntheticLog(isOnline);
-  const eventLog = isOnline ? liveLog : demoLog;
+  // Only real server events are shown — no synthetic/demo entries when offline.
+  const eventLog = liveLog;
 
   // Stats derived from signals
   const allSignals = adminSignals.length > 0 ? adminSignals : legacySignals;
@@ -427,6 +442,52 @@ export default function AnalyticsDashboard({ isPopup = false }) {
     return () => BC.removeEventListener('message', handler);
   }, [setPersonalityPreset]);
 
+  // ── LOG_JUMP: the Autonomy panel's live strip asks the Event Log to focus
+  // a matching line. Only the VISIBLE dashboard reacts (the main window also
+  // mounts a hidden AnalyticsDashboard as a background socket listener — it
+  // must not consume the stash or claim to be the open dashboard).
+  useEffect(() => {
+    if (!isAnalyticsRoute) return;
+
+    // Consume a stash written by the Autonomy panel. Covers the window that
+    // was just opened by the click (a broadcast sent now would be missed
+    // because the dashboard is still loading).
+    const consumeStash = () => {
+      let raw = null;
+      try { raw = sessionStorage.getItem('aariya_log_jump'); } catch { /* ignore */ }
+      if (!raw) return;
+      try { sessionStorage.removeItem('aariya_log_jump'); } catch { /* ignore */ }
+      try {
+        const target = JSON.parse(raw);
+        if (target && target.tag) setLogFocus({ ...target, nonce: Date.now() });
+      } catch { /* ignore */ }
+    };
+
+    // Heartbeat: tell the Autonomy panel a visible dashboard is open so it
+    // doesn't spawn a second window on every click.
+    try { sessionStorage.setItem('aariya_dashboard_open', '1'); } catch { /* ignore */ }
+    const onUnload = () => {
+      try { sessionStorage.removeItem('aariya_dashboard_open'); } catch { /* ignore */ }
+    };
+    window.addEventListener('beforeunload', onUnload);
+
+    const handler = (e) => {
+      if (e.data?.type !== 'LOG_JUMP' || !e.data.tag) return;
+      setLogFocus({ tag: e.data.tag, text: e.data.text, ts: e.data.ts, nonce: Date.now() });
+      // Live jump ⇒ the stash was already consumed; drop it so a future
+      // reload of this window doesn't re-jump to a stale line.
+      try { sessionStorage.removeItem('aariya_log_jump'); } catch { /* ignore */ }
+    };
+
+    consumeStash();
+    BC?.addEventListener('message', handler);
+    return () => {
+      BC?.removeEventListener('message', handler);
+      window.removeEventListener('beforeunload', onUnload);
+      try { sessionStorage.removeItem('aariya_dashboard_open'); } catch { /* ignore */ }
+    };
+  }, [isAnalyticsRoute]);
+
   // ── Authority-layer ack listener ─────────────────────────────────────────
   // The server replies to every command on the shared /ws/brain_metrics socket
   // with an authority.ack frame; surface it in the Control tab so the laptop
@@ -439,12 +500,15 @@ export default function AnalyticsDashboard({ isPopup = false }) {
     return unsub;
   }, []);
 
-  // uptime — mountTimeRef is set on first paint via useEffect to avoid Date.now() at render time
+  // uptime — mountTimeRef is set on first paint via useEffect to avoid Date.now() at render time.
+  // Gated on the analytics route: the hidden main-window mount renders this component off-route,
+  // and a 1s interval just to count seconds it never displays would be pure waste.
   useEffect(() => {
+    if (!isAnalyticsRoute) return undefined;
     mountTimeRef.current = Date.now();
     const t = setInterval(() => setUptime(Math.floor((Date.now() - mountTimeRef.current) / 1000)), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [isAnalyticsRoute]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleModeChange = (mode) => {
@@ -479,8 +543,6 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   };
 
   // ── Route guard ───────────────────────────────────────────────────────────
-  const urlParams = new URLSearchParams(window.location.search);
-  const isAnalyticsRoute = isPopup || urlParams.get('route') === 'analytics' || window.location.hash.includes('analytics');
   if (!isAnalyticsRoute) return null;
 
   // ── Filtered signals ──────────────────────────────────────────────────────
@@ -615,7 +677,16 @@ export default function AnalyticsDashboard({ isPopup = false }) {
               thinking={thinking}
               speaking={speaking}
               listening={listening}
+              predictorEnabled={isAnalyticsRoute}
             />
+          )}
+
+          {tab === 'companion' && (
+            <CompanionTab />
+          )}
+
+          {tab === 'health' && (
+            <SystemHealthTab />
           )}
 
           {tab === 'control' && (
@@ -668,7 +739,7 @@ export default function AnalyticsDashboard({ isPopup = false }) {
 
 
           {tab === 'log' && (
-            <EventLogTab log={eventLog} onClear={clearLog} isOnline={isOnline} />
+            <EventLogTab log={eventLog} onClear={clearLog} isOnline={isOnline} focus={logFocus} />
           )}
 
           {tab === 'personality3d' && (
@@ -678,6 +749,18 @@ export default function AnalyticsDashboard({ isPopup = false }) {
               personality={personality}
               personalityPreset={personalityPreset}
             />
+          )}
+
+          {tab === 'brain3d' && (
+            <div style={{ height: '100%', minHeight: 560 }}>
+              <BrainScene data={{
+                synoptic,
+                planetary,
+                trust,
+                valence,
+                arousal,
+              }} />
+            </div>
           )}
 
           {tab === 'security' && (
@@ -966,8 +1049,8 @@ function RiskBadge({ active, color, label }) {
   );
 }
 
-function PredictorStatusCard() {
-  const { payload, online } = usePredictorStatus();
+function PredictorStatusCard({ enabled = true }) {
+  const { payload, online } = usePredictorStatus(15000, enabled);
 
   const trained = payload?.status === 'trained';
   const statusColor = !online ? '#64748b' : trained ? '#10b981' : '#ffd93d';
@@ -1088,9 +1171,15 @@ function PredictorStatusCard() {
 }
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
-function OverviewTab({ allSignals, trust, personality, emotions, personalityPreset, isOnline, thinking, speaking, listening }) {
+function OverviewTab({ allSignals, trust, personality, emotions, personalityPreset, isOnline, thinking, speaking, listening, predictorEnabled = true }) {
   const criticals = allSignals.filter(s => s.severity === 'critical').length;
   const modeInfo  = PERSONALITY_MODES.find(m => m.id === personalityPreset) || PERSONALITY_MODES[0];
+  // Companion presence (real trait-engine + transparency from the synoptic frame).
+  const syn = useStore((s) => s.synoptic) || {};
+  const te = syn.trait_engine || {};
+  const trans = syn.transparency || syn.companion_health?.transparency || null;
+  const bm = syn.behavior_mode || {};
+  const transColor = trans?.dial_back ? '#ff9a9e' : (trans?.transparency_satisfaction ?? 0.5) > 0.6 ? '#34d399' : '#ffd93d';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -1105,7 +1194,7 @@ function OverviewTab({ allSignals, trust, personality, emotions, personalityPres
       </div>
 
       {/* Emotion Predictor status (polls /api/emotion/predictor) */}
-      <PredictorStatusCard />
+      <PredictorStatusCard enabled={predictorEnabled} />
 
       {/* Active Mode + States */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -1129,6 +1218,52 @@ function OverviewTab({ allSignals, trust, personality, emotions, personalityPres
           </div>
         </Card>
       </div>
+
+      {/* Companion presence (Trait Engine + Transparency — live synoptic) */}
+      {(te.active_traits || trans || bm.mode) && (
+        <Card accentColor={trans?.dial_back ? '#ff9a9e' : '#a3e635'}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.5, textTransform: 'uppercase' }}>🎭 Companion Presence</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {bm.mode && (
+                <span style={{
+                  padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                  color: bm.color, border: `1px solid ${bm.color}66`, background: `${bm.color}18`,
+                }}>● {bm.mode}</span>
+              )}
+              {trans && (
+                <span style={{
+                  padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                  color: transColor, border: `1px solid ${transColor}66`, background: `${transColor}18`,
+                }}>🪞 {Math.round((trans.transparency_satisfaction ?? 0.5) * 100)}% transparency</span>
+              )}
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {(te.active_traits || []).map((t) => (
+              <span key={t.id} style={{
+                padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 700,
+                color: t.color, border: `1px solid ${t.color}66`, background: `${t.color}14`,
+              }}>{t.label}</span>
+            ))}
+            {te.voice && (
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', alignSelf: 'center', fontFamily: 'monospace' }}>
+                🎙️ rate ×{te.voice.speech_rate.toFixed(2)} · {te.voice.pauses}
+              </span>
+            )}
+            {te.avatar && (
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', alignSelf: 'center', fontFamily: 'monospace' }}>
+                👤 smile {Math.round(te.avatar.Smile * 100)}% · head {te.avatar.HeadTilt.toFixed(1)}°
+              </span>
+            )}
+          </div>
+          {trans?.dial_back && (
+            <div style={{ marginTop: 10, fontSize: 11, color: '#ffb3b3' }}>
+              ⛔ {trans.reason}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Personality axes chart */}
       <Card>
@@ -1196,6 +1331,234 @@ function StateRow({ label, active, color }) {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: active ? `${color}12` : 'rgba(255,255,255,0.02)', borderRadius: 6, border: `1px solid ${active ? `${color}33` : 'transparent'}`, transition: 'all 0.3s' }}>
       <span style={{ fontSize: 12, color: active ? color : 'rgba(255,255,255,0.3)' }}>{label}</span>
       <div style={{ width: 8, height: 8, borderRadius: '50%', background: active ? color : 'rgba(255,255,255,0.1)', boxShadow: active ? `0 0 10px ${color}` : 'none', transition: 'all 0.3s', animation: active ? 'statusPulse 1.5s infinite' : 'none' }} />
+    </div>
+  );
+}
+
+// ── Companion Tab (Trait Engine + Transparency + relationship health) ────────
+// Reads the same live synoptic frame the Governance panel uses — real measured
+// values from the brain, never synthetic.
+function CompanionTab() {
+  const syn = useStore((s) => s.synoptic) || {};
+  const te = syn.trait_engine || {};
+  const bm = syn.behavior_mode || {};
+  const reason = syn.emotion_reason || null;
+  // Local overrides so feedback updates the UI instantly (the next synoptic
+  // frame also carries the same values — this is just a fresher read).
+  const [healthOverride, setHealthOverride] = useState(null);
+  const [fbState, setFbState] = useState(null);
+  const health = healthOverride || syn.companion_health || {};
+  const trans = healthOverride?.transparency || syn.transparency || syn.companion_health?.transparency || null;
+  const reviewer = health.reviewer || {};
+
+  const transPct = Math.round((trans?.transparency_satisfaction ?? 0.5) * 100);
+  const transColor = trans?.dial_back ? '#ff9a9e' : (trans?.transparency_satisfaction ?? 0.5) > 0.6 ? '#34d399' : '#ffd93d';
+  const stableColor = health.stability_index > 0.6 ? '#a8e6cf' : health.stability_index > 0.4 ? '#ffd93d' : '#ff9a9e';
+
+  const refreshHealth = async () => {
+    try {
+      const res = await fetch(`${apiBase()}/api/compliance/health?user_id=user_default`);
+      if (res.ok) setHealthOverride(await res.json());
+    } catch { /* next synoptic frame will catch up */ }
+  };
+
+  const submitFeedback = async (rating, discomfort) => {
+    setFbState('sending');
+    try {
+      const res = await fetch(`${apiBase()}/api/compliance/feedback`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 'user_default', rating, discomfort }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setFbState(data.transparency?.dial_back ? 'dialed-back' : 'recorded');
+      await refreshHealth();  // instant gauge update — no waiting for the next turn
+      setTimeout(() => setFbState(null), 4000);
+    } catch {
+      setFbState('error');
+      setTimeout(() => setFbState(null), 4000);
+    }
+  };
+
+  const clearDialBack = async () => {
+    setFbState('sending');
+    try {
+      const res = await fetch(`${apiBase()}/api/compliance/feedback`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 'user_default', action: 'clear' }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setFbState(data.transparency?.dial_back ? 'dialed-back' : 'recorded');
+      await refreshHealth();
+      setTimeout(() => setFbState(null), 4000);
+    } catch {
+      setFbState('error');
+      setTimeout(() => setFbState(null), 4000);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionHeader title="Companion Presence" sub="Trait Activation Engine · Transparency Satisfaction · relationship health — live from the synoptic frame" />
+
+      {/* Behavior mode + emotion reason */}
+      {bm.mode && (
+        <Card accentColor={bm.color}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <span style={{
+              padding: '4px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, letterSpacing: 1.5,
+              color: bm.color, border: `1px solid ${bm.color}66`, background: `${bm.color}18`,
+            }}>● {bm.mode}</span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+              focus <b style={{ color: '#e8f6ff' }}>{Math.round((bm.focus_level || 0) * 100)}%</b> · urgency <b style={{ color: '#e8f6ff' }}>{Math.round((bm.urgency_level || 0) * 100)}%</b>
+              {bm.inactivity_seconds ? ` · away ${Math.round(bm.inactivity_seconds)}s` : ''}
+            </span>
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+              {bm.reasons?.join(' · ')}
+            </span>
+          </div>
+          {reason && (
+            <div style={{ padding: '0.6rem 0.8rem', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>💬 why she reacted</div>
+              <div style={{ fontSize: 12, color: '#e8f6ff', fontStyle: 'italic', lineHeight: 1.5 }}>“{reason.hedged}”</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
+                {reason.drivers.map((d) => `${d.signal} ${Math.round((d.value || 0) * 100)}%`).join(' · ')}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Trait Activation Engine */}
+      <Card accentColor="#a3e635">
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 }}>🎭 Trait Activation Engine</div>
+        {te.active_traits?.length ? (
+          <>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+              {(te.active_traits || []).map((t) => (
+                <span key={t.id} style={{
+                  padding: '4px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800,
+                  color: t.color, border: `1px solid ${t.color}66`, background: `${t.color}16`,
+                  boxShadow: `0 0 10px ${t.color}22`,
+                }}>{t.label}</span>
+              ))}
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', alignSelf: 'center' }}>max 3 active · mode {te.mode}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+              {[['focus_level', 'Focus'], ['urgency_level', 'Urgency'], ['empathy_level', 'Empathy'], ['confidence_level', 'Confidence'], ['cognitive_load', 'Cognitive load'], ['engagement_level', 'Engagement'], ['system_stability', 'Stability']].map(([k, label]) => (
+                <Bar key={k} label={label} value={te.latent?.[k] ?? 0} color="#a3e635" />
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
+              {te.voice && (
+                <div style={{ padding: '0.6rem 0.8rem', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: 9, letterSpacing: 1.5, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', marginBottom: 6 }}>🎙️ Voice prosody</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>
+                    rate <b style={{ color: '#e8f6ff' }}>×{te.voice.speech_rate.toFixed(2)}</b> · pitch {te.voice.pitch.toFixed(2)} · volume {Math.round(te.voice.volume * 100)}% · pause {te.voice.pause_duration.toFixed(2)}s
+                  </div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2, fontStyle: 'italic' }}>{te.voice.pauses}</div>
+                </div>
+              )}
+              {te.avatar && (
+                <div style={{ padding: '0.6rem 0.8rem', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: 9, letterSpacing: 1.5, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', marginBottom: 6 }}>👤 Avatar motion</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>
+                    smile {Math.round(te.avatar.Smile * 100)}% · head {te.avatar.HeadTilt.toFixed(1)}° · gaze {Math.round(te.avatar.EyeFocus * 100)}% · posture {Math.round(te.avatar.Posture * 100)}% · blink {te.avatar.BlinkRate.toFixed(2)}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, fontStyle: 'italic' }}>
+            No trait data yet — send a message and the brain will resolve the current traits.
+          </div>
+        )}
+      </Card>
+
+      {/* Transparency Satisfaction */}
+      <Card accentColor={transColor}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.5, textTransform: 'uppercase' }}>🔍 Transparency Satisfaction</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: transColor, fontFamily: 'monospace' }}>{trans ? `${transPct}%` : '—'}</div>
+        </div>
+        <div style={{ height: 8, background: 'rgba(255,255,255,0.07)', borderRadius: 4, overflow: 'hidden', marginBottom: 14 }}>
+          <div style={{ width: `${trans ? transPct : 0}%`, height: '100%', background: `linear-gradient(90deg, ${transColor}88, ${transColor})`, borderRadius: 4, boxShadow: trans ? `0 0 12px ${transColor}66` : 'none', transition: 'width 0.6s ease' }} />
+        </div>
+        {trans?.dial_back ? (
+          <div style={{ padding: '0.6rem 0.8rem', borderRadius: 10, background: 'rgba(255,154,158,0.1)', border: '1px solid rgba(255,154,158,0.35)', color: '#ffb3b3', fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
+            ⛔ <b>Red-line active.</b> {trans.reason} — she is dialing back intensity and initiative until you say it's fine.
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+            {trans?.reason || "Did the system's behavior make sense? Send a message or give feedback below."}
+          </div>
+        )}
+        {!trans?.dial_back && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', letterSpacing: 1, textTransform: 'uppercase' }}>Was that clear?</span>
+            {[{ r: 0.2, label: '🙁 unclear', d: true }, { r: 0.5, label: '😐 mostly', d: false }, { r: 0.8, label: '😊 clear', d: false }].map((o) => (
+              <button
+                key={o.r}
+                onClick={() => submitFeedback(o.r, o.d)}
+                disabled={fbState === 'sending'}
+                style={{
+                  padding: '5px 12px', borderRadius: 999, cursor: fbState === 'sending' ? 'wait' : 'pointer',
+                  fontSize: 11, fontWeight: 700, transition: 'all 0.2s',
+                  border: o.d ? '1px solid rgba(255,154,158,0.5)' : '1px solid rgba(255,255,255,0.15)',
+                  background: o.d ? 'rgba(255,154,158,0.1)' : 'rgba(255,255,255,0.04)',
+                  color: o.d ? '#ffb3b3' : '#e8f6ff',
+                  opacity: fbState === 'sending' ? 0.5 : 1,
+                }}
+                onMouseOver={e => { if (!o.d) e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                onMouseOut={e => { if (!o.d) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+              >{o.label}</button>
+            ))}
+            {fbState === 'recorded' && <span style={{ fontSize: 11, color: '#34d399' }}>✓ recorded</span>}
+            {fbState === 'dialed-back' && <span style={{ fontSize: 11, color: '#ffb3b3' }}>⛔ dialed back</span>}
+            {fbState === 'error' && <span style={{ fontSize: 11, color: '#ef4444' }}>server unreachable</span>}
+          </div>
+        )}
+        {trans?.dial_back && (
+          <button
+            onClick={clearDialBack}
+            disabled={fbState === 'sending'}
+            style={{ padding: '5px 12px', borderRadius: 999, cursor: fbState === 'sending' ? 'wait' : 'pointer', fontSize: 11, fontWeight: 700, border: '1px solid rgba(163,230,53,0.5)', background: 'rgba(163,230,53,0.1)', color: '#a3e635', opacity: fbState === 'sending' ? 0.5 : 1 }}
+          >✓ It's fine now — resume normal</button>
+        )}
+      </Card>
+
+      {/* Relationship health */}
+      {health.stability_index != null ? (
+        <Card accentColor={stableColor}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 14 }}>💚 Relationship Health</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+            <Bar label="Stability Index" value={health.stability_index} color={stableColor} />
+            <Bar label="Over-Attachment Risk" value={health.over_attachment_risk ?? 0} color={health.over_attachment_risk > 0.55 ? '#ff9a9e' : '#ffd93d'} />
+          </div>
+          {health.reliance_signals != null && (
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 12 }}>
+              {health.reliance_signals} reliance signal(s) · {health.absent_days >= 1 ? `${health.absent_days.toFixed(1)}d` : `${Math.round((health.absent_days || 0) * 24)}h`} since last visit
+            </div>
+          )}
+          {reviewer.tone_appropriateness != null && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+              <Bar label="Tone" value={reviewer.tone_appropriateness} color="#6bcbef" />
+              <Bar label="Boundaries" value={reviewer.boundary_respect} color="#c084fc" />
+              <Bar label="Engagement" value={reviewer.engagement} color="#00f2ff" />
+              <Bar label="Reassurance" value={reviewer.reassurance} color="#a8e6cf" />
+            </div>
+          )}
+        </Card>
+      ) : (
+        <Card>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 }}>💚 Relationship Health</div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, fontStyle: 'italic' }}>
+            No health data yet — the brain writes a snapshot after each real turn.
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1579,25 +1942,80 @@ function SmBtn({ onClick, label, color = '#6bcbef' }) {
 }
 
 // ── Event Log Tab ─────────────────────────────────────────────────────────────
-function EventLogTab({ log, onClear, isOnline }) {
+function EventLogTab({ log, onClear, isOnline, focus }) {
   const logRef = useRef(null);
   const [paused, setPaused] = useState(false);
   const [tagFilter, setTagFilter] = useState('ALL');
+  // Row id flashed when the Autonomy panel's live strip asked to focus a line.
+  const [highlightId, setHighlightId] = useState(null);
+  // While a jump is in flight (or its highlight is fading), new log entries
+  // must NOT yank the view back to the top.
+  const focusUntilRef = useRef(0);
 
   useEffect(() => {
-    if (!paused && logRef.current) {
+    if (!paused && logRef.current && Date.now() > focusUntilRef.current) {
       logRef.current.scrollTop = 0;
     }
   }, [log, paused]);
 
-  const tags = ['ALL', 'SENSORS', 'SWARM', 'BRAIN', 'LLM', 'VOICE', 'SYSTEM'];
+  // Jump to the log line matching the Autonomy panel's activity entry: filter
+  // to the right tag, locate the line by text (exact → prefix → fragment),
+  // fall back to nearest timestamp, then scroll + flash it. The previous tag
+  // filter is restored once the highlight fades.
+  useEffect(() => {
+    if (!focus) return;
+    const prevFilter = tagFilter;
+    setTagFilter(focus.tag || 'ALL');
+    focusUntilRef.current = Date.now() + 3000;
+    let clearTimer = null;
+    const t = setTimeout(() => {
+      const candidates = log.filter((l) => l.tag === focus.tag);
+      let hit = null;
+      if (focus.text) {
+        hit = candidates.find((l) => l.text === focus.text)
+          || candidates.find((l) => (l.text || '').startsWith(focus.text))
+          || candidates.find((l) => (l.text || '').includes(focus.text.slice(0, 20)));
+      }
+      if (!hit && focus.ts != null) {
+        hit = candidates.reduce((best, l) => (
+          l.ts != null && (!best || Math.abs(l.ts - focus.ts) < Math.abs(best.ts - focus.ts)) ? l : best
+        ), null);
+      }
+      const id = hit != null ? String(hit.id ?? '') : null;
+      setHighlightId(id);
+      if (id) {
+        const el = logRef.current?.querySelector(`[data-log-id="${id.replace(/"/g, '\\"')}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (logRef.current) {
+        logRef.current.scrollTop = 0; // no match — show the newest lines
+      }
+      clearTimer = setTimeout(() => {
+        setHighlightId(null);
+        setTagFilter(prevFilter);
+      }, 2600);
+    }, 60);
+    return () => { clearTimeout(t); if (clearTimer) clearTimeout(clearTimer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
+  // Dynamic chips: canonical known tags first, then any tag present in the
+  // live log (so a future/new source auto-appears without a code change).
+  const seenTags = Array.from(new Set(log.map(l => l.tag).filter(Boolean)));
+  const extraTags = seenTags.filter(t => !LOG_TAG_ORDER.includes(t));
+  const tags = ['ALL', ...LOG_TAG_ORDER, ...extraTags];
+
+  // Per-tag live counts for the chips (scannable at a glance).
+  const tagCounts = log.reduce((acc, l) => {
+    if (l.tag) acc[l.tag] = (acc[l.tag] || 0) + 1;
+    return acc;
+  }, {});
   const filtered = tagFilter === 'ALL' ? log : log.filter(l => l.tag === tagFilter);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <SectionHeader title="Live Event Log" sub={`${isOnline ? '🟢 Live feed' : '🔴 Demo mode'} — real-time cognitive pipeline trace`} />
+          <SectionHeader title="Live Event Log" sub={`${isOnline ? '🟢 Live feed' : '🔴 Backend offline'} — real-time cognitive pipeline events only`} />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setPaused(!paused)} style={{
@@ -1613,17 +2031,44 @@ function EventLogTab({ log, onClear, isOnline }) {
         </div>
       </div>
 
-      {/* Tag filter */}
-      <div style={{ display: 'flex', gap: 4 }}>
-        {tags.map(t => (
-          <button key={t} onClick={() => setTagFilter(t)} style={{
-            padding: '4px 10px', borderRadius: 5, border: 'none', cursor: 'pointer',
-            fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
-            background: tagFilter === t ? (LOG_TAG_COLOR[t] || '#00f2ff') : 'rgba(255,255,255,0.04)',
-            color: tagFilter === t ? '#000' : (LOG_TAG_COLOR[t] || 'rgba(255,255,255,0.35)'),
-            transition: 'all 0.2s',
-          }}>{t}</button>
-        ))}
+      {/* Tag filter chips — color-coded by event source, live counts */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {tags.map(t => {
+          const active = tagFilter === t;
+          const color = LOG_TAG_COLOR[t] || '#00f2ff';
+          const count = t === 'ALL' ? log.length : (tagCounts[t] || 0);
+          return (
+            <button
+              key={t}
+              onClick={() => setTagFilter(t)}
+              title={`${LOG_TAG_LABEL[t] || t} events`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px', borderRadius: 999,
+                cursor: 'pointer',
+                fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
+                textTransform: 'uppercase', fontFamily: 'inherit',
+                background: active ? `${color}26` : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${active ? `${color}88` : `${color}30`}`,
+                color: active ? color : 'rgba(255,255,255,0.45)',
+                boxShadow: active ? `0 0 12px ${color}30` : 'none',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseOver={e => { if (!active) { e.currentTarget.style.color = color; e.currentTarget.style.borderColor = `${color}70`; } }}
+              onMouseOut={e => { if (!active) { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; e.currentTarget.style.borderColor = `${color}30`; } }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, boxShadow: active ? `0 0 6px ${color}` : 'none', flexShrink: 0 }} />
+              {LOG_TAG_LABEL[t] || t}
+              <span style={{
+                minWidth: 16, textAlign: 'center',
+                padding: '0 5px', borderRadius: 8,
+                fontSize: 9, fontWeight: 800,
+                background: active ? `${color}30` : 'rgba(255,255,255,0.06)',
+                color: active ? color : 'rgba(255,255,255,0.35)',
+              }}>{count}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Log entries */}
@@ -1637,20 +2082,30 @@ function EventLogTab({ log, onClear, isOnline }) {
       >
         {filtered.length === 0 ? (
           <div style={{ color: 'rgba(255,255,255,0.2)', textAlign: 'center', marginTop: 40, fontStyle: 'italic' }}>
-            {isOnline ? 'Waiting for events…' : 'Demo events loading…'}
+            {isOnline ? 'Waiting for real events…' : 'Backend offline — no events received'}
           </div>
         ) : filtered.map((entry, i) => {
           const tagColor = LOG_TAG_COLOR[entry.tag] || '#94a3b8';
           const ts = entry.ts
             ? new Date(entry.ts * 1000).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
             : '——:——:——';
+          const rowId = String(entry.id ?? i);
+          const isHighlighted = highlightId != null && rowId === highlightId;
 
           return (
-            <div key={entry.id || i} style={{
-              display: 'flex', alignItems: 'flex-start', gap: 8,
-              padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.03)',
-              animation: i === 0 ? 'logFadeIn 0.4s ease' : 'none',
-            }}>
+            <div
+              key={entry.id || i}
+              data-log-id={rowId}
+              style={{
+                display: 'flex', alignItems: 'flex-start', gap: 8,
+                padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.03)',
+                animation: i === 0 ? 'logFadeIn 0.4s ease' : 'none',
+                background: isHighlighted ? 'rgba(0,242,255,0.10)' : 'transparent',
+                boxShadow: isHighlighted ? 'inset 0 0 0 1px rgba(0,242,255,0.45)' : 'none',
+                borderRadius: isHighlighted ? 6 : 0,
+                transition: 'background 0.3s ease, box-shadow 0.3s ease',
+              }}
+            >
               <span style={{ color: '#444', flexShrink: 0, lineHeight: '16px' }}>{ts}</span>
               <span style={{
                 color: tagColor, background: `${tagColor}18`, border: `1px solid ${tagColor}30`,
@@ -2060,8 +2515,8 @@ function BuildTab() {
     setLoading(true);
     setError(false);
     try {
-      const host = window.location.hostname || 'localhost';
-      const res = await fetch(`http://${host}:8000/api/build/summary`);
+      const host = apiHost();
+      const res = await fetch(`${apiBase()}/api/build/summary`);
       if (mountedRef.current) {
         if (res.ok) {
           const d = await res.json();
