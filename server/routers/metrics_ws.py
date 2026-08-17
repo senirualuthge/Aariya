@@ -1,70 +1,59 @@
 """
-Metrics WebSocket Router + MetricsTracker
+Metrics WebSocket helpers + MetricsTracker
 
-Provides:
-  /ws/brain_metrics  → streams neural_update events to the 3D dashboard
-  MetricsTracker     → tracks per-turn reward and aggregates PPO learning curve
-  broadcast_brain_metrics() → pushes state events from brain/main
+  broadcast_brain_metrics() → pushes a data dict to every /ws/brain_metrics client
+  MetricsTracker             → tracks per-turn reward and aggregates PPO learning curve
 
-Dashboard consumers receive two event types:
-  { type: "neural_update", trust, valence, arousal, agent_activations }
-  { type: "metrics_update", avg_reward, reward_history, total_turns, session_rewards }
+The live /ws/brain_metrics endpoint lives in server/main.py
+(websocket_brain_metrics); it registers each connection with the admin signal
+bus (server.systems.signal_bus.bus._connected_sockets).
+
+This module previously defined its OWN duplicate /ws/brain_metrics route plus a
+private `connected_dashboards` list — but the router was never mounted, so the
+list stayed empty and every broadcast_brain_metrics() call (from
+system_health, the mobile telemetry agents, MetricsTracker) was silently
+dropped. The duplicate route and list are gone; broadcasts now fan out to the
+real registry, the single source of truth for connected dashboard sockets.
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
-import asyncio
 from collections import deque
 from typing import Optional
 
-router = APIRouter()
-
-# ── Connection manager ─────────────────────────────────────────────────────────
-connected_dashboards: list[WebSocket] = []
+# ── Broadcast to the real /ws/brain_metrics registry ─────────────────────────
+# server.main's /ws/brain_metrics handler registers / unregisters sockets here.
+# There is deliberately NO parallel list in this module — a second registry is
+# exactly the duplication that made these broadcasts dead.
+def _metrics_sockets() -> list:
+    try:
+        from server.systems.signal_bus import bus as admin_signal_bus
+        return admin_signal_bus._connected_sockets
+    except Exception:
+        return []
 
 
 async def broadcast_brain_metrics(data: dict) -> None:
     """
-    Push any data dict to all connected dashboard WebSocket clients.
-    Called by brain_v2 / main.py after each cognitive turn.
+    Push any data dict to all connected /ws/brain_metrics clients.
+
+    Called by system_health, the mobile telemetry agents, and MetricsTracker.
     """
+    payload = json.dumps(data)
+    sockets = list(_metrics_sockets())
     dead = []
-    for ws in connected_dashboards:
+    for ws in sockets:
         try:
-            await ws.send_text(json.dumps(data))
+            await ws.send_text(payload)
         except Exception:
             dead.append(ws)
-    for ws in dead:
-        if ws in connected_dashboards:
-            connected_dashboards.remove(ws)
-
-
-@router.websocket("/ws/brain_metrics")
-async def brain_metrics_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    connected_dashboards.append(websocket)
-    # Send current metrics snapshot immediately on connect
-    snapshot = _tracker.snapshot()
-    await websocket.send_text(json.dumps({"type": "metrics_update", **snapshot}))
-    try:
-        while True:
-            # Bidirectional: GUI can send mode-change commands through this socket
-            raw = await websocket.receive_text()
-            try:
-                msg = json.loads(raw)
-            except Exception:
-                continue
-
-            # ── GUI → Mobile mood sync ────────────────────────────────────────
-            if msg.get("type") == "override_mode":
-                mode = msg.get("mode", "")
-                from server.infrastructure.session_manager import manager
-                await manager.broadcast_mobile(
-                    json.dumps({"type": "override_mode", "mode": mode})
-                )
-    except WebSocketDisconnect:
-        if websocket in connected_dashboards:
-            connected_dashboards.remove(websocket)
+    if dead:
+        try:
+            from server.systems.signal_bus import bus as admin_signal_bus
+            for ws in dead:
+                if ws in admin_signal_bus._connected_sockets:
+                    admin_signal_bus._connected_sockets.remove(ws)
+        except Exception:
+            pass
 
 
 # ── MetricsTracker ─────────────────────────────────────────────────────────────
