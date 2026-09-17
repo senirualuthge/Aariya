@@ -59,6 +59,10 @@ class MobileTelemetry:
     avg_latency_ms: float = 0.0
     last_activity_ts: float = field(default_factory=time.time)
     uptime_seconds: float = 0.0
+    # Latest phone-reported device metrics (battery / CPU / memory / model)
+    # pushed by the app via /ws/mobile/control `device_metrics` frames.
+    device: dict = field(default_factory=dict)
+    device_last_ts: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -149,6 +153,26 @@ class MobileGatewayAgent(BaseSwarmAgent):
         self._telemetry.avg_latency_ms = (
             alpha * latency_ms + (1 - alpha) * self._telemetry.avg_latency_ms
         )
+
+    def record_device_metrics(self, device: dict, ts: float = 0.0) -> None:
+        """Store the phone's latest reported device metrics (battery, CPU,
+        memory, model…). Kept as the most recent sample so the System Health
+        tab can render the phone's own performance. Also counts as proof of
+        life, so it refreshes last_activity_ts.
+
+        Defensive by design: this runs inside the /ws/mobile/control handler
+        (which has no generic exception guard), so a malformed payload from a
+        buggy or malicious client must never raise.
+        """
+        if not isinstance(device, dict):
+            device = {}
+        try:
+            ts_f = float(ts) if ts else time.time()
+        except (TypeError, ValueError):
+            ts_f = time.time()
+        self._telemetry.device = dict(device)
+        self._telemetry.device_last_ts = ts_f
+        self._telemetry.last_activity_ts = time.time()
 
     # ── Public read ───────────────────────────────────────────────────────────
 

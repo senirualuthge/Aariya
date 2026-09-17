@@ -36,6 +36,12 @@ from server.routers.prediction_router import router as prediction_router
 from server.routers.system_health_router import router as system_health_router
 from server.routers.compliance import router as compliance_router
 from server.routers.events_router import router as events_router
+from server.routers.filesystem_router import router as filesystem_router
+from server.routers.tools_router import router as tools_router
+from server.routers.analytics import router as analytics_router
+from server.routers.signals import router as ingest_router
+from server.routers.swarm_ws import router as swarm_ws_router
+from server.routers.gev_router import router as gev_router
 from server.infrastructure.agent_watcher import get_watcher
 from server.systems.security.mobile_authority import is_mobile_allowed, denied_frame
 from server.systems.security.dashboard_authority import execute_authority_command
@@ -52,6 +58,18 @@ _gap_detect_lock = asyncio.Lock()
 async def lifespan(app: FastAPI):
     logger.info("Aariya Brain FIXV4 Starting Up...")
     init_db()
+
+    # Apply SQL migrations (trust/contradiction/episodic/pattern/audit tables
+    # etc.) to the analytics store. Never ran before — every module querying
+    # those tables hit "no such table" until this startup hook existed.
+    try:
+        from server.migrations import MigrationRunner
+        applied = MigrationRunner().run_pending_migrations()
+        if applied:
+            logger.info("Applied %d DB migration(s)", applied)
+    except Exception as exc:
+        logger.warning("DB migrations skipped: %s", exc)
+
 
     # Kick off a non-blocking sync of the Obsidian dual vaults into RAG memory.
     # Runs in a background thread so server startup is never blocked by indexing.
@@ -117,6 +135,23 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Mobile telemetry agents start skipped: %s", exc)
 
+    # ── GEV GEOSPATIAL INTELLIGENCE AGENT ───────────────────────────────────
+    # ⚡ On-demand mode: no background polling.  The agent is only registered
+    # here so the dashboard's Agent Registry tab shows it.  Data is fetched
+    # when the brain, daemon, or a REST consumer explicitly requests it.
+    try:
+        from server.systems.gev.gev_agent import get_gev_agent, GEVAgent
+        _gev_agent = get_gev_agent()
+        # Self-register in the persistent agent registry so the dashboard's
+        # Agent Registry tab shows GEVAgent without waiting for a file scan.
+        from server.infrastructure.agent_registry import get_registry
+        reg = get_registry()
+        rec = _gev_agent.registry_record()
+        reg.register_static_agent(rec)
+        logger.info("[GEVAgent] Registered (kind=geospatial, on-demand mode)")
+    except Exception as exc:
+        logger.warning("GEV agent registration skipped: %s", exc)
+
     # Surface any pending startup brief (things learned while away) after a
     # short delay so clients connecting right at boot receive it.
     async def _brief_broadcaster():
@@ -155,6 +190,12 @@ async def lifespan(app: FastAPI):
         get_mobile_dashboard().stop()
     except Exception:
         pass
+    # Stop GEV polling loop.
+    try:
+        from server.systems.gev.gev_agent import get_gev_agent
+        get_gev_agent().stop()
+    except Exception:
+        pass
     logger.info("Aariya Brain shutting down.")
 
 app = FastAPI(title="Aariya AI Brain - FIXV4", lifespan=lifespan)
@@ -176,7 +217,7 @@ app.include_router(meeting_router)
 app.include_router(agents_router)    # Provides /api/agents + /api/agents/ws
 app.include_router(security_router)  # Provides /api/security/scan + /api/security/last-scan
 app.include_router(news_router)      # Provides /api/news + /api/news/article + /api/news/alerts
-app.include_router(web_search_router) # Provides /api/web-search (Bing > SerpAPI > Serper > mock)
+app.include_router(web_search_router) # Provides /api/web-search (Bing > SerpAPI > Serper > DDG > Wikipedia — keyless tail)
 app.include_router(self_knowledge_router)  # Provides /api/self-knowledge (data-location inventory)
 app.include_router(build_summary_router)   # Provides /api/build/summary (production build stats)
 app.include_router(obsidian_router)        # Provides /api/obsidian/search + /api/obsidian/runtime/latest
@@ -189,18 +230,32 @@ app.include_router(events_router)              # Provides /api/events/latest (re
 from server.routers.synoptics_ws import router as synoptics_router
 app.include_router(synoptics_router)          # Provides /ws/synoptics (synoptics v2 frame stream)
 
-# BUG #15 FIX: mount the WebRTC voice router so the mobile app's /offer
-# negotiation actually reaches the AI voice pipeline (was defined but unmounted).
-from server.realtime.webrtc_server import router as webrtc_router
-app.include_router(webrtc_router)            # Provides POST /offer + POST /interrupt
-
-# AccessFIles §14/§31: mount the voice router so the /ws/voice streaming
-# pipeline (VAD → ASR → TurnPredictor → brain → TTS) is reachable.
-from server.routers.voice import router as voice_router
-app.include_router(voice_router)             # Provides /ws/voice (streaming voice)
-
 from server.routers.autonomy_router import router as autonomy_router
 app.include_router(autonomy_router)        # Provides /api/autonomy/* (inner world, approvals, gaps)
+
+# AccessFIles §1-§17: guarded local filesystem access (browse/read/search/
+# semantic recall/confirmation-gated mutations/audit/rollback/sandbox/vision).
+app.include_router(filesystem_router)      # Provides /api/fs/* + /api/sandbox/run + /api/vision/screen*
+
+# AccessFIles §33: MCP tool ecosystem + knowledge-graph query/ingest surface.
+app.include_router(tools_router)           # Provides /api/tools/* + /api/knowledge/*
+app.include_router(analytics_router)       # Provides /api/analytics/overview|personality|memories (real schema)
+app.include_router(ingest_router)          # Provides /ingest/signal|signals|device (external telemetry)
+app.include_router(swarm_ws_router)        # Provides /api/swarm/ws (AGENT_UPDATE / AGENT_EVOLVED pulses)
+app.include_router(gev_router)             # Provides /api/gev/* (geospatial intelligence + /api/gev/stream WS)
+
+# HumanAI SDK: trust, emotion, memory, audit, kill-switch REST API.
+from server.routers.sdk_api import router as sdk_router
+app.include_router(sdk_router)             # Provides /api/sdk/* (SDK public contract)
+
+# AccessFIles §61/§76: distributed-memory sync + real-hardware embodiment probe.
+from server.routers.sync_router import router as sync_router
+app.include_router(sync_router)            # Provides /api/memory/* + /api/embodiment/status
+
+# AccessFIles §75: real-time collaboration (shared workspace memory + live rooms).
+from server.routers.collab_router import router as collab_router, ws_router as collab_ws_router
+app.include_router(collab_router)          # Provides /api/collab/*
+app.include_router(collab_ws_router)       # Provides /ws/collab/{name} rooms
 
 
 # --- SHARED COGNITIVE LOOP HANDLER ---
@@ -369,7 +424,7 @@ async def _run_gap_detection(learner, user_text: str, response_text: str):
 
 async def _handle_control_command(raw_input: dict, daemon, websocket: WebSocket):
     """Route UI control commands to the autonomy daemon."""
-    action = raw_input.get("action")
+    action: str = raw_input.get("action") or ""
     plan_id = raw_input.get("plan_id", "")
     try:
         if action == "approve_plan":
@@ -518,6 +573,13 @@ async def websocket_mobile_chat(websocket: WebSocket):
             # "mobile" surface). broadcast_state uses model_dump(mode="json")
             # (BUG #5 FIX) so the datetime timestamp serializes to an ISO string.
             await session_manager.broadcast_state(user_id, brain.get_state())
+
+            # Broadcast kill-switch / feature-flag state so mobile stays in sync.
+            try:
+                from server.systems.kill_switches import get_kill_switches
+                await session_manager.broadcast(get_kill_switches().to_broadcast_frame())
+            except Exception:
+                pass
 
             # Real event log: real mobile turn telemetry (no synthetic data).
             try:

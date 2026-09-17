@@ -138,6 +138,29 @@ class AutonomyPlanner:
             context: optional {gaps, insights, trust, valence, topic}
         """
         context = context or {}
+
+        # Learned-workflow recall (AccessFIles §59): if this exact goal was
+        # already executed successfully before, reuse its real step sequence
+        # instead of re-planning. Steps are re-sanitized so a corrupted or
+        # hand-edited memory file can never inject an unknown action type.
+        try:
+            from server.systems.workflows.workflow_memory import WorkflowMemory
+            learned = WorkflowMemory().best_template(goal.get("description", ""))
+            if learned:
+                recalled = _sanitize_steps(
+                    [{"type": t, "params": {}, "description": t} for t in learned]
+                )
+                if recalled:
+                    risk = _compute_risk(recalled)
+                    return {
+                        "steps": recalled,
+                        "risk_level": risk,
+                        "requires_approval": any(s["requires_approval"] for s in recalled) or risk != "low",
+                        "rationale": "recalled previously-successful workflow",
+                    }
+        except Exception as exc:
+            logger.debug("[AutonomyPlanner] workflow recall skipped: %s", exc)
+
         llm_steps = await self._llm_plan(goal, context)
         steps = _sanitize_steps(llm_steps)
 

@@ -77,12 +77,12 @@ class CVEAgent(SecurityAgent):
 
         # Merge caller-supplied deps with the built-in watchlist
         extra = data.get("dependencies", [])
-        packages = list(WATCHED_PACKAGES)
+        packages: List[Dict[str, Any]] = list(WATCHED_PACKAGES)  # type: ignore[assignment]
         for dep in extra:
             if isinstance(dep, dict):
                 if not dep.get("name"):
                     continue  # junk entry — never query OSV with an empty name
-                packages.append({
+                packages.append({  # type: ignore[arg-type]
                     "name": dep["name"],
                     "ecosystem": dep.get("ecosystem", "PyPI"),
                     "version": dep.get("version"),

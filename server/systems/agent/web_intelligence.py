@@ -18,7 +18,9 @@ class WebIntelligence:
     def search(self, query: str, num_results: int = 5) -> List[Dict[str, str]]:
         """
         Execute a web search using configured provider.
-        Priority: Bing > SerpAPI > Serper > Mock
+        Priority: Bing > SerpAPI > Serper > DuckDuckGo (keyless) > Wikipedia
+        (keyless). The final fallback returns an honest "unavailable" row —
+        results are never fabricated.
         """
         if self.bing_api_key:
             return self._search_bing(query, num_results)
@@ -27,8 +29,78 @@ class WebIntelligence:
         elif hasattr(config, "SERPER_API_KEY") and config.SERPER_API_KEY:
             return self._search_serper(query, num_results)
         else:
-            logger.warning("No search API keys configured. Returning mock results.")
-            return self._search_mock(query, num_results)
+            for provider in (self._search_duckduckgo, self._search_wikipedia):
+                try:
+                    results = provider(query, num_results)
+                except Exception as e:
+                    logger.warning("[web] %s failed: %s",
+                                   provider.__name__, e)
+                    continue
+                if results:
+                    return results
+            logger.warning("No search providers reachable (no API keys, "
+                           "keyless providers failed).")
+            return [
+                {
+                    "title": "Search Unavailable",
+                    "url": "#",
+                    "snippet": "No search API key is configured and the "
+                               "keyless providers (DuckDuckGo/Wikipedia) were "
+                               "unreachable. Add SERPER_API_KEY, BING_API_KEY, "
+                               "or SERPAPI_KEY to your .env file."
+                }
+            ]
+
+    def _search_duckduckgo(self, query: str, num_results: int) -> List[Dict[str, str]]:
+        """Keyless DuckDuckGo HTML endpoint — REAL results, no API key."""
+        from bs4 import BeautifulSoup
+
+        response = requests.post(
+            "https://html.duckduckgo.com/html/",
+            data={"q": query},
+            headers={"User-Agent": self.user_agent},
+            timeout=config.REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "lxml")
+
+        results = []
+        for anchor in soup.select("a.result__a")[:num_results]:
+            href = str(anchor.get("href", ""))
+            # DDG wraps outbound links in /l/?uddg=<urlencoded>
+            if href.startswith("//duckduckgo.com/l/") or href.startswith("/l/"):
+                from urllib.parse import urlparse, parse_qs
+                parsed = parse_qs(urlparse("https:" + href if href.startswith("//") else href).query)
+                href = parsed.get("uddg", [href])[0]
+            snippet_node = anchor.find_next(attrs={"class": "result__snippet"})
+            results.append({
+                "title": anchor.get_text(" ", strip=True),
+                "url": href,
+                "snippet": snippet_node.get_text(" ", strip=True) if snippet_node else "",
+            })
+        return results
+
+    def _search_wikipedia(self, query: str, num_results: int) -> List[Dict[str, str]]:
+        """Keyless Wikipedia OpenSearch API — real encyclopedic results."""
+        response = requests.get(
+            "https://en.wikipedia.org/w/api.php",
+            params={
+                "action": "opensearch",
+                "search": query,
+                "limit": max(1, min(num_results, 10)),
+                "namespace": 0,
+                "format": "json",
+            },
+            headers={"User-Agent": self.user_agent},
+            timeout=config.REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        data = response.json()
+        titles, descriptions, links = data[1], data[2], data[3]
+        return [
+            {"title": t, "url": u, "snippet": d}
+            for t, d, u in zip(titles, descriptions, links)
+        ]
 
     def _search_bing(self, query: str, num_results: int) -> List[Dict[str, str]]:
         """Search using Bing Web Search API."""
@@ -37,7 +109,7 @@ class WebIntelligence:
         params = {"q": query, "count": num_results}
         
         try:
-            response = requests.get(endpoint, headers=headers, params=params, timeout=config.REQUEST_TIMEOUT)
+            response = requests.get(endpoint, headers=headers, params=params, timeout=config.REQUEST_TIMEOUT)  # type: ignore[arg-type]
             response.raise_for_status()
             data = response.json()
             
@@ -105,17 +177,6 @@ class WebIntelligence:
         except Exception as e:
             logger.error(f"Serper search failed: {e}")
             return []
-
-    def _search_mock(self, query: str, num_results: int) -> List[Dict[str, str]]:
-        """Return proper mock structure for testing."""
-        return [
-            {
-                "title": f"Mock Result {i+1} for {query}",
-                "url": f"https://example.com/mock/{i+1}",
-                "snippet": f"This is a simulated search result for query: {query}"
-            }
-            for i in range(num_results)
-        ]
 
     def fetch_content(self, url: str) -> str:
         """

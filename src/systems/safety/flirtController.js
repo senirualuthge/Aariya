@@ -1,5 +1,7 @@
 export function getFlirtMode(memory) {
-    const risk = memory.safety.dependencyRisk;
+    // memory may lack `safety` (e.g. hand-built in aiEngine) — default to low
+    // so the safety gates stay open instead of crashing the chat pipeline.
+    const risk = memory.safety?.dependencyRisk ?? "low";
     // Handle both new schema ("context.mood") and potentially legacy locations if needed
     const mood = memory.context?.mood || "neutral";
 

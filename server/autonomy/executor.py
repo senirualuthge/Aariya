@@ -29,7 +29,9 @@ class AutonomyExecutor:
                  broadcast: Optional[Callable[[dict], Any]] = None):
         self.store = store
         # broadcast: async fn(dict) — used by check_in steps to deliver messages
-        self.broadcast = broadcast or (lambda msg: None)
+        async def _noop(msg: dict) -> None:
+            pass
+        self.broadcast = broadcast or _noop
 
     # ── Plan execution ───────────────────────────────────────────────────────
 
@@ -64,6 +66,19 @@ class AutonomyExecutor:
                 status="completed" if all_ok else "failed",
                 progress=1.0 if all_ok else 0.5,
             )
+        # Workflow memory (AccessFIles §59): learn from the REAL run — store
+        # the step sequence that actually executed so the planner can recall
+        # it next time this goal reappears. Failures are recorded too, with
+        # successes=0, so weak templates are never reused.
+        try:
+            from server.systems.workflows.workflow_memory import WorkflowMemory
+            WorkflowMemory().record_execution(
+                goal.get("description", "") if goal else plan.get("id", ""),
+                [r.get("type") for r in results if r.get("type")],
+                success=(final_status == "completed"),
+            )
+        except Exception as exc:
+            logger.debug("[Executor] workflow record skipped: %s", exc)
 
         return {"plan_id": plan["id"], "status": final_status, "steps": results}
 
@@ -73,7 +88,8 @@ class AutonomyExecutor:
                         goal: Dict[str, Any],
                         params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         stype = step["type"]
-        params = params if params is not None else step.get("params", {})
+        if params is None:
+            params = dict(step.get("params") or {})
         action_id = self.store.log_action(
             action_type=stype,
             plan_id=plan["id"],

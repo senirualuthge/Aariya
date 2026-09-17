@@ -49,7 +49,7 @@ class LogicEngine:
         Get the unsat core (subset of clauses causing contradiction).
         Requires solver to be in unsat state.
         """
-        return self.solver.unsat_core()
+        return self.solver.unsat_core()  # type: ignore[return-value]
 
 # Global instance
 logic_engine = LogicEngine()

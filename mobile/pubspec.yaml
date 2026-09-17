@@ -21,7 +21,6 @@ dependencies:
   # BUG #15 FIX: core voice + camera features were missing from pubspec
   # These are required for the full Aariya UX documented in §7.1
   speech_to_text: ^7.4.0        # on-device speech recognition
-  flutter_tts: ^4.0.2           # native TTS for Aariya's voice
   camera: ^0.10.5               # live viewfinder + JPEG snapshot
   permission_handler: ^11.3.0   # runtime permissions (mic, camera)
 
@@ -38,6 +37,8 @@ dependencies:
   webview_flutter: ^4.8.0
   shared_preferences: ^2.5.5
   record: ^6.2.1
+  battery_plus: ^7.1.1
+  device_info_plus: ^13.2.0
 
 dev_dependencies:
   flutter_test:

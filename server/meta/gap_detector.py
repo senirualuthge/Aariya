@@ -159,7 +159,7 @@ def _generate_agent(cap: str) -> Tuple[str, str, str]:
     """Return (class_name, source, method). LLM auto-coder first, template fallback."""
     llm_class, llm_code = _generate_via_llm(cap)
     if llm_class:
-        return llm_class, llm_code, "llm"
+        return llm_class, llm_code or "", "llm"
     class_name, source = _generate_template(cap)
     return class_name, source, "template"
 

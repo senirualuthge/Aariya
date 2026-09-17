@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import time
 from typing import Dict, Any
 from server.systems.agent.config import config
 
@@ -20,12 +21,14 @@ class FactMemory:
     def update_fact(self, fact_id: str, new_confidence: float):
         """
         Update belief using exponential moving average (reinforcement).
+        Every entry carries a real epoch timestamp of its last update.
         """
+        now = time.time()
         if fact_id not in self.facts:
             self.facts[fact_id] = {
                 "confidence": new_confidence,
                 "count": 1,
-                "last_updated": "now" # TODO: Implement timestamp
+                "last_updated": now,
             }
         else:
             # Reinforcement learning update
@@ -33,6 +36,7 @@ class FactMemory:
             old_conf = self.facts[fact_id]["confidence"]
             self.facts[fact_id]["confidence"] = old_conf + alpha * (new_confidence - old_conf)
             self.facts[fact_id]["count"] += 1
+            self.facts[fact_id]["last_updated"] = now
             
         self._save()
         

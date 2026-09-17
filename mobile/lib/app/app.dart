@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import '../ui/screens/chat_screen.dart';
 import '../ui/screens/analytics_screen.dart';
+import '../ui/screens/companion_screen.dart';
 import '../services/websocket_service.dart';
 import '../services/connection_monitor.dart';
 
@@ -18,6 +19,7 @@ class _AppState extends State<App> {
   final List<Widget> _screens = const [
     ChatScreen(),
     AnalyticsScreen(),
+    CompanionScreen(),
   ];
 
   @override
@@ -59,6 +61,10 @@ class _AppState extends State<App> {
             BottomNavigationBarItem(
               icon: Icon(Icons.analytics_outlined),
               label: 'Analytics',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.favorite_outline),
+              label: 'Companion',
             ),
           ],
         ),

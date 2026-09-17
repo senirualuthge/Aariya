@@ -97,7 +97,7 @@ class InternalConflictSystem:
             voice_scores[v.name] = max(0.0, min(1.0, score))
 
         # Select dominant voice
-        dominant_name = max(voice_scores, key=voice_scores.get)
+        dominant_name = max(voice_scores, key=voice_scores.get)  # type: ignore[arg-type]
         dominant_score = voice_scores[dominant_name]
 
         # Find dominant voice object

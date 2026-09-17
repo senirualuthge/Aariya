@@ -16,7 +16,7 @@ class ServerConfig extends ChangeNotifier {
 
   static const String _defaultHost = String.fromEnvironment(
     'SERVER_HOST',
-    defaultValue: '192.168.1.57',
+    defaultValue: '127.0.0.1',
   );
   static const int _defaultPort = int.fromEnvironment(
     'SERVER_PORT',

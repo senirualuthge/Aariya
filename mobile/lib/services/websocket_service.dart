@@ -338,6 +338,22 @@ class WebSocketService {
     _sendControl({'type': 'ping'});
   }
 
+  /// Pushes the phone's own device metrics (battery / CPU / memory / model) to
+  /// the backend on the control channel.
+  ///
+  /// Consumed by [DeviceMetricsReporter]. Deliberately fire-and-forget (NOT
+  /// tracked by the outbox): telemetry goes stale within seconds, so retrying
+  /// a lost sample over a flaky link only spams the server. The server ACKs
+  /// nothing and just stores the latest sample on the mobile gateway agent.
+  void sendDeviceMetrics(Map<String, dynamic> device, {num? ts}) {
+    if (_disposed) return;
+    _sendControl({
+      'type': 'device_metrics',
+      'device': device,
+      'ts': ts ?? DateTime.now().millisecondsSinceEpoch / 1000,
+    });
+  }
+
   // ── Internals ───────────────────────────────────────────────────────────────
 
   void _sendChatReliable(Map<String, dynamic> payload) {
@@ -365,6 +381,7 @@ class WebSocketService {
       'input.multimodal',
       'ping',
       'interrupt',
+      'device_metrics',
     }.contains(type);
   }
 

@@ -71,7 +71,7 @@ def test_save_load_roundtrip(tmp_path):
     path = tmp_path / "model.pt"
     save_model(model, path)
     loaded = predictor.load_model(path)
-    for p1, p2 in zip(model.parameters(), loaded.parameters()):
+    for p1, p2 in zip(model.parameters(), loaded.parameters()):  # type: ignore
         assert torch.allclose(p1, p2)
 
 
@@ -80,9 +80,9 @@ def test_training_loss_decreases():
     model = train_predictor(_make_history(60, trend=0.05), epochs=12, seq_len=8)
     assert model is not None
     X, Y = build_sequences(_make_history(60, trend=0.05), seq_len=8)
-    model.eval()
+    model.eval()  # type: ignore
     with torch.no_grad():
-        pred_cont, _ = model(X)
+        pred_cont, _ = model(X)  # type: ignore
         loss = torch.nn.functional.mse_loss(pred_cont, Y)
     # A trained model must meaningfully fit the trend (zigzag noise included).
     assert float(loss) < 0.2
@@ -92,7 +92,7 @@ def test_training_loss_decreases():
 
 def test_predict_future_state_sane_outputs():
     model = train_predictor(_make_history(40, trend=0.05), epochs=4, seq_len=8)
-    out = predict_future_state(model, _make_history(10))
+    out = predict_future_state(model, _make_history(10))  # type: ignore
     assert -1.0 <= out["future_valence"] <= 1.0
     assert 0.0 <= out["future_arousal"] <= 1.0
     assert len(out["state_logits"]) == 3
@@ -104,9 +104,9 @@ def test_predict_future_state_sane_outputs():
 
 def test_predict_future_state_short_and_empty_history():
     model = train_predictor(_make_history(30), epochs=2, seq_len=8)
-    out = predict_future_state(model, [{"valence": 0.2, "arousal": 0.5}])
+    out = predict_future_state(model, [{"valence": 0.2, "arousal": 0.5}])  # type: ignore
     assert out["future_valence"] is not None
-    empty = predict_future_state(model, [])
+    empty = predict_future_state(model, [])  # type: ignore
     assert empty["future_valence"] == 0.0
     assert empty["confidence"] == 0.0
 
@@ -124,7 +124,7 @@ def test_enrich_prediction_no_model_returns_unchanged(tmp_path, monkeypatch):
 
 def test_enrich_prediction_with_model(tmp_path, monkeypatch):
     path = tmp_path / "model.pt"
-    save_model(train_predictor(_make_history(40, trend=0.05), epochs=4, seq_len=8), path)
+    save_model(train_predictor(_make_history(40, trend=0.05), epochs=4, seq_len=8), path)  # type: ignore
     monkeypatch.setattr(predictor, "MODEL_PATH", path)
 
     heuristic = {"distress_risk": False, "escalation_risk": False,
@@ -193,14 +193,14 @@ def test_enrich_lstm_can_downgrade_heuristic(monkeypatch):
 
 def test_get_predictor_reloads_when_checkpoint_retrained(tmp_path):
     path = tmp_path / "model.pt"
-    save_model(train_predictor(_make_history(40, trend=0.05), epochs=3, seq_len=8), path)
+    save_model(train_predictor(_make_history(40, trend=0.05), epochs=3, seq_len=8), path)  # type: ignore
 
     first = predictor.get_predictor(path)
     assert first is not None
     assert predictor.get_predictor(path) is first  # cached
 
     # Retrain with different data, resave, force a fresh mtime.
-    save_model(train_predictor(_make_history(40, trend=-0.05), epochs=3, seq_len=8), path)
+    save_model(train_predictor(_make_history(40, trend=-0.05), epochs=3, seq_len=8), path)  # type: ignore
     path.touch()
     second = predictor.get_predictor(path)
     assert second is not None
@@ -459,7 +459,7 @@ def test_telemetry_untrained(tmp_path, monkeypatch):
 def test_telemetry_trained_with_forecast_and_age(tmp_path, monkeypatch):
     path = tmp_path / "m.pt"
     monkeypatch.setattr(predictor, "MODEL_PATH", path)
-    save_model(train_predictor(_make_history(40, trend=0.05), epochs=3, seq_len=8), path)
+    save_model(train_predictor(_make_history(40, trend=0.05), epochs=3, seq_len=8), path)  # type: ignore
     predictor._write_training_meta(path, trained_at=time.time() - 3600,
                                    max_snapshot_id=12, count=12, seed_count=3)
 
@@ -490,7 +490,7 @@ def test_telemetry_corrupt_checkpoint_with_fresh_meta(tmp_path, monkeypatch):
 def test_telemetry_trained_without_history(tmp_path, monkeypatch):
     path = tmp_path / "m.pt"
     monkeypatch.setattr(predictor, "MODEL_PATH", path)
-    save_model(train_predictor(_make_history(30), epochs=2, seq_len=8), path)
+    save_model(train_predictor(_make_history(30), epochs=2, seq_len=8), path)  # type: ignore
     t = predictor.telemetry([])
     assert t["status"] == "trained"   # model exists
     assert t["forecast"] is None      # but no history to run it on

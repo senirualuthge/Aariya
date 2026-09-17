@@ -26,6 +26,14 @@
  *    or times out (BUILD_TIMEOUT_MS, default 5 min), no servers are started.
  *    On success it prints the dist/ path, bundle size breakdown, and build time,
  *    and warns about any JS chunk over BUILD_CHUNK_WARN_KB (default 500 KB).
+ *
+ *  Brain ownership:
+ *  - In dev the brain (uvicorn) is a child of THIS script, so it always dies
+ *    with the terminal — no orphaned process pegging the CPU.
+ *  - The persistent launchd agent (com.aariya.backend, managed by
+ *    scripts/backend.sh start) is booted out on startup so it can't hold
+ *    :8000 or respawn after exit. Persistent mode stays available via
+ *    `bash scripts/backend.sh start`.
  */
 
 import { spawn } from 'node:child_process';
@@ -108,6 +116,7 @@ const UI = {
   color: MAGENTA,
 };
 
+
 const servers = [BRAIN, UI];
 const children = [];
 
@@ -176,7 +185,7 @@ function onExit(child, server) {
 
 function startServer(server) {
   const child = spawn(server.cmd, server.args, {
-    cwd: ROOT,
+    cwd: server.cwd || ROOT,
     // Only force colors when the terminal can render them (legacy cmd.exe cannot).
     env: USE_COLORS ? { ...process.env, FORCE_COLOR: '1' } : process.env,
     stdio: ['ignore', 'inherit', 'inherit'], // keep output visible in terminal
@@ -295,6 +304,32 @@ function distInfo() {
   }
 }
 
+// ── Persistent-agent handover ───────────────────────────────────────────────
+// The brain may be running as the launchd agent `com.aariya.backend`
+// (scripts/backend.sh start, KeepAlive=true). If left loaded it would hold
+// :8000, our child uvicorn would die on "address in use", and — worse — any
+// port-based kill would make launchd respawn it. So dev owns the brain: boot
+// the agent out on startup and wait for the port to free before spawning.
+const AGENT_LABEL = 'com.aariya.backend';
+
+async function waitPortFree(port, timeoutMs = 15000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!(await portOpen(port))) return true;
+    await sleep(200);
+  }
+  return false;
+}
+
+async function stopLaunchdBrain() {
+  if (process.platform !== 'darwin' || process.env.AARIYA_NO_LAUNCHD === '1') return true;
+  // bootout is async — launchd de-registers + SIGTERMs the agent, which then
+  // drains its socket. Poll until :8000 is actually free so we never spawn a
+  // child that crashes on "address already in use".
+  await run(['launchctl', 'bootout', `gui/${process.getuid()}/${AGENT_LABEL}`]);
+  return waitPortFree(BRAIN.port);
+}
+
 // ── Leftover-process cleanup (--clean) ──────────────────────────────────────
 function run(args) {
   return new Promise((resolve) => {
@@ -376,18 +411,19 @@ async function waitForReady() {
     const [brainUp, uiUp] = await Promise.all([
       portOpen(BRAIN.port),
       portOpen(UI.port),
+      
     ]);
     if (brainUp && uiUp && !shuttingDown) {
-      console.log(`${GREEN}✅ Both servers are ready!${RESET}`);
+      console.log(`${GREEN}✅ All servers are ready!${RESET}`);
       console.log(`${GREEN}   → UI:      http://localhost:${UI.port}${RESET}`);
       console.log(`${GREEN}   → Brain:   http://localhost:${BRAIN.port}${RESET}`);
-      return;
+            return;
     }
     // Tell the user which server(s) are still booting instead of staying silent.
     const waiting = [];
     if (!brainUp) waiting.push(`${BRAIN.color}${BRAIN.short}${RESET} on :${BRAIN.port}`);
     if (!uiUp) waiting.push(`${UI.color}${UI.short}${RESET} on :${UI.port}`);
-    const line = `⏳ Waiting for ${waiting.join(' and ')}…`;
+        const line = `⏳ Waiting for ${waiting.join(' and ')}…`;
     const now = Date.now();
     if (line !== lastLine) {
       console.log(line);
@@ -410,6 +446,11 @@ async function waitForReady() {
 // ── Main ────────────────────────────────────────────────────────────────────
 async function main() {
   banner();
+
+  // Dev owns the brain: boot the persistent launchd agent out so our uvicorn
+  // child binds :8000 — otherwise the agent holds the port and stays alive
+  // (and pegging the CPU) after this script exits.
+  await stopLaunchdBrain();
 
   if (CLEAN) {
     console.log('🧹 Cleaning leftover dev processes…');

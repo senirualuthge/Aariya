@@ -58,7 +58,7 @@ def test_plan_llm_hierarchical_decomposition(monkeypatch):
     assert steps[1]["parallel"] is True
     assert steps[1]["subgoals"][0] == {"task": "web_search", "parallel": True}
     # The LLM was actually asked for hierarchical decomposition.
-    assert "subgoals" in fake.last_prompt
+    assert "subgoals" in fake.last_prompt  # type: ignore
 
 
 def test_plan_llm_fenced_json(monkeypatch):
@@ -130,7 +130,7 @@ def test_plan_accepts_dict_goal(monkeypatch):
     fake = _FakeLLM('{"steps": [{"task": "a"}, {"task": "b"}]}')
     monkeypatch.setattr(planner, "_get_llm", lambda: fake)
 
-    result = planner.plan({"description": "scale the service", "id": 1})
+    result = planner.plan({"description": "scale the service", "id": 1})  # type: ignore
     assert result["goal"] == "scale the service"
 
 

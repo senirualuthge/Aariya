@@ -107,8 +107,8 @@ async def agent_registry_ws(websocket: WebSocket):
     async def send_update(payload: str):
         try:
             await websocket.send_text(payload)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("[AgentsRouter] broadcast send failed: %s", exc)
 
     watcher.broadcaster.register(send_update)
 

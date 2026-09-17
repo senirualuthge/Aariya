@@ -33,15 +33,72 @@ class MultiWorldReasoning:
         
     def evaluate_in_world(self, world_name: str, query: str) -> Any:
         """
-        Evaluate a query within the context of a specific world.
+        Evaluate a query against the world's REAL facts:
+          * "key"                → the fact's value (or None when absent)
+          * "key = value" /
+            "key == value"       → True/False comparison
+        Matching is case/punctuation-insensitive; a query that matches no
+        fact key returns None (callers decide what 'unknown' means).
         """
         world = self.worlds.get(world_name)
         if not world:
             return None
-            
-        # Placeholder for query evaluation logic
-        # Returns True/False/Probability based on world facts
-        return world["facts"].get(query, "unknown")
+
+        facts = world["facts"]
+        q = " ".join((query or "").strip().split())
+        if not q:
+            return None
+
+        # key = value / key == value comparisons
+        for op in ("==", "="):
+            if op in q:
+                left, _, right = q.partition(op)
+                value = self._lookup_fact(facts, left.strip())
+                if value is None:
+                    return None
+                target = right.strip().strip("'\"")
+                return self._loose_eq(value, target)
+
+        # Bare-key lookup: exact, then normalized containment both ways.
+        hit = self._lookup_fact(facts, q)
+        return hit if hit is not None else None
+
+    @staticmethod
+    def _normalize(text: Any) -> str:
+        text = str(text).lower()
+        # Punctuation collapses to spaces so "user's-name" ~ "user s name".
+        return "".join(ch if ch.isalnum() or ch.isspace() else " "
+                       for ch in text)
+
+    @classmethod
+    def _lookup_fact(cls, facts: Dict[str, Any], key: str):
+        """Exact → normalized-equal → substring containment fact lookup."""
+        if key in facts:
+            return facts[key]
+        norm = cls._normalize(key)
+        for k, v in facts.items():
+            if cls._normalize(k) == norm:
+                return v
+        for k, v in facts.items():
+            nk = cls._normalize(k)
+            if norm and (norm in nk or nk in norm):
+                return v
+        return None
+
+    @staticmethod
+    def _loose_eq(a: Any, b: Any) -> bool:
+        """Real equality that tolerates case/type noise ('True' vs true)."""
+        sa, sb = str(a).strip().lower(), str(b).strip().lower()
+        bools = {"true": True, "1": True, "false": False, "0": False}
+        if sa in bools and sb in bools:
+            return bools[sa] is bools[sb]
+        try:
+            return abs(float(sa) - float(sb)) < 1e-9
+        except ValueError:
+            pass
+        na = MultiWorldReasoning._normalize(a)
+        nb = MultiWorldReasoning._normalize(b)
+        return na == nb
 
     def world_distance(self, w1_name: str, w2_name: str) -> float:
         """

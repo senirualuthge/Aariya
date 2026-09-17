@@ -35,6 +35,14 @@ class ClientBrain extends ChangeNotifier {
   double _trustEstimate = 0.5;
   double get trustEstimate => _trustEstimate;
 
+  // ── Server-synced state ──────────────────────────────────────────────────
+  double _serverTrust = 0.5;
+  double get serverTrust => _serverTrust;
+  String _serverContradiction = '0.0';
+  String get serverContradiction => _serverContradiction;
+  String _serverLanguage = 'en';
+  String get serverLanguage => _serverLanguage;
+
   // ─── Short-term cache (local memory) ─────────────────────────────────────
   final List<Map<String, String>> _recentMessages = [];
   List<Map<String, String>> get recentMessages =>
@@ -128,6 +136,21 @@ class ClientBrain extends ChangeNotifier {
   /// Called when AI finishes speaking.
   void onSpeakingEnd() {
     _transition(ConversationState.idle);
+  }
+
+  /// Called when a brain.response arrives with trust/contradiction metadata.
+  void onServerTrustUpdate(double trust, {String contradiction = '0.0', String language = 'en'}) {
+    _serverTrust = trust;
+    _trustEstimate = trust;  // Use server trust as authoritative
+    _serverContradiction = contradiction;
+    _serverLanguage = language;
+    notifyListeners();
+  }
+
+  /// Called when a killswitch.update frame arrives from the server.
+  void onKillSwitchUpdate(Map<String, dynamic> flags) {
+    // Expose flags to UI so it can disable features
+    notifyListeners();
   }
 
   /// Called on WebSocket disconnect / error — enter degraded mode.

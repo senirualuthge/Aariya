@@ -54,17 +54,32 @@ class SignalBus:
 # Global singleton
 bus = SignalBus()
 
-async def emit_test_signals():
-    """Fires a burst of deterministic startup signals to populate the dashboard visually"""
-    await bus.emit_signal(
-        signal_type="qos", 
-        severity="medium", 
-        source="server.main.SignalBus",
-        payload={"title": "Dashboard Connected", "description": "Admin UI successfully subscribed to unified observability."}
-    )
-    await bus.emit_signal(
-        signal_type="telemetry", 
-        severity="info", 
-        source="core.AariyaBrain",
-        payload={"title": "Models Loaded", "description": "Tensor engines loaded in 1.42s."}
-    )
+
+async def emit_real_event(source: str, severity: str, title: str,
+                         payload: Optional[Dict[str, Any]] = None) -> None:
+    """
+    Push a REAL event into the dashboard Event Log (no synthetic data).
+
+    Shared by every background system (autonomy daemon, evolution loop) that
+    needs to surface a genuine action to the dashboard's Event Log without
+    reaching into the bus internals. Best-effort: a missing bus / dead socket
+    never breaks the caller's tick.
+
+    Args:
+        source:   event source tag — becomes the log chip (e.g. "DAEMON",
+                  "PLANNER", "LEARNING", "MODEL", "EVOLUTION", "BRAIN").
+        severity: "info" | "warn" | "critical" (frontend colors by this).
+        title:    human-readable event text shown in the log.
+        payload:  optional extra fields (surfaced in the signal object).
+    """
+    try:
+        await bus.emit_signal(
+            "telemetry",
+            severity,
+            source,
+            {"title": title, **(payload or {})},
+        )
+    except Exception as exc:  # pragma: no cover — best-effort by design
+        logging.getLogger("Aariya.SignalBus").debug(
+            "event log emission skipped: %s", exc
+        )

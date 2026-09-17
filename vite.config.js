@@ -1,10 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { getGevPlugins } from './vite.gev.config.js'
+import { resolve } from 'path'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const gevConfig = getGevPlugins(mode);
+  return {
   base: './',
-  plugins: [react()],
+  plugins: [react(), ...gevConfig.plugins],
   // Only VITE_-prefixed vars reach the renderer's import.meta.env by default.
   // Adding the BUILD_WARN_ prefix exposes BUILD_WARN_MAX_AGE_HOURS (set in the
   // shell when starting the dev server, or in a .env file) to client code in
@@ -15,7 +19,11 @@ export default defineConfig({
   envPrefix: ['VITE_', 'BUILD_WARN_'],
   build: {
     rollupOptions: {
-      output: {
+      input: {
+          main: resolve(__dirname, 'index.html'),
+          gev: resolve(__dirname, 'src/gev/index.html')
+        },
+        output: {
         // Split the two giant vendor libraries (TensorFlow + three.js, together
         // ~1.5 MB min) out of the app chunk so they load in parallel and cache
         // independently, and so React stays in its own cached chunk. The heavy
@@ -44,6 +52,9 @@ export default defineConfig({
     // legitimately exceed the default 500 kB threshold — that's the point of
     // splitting them out. Warn only at a realistic size; keep it in sync with
     // CHUNK_WARN_KB in scripts/dev.mjs (which feeds the GUI warnings banner).
-    chunkSizeWarningLimit: 1200,
+    chunkSizeWarningLimit: 1500,
   },
+  server: gevConfig.server,
+  define: gevConfig.define
+};
 })

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { apiBase } from '../../utils/apiHost';
 
 // ── Palette / helpers ──────────────────────────────────────────────────────────
 const SEV = {
@@ -184,13 +185,11 @@ export default function CveScannerPanel() {
   const [lastRun, setLastRun]   = useState(null);
   const [ignored, setIgnored]   = useState(new Set());
 
-  const host = window.location.hostname;
-
   const runScan = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const url = `http://${host}:8000/api/security/scan${force ? '?force=true' : ''}`;
-      const res = await fetch(url);
+      const url = `${apiBase()}/api/security/scan${force ? '?force=true' : ''}`;
+      const res = await fetch(url, { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         setScan(data);
@@ -201,15 +200,15 @@ export default function CveScannerPanel() {
     } finally {
       setLoading(false);
     }
-  }, [host]);
+  }, []);
 
   // Load cached result on mount
   useEffect(() => {
-    fetch(`http://${host}:8000/api/security/last-scan`)
+    fetch(`${apiBase()}/api/security/last-scan`)
       .then(r => r.ok ? r.json() : null)
       .then(d => d && !d.message ? setScan(d) : runScan())
       .catch(() => runScan());
-  }, [host, runScan]);
+  }, [runScan]);
 
   // Auto-refresh every 2 min
   useEffect(() => {

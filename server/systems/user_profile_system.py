@@ -1,11 +1,19 @@
 """
 User Profile System - Social QoS
 Tracks communicative style and topic preferences to enable mirroring and better alignment.
+
+Profiles are PERSISTED to SQLite (data/user_profiles.db) with a write-through
+in-memory cache, so learned style survives restarts — no reset-to-zero data loss.
 """
 
+import json
+import os
+import sqlite3
 import time
 from typing import Dict, List, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
+
+_DB_PATH = os.path.join("data", "user_profiles.db")
 
 @dataclass
 class UserStyleProfile:
@@ -17,9 +25,50 @@ class UserStyleProfile:
     last_updated: float = field(default_factory=time.time)
 
 class UserProfileSystem:
-    def __init__(self):
-        # In-memory storage for now, would be Redis in production
+    def __init__(self, db_path: str = _DB_PATH):
+        self.db_path = db_path
         self.profiles: Dict[str, UserStyleProfile] = {}
+        self._init_db()
+        self._load_all()
+
+    # ── SQLite persistence ────────────────────────────────────────────────────
+
+    def _init_db(self):
+        os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_style_profiles (
+                    user_id TEXT PRIMARY KEY,
+                    payload   TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            """)
+
+    def _load_all(self):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                rows = conn.execute(
+                    "SELECT user_id, payload FROM user_style_profiles").fetchall()
+            for user_id, blob in rows:
+                try:
+                    data = json.loads(blob)
+                    self.profiles[user_id] = UserStyleProfile(**data)
+                except (json.JSONDecodeError, TypeError) as exc:
+                    print(f"[UserProfile] corrupt row for {user_id}: {exc}")
+        except sqlite3.Error as exc:
+            print(f"[UserProfile] load failed: {exc}")
+
+    def _persist(self, profile: UserStyleProfile):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    "INSERT INTO user_style_profiles (user_id, payload, updated_at) "
+                    "VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+                    "payload=excluded.payload, updated_at=excluded.updated_at",
+                    (profile.user_id, json.dumps(asdict(profile)),
+                     profile.last_updated))
+        except sqlite3.Error as exc:
+            print(f"[UserProfile] persist failed: {exc}")
 
     def get_profile(self, user_id: str) -> UserStyleProfile:
         if user_id not in self.profiles:
@@ -61,6 +110,7 @@ class UserProfileSystem:
 
         profile.interaction_count += 1
         profile.last_updated = time.time()
+        self._persist(profile)
 
     def get_style_directives(self, user_id: str) -> str:
         """

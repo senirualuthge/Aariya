@@ -8,11 +8,14 @@
 // Pure helpers (intent detection, reply formatting) are kept separate from the
 // fetch glue so they're unit-testable with `node --test`.
 
-const BRAIN_PORT = 8000;
+function _apiBase() {
+  return brainBaseUrl();
+}
+
+import { apiBase } from '../utils/apiHost.js';
 
 function brainBaseUrl() {
-  const host = typeof window !== "undefined" ? window.location?.hostname || "localhost" : "localhost";
-  return `http://${host}:${BRAIN_PORT}`;
+  return apiBase();
 }
 
 // Phrases that mean "tell me how you've been running" → runtime vault
@@ -170,7 +173,7 @@ function formatEntry(e) {
  */
 export function formatRuntimeReply(query, { ok, latest = [], hits = [] } = {}) {
   if (ok === false) {
-    return "I couldn't reach my runtime vault right now — the brain server on :8000 isn't responding. Try again once it's up. 🤖";
+    return `I couldn't reach my runtime vault right now — the brain server at ${_apiBase()} isn't responding. Try again once it's up. 🤖`;
   }
   const entries = mergeVaultEntries(latest, hits);
   if (entries.length === 0) {
@@ -196,7 +199,7 @@ export function formatRuntimeReply(query, { ok, latest = [], hits = [] } = {}) {
  */
 export function formatDeveloperReply(query, { ok, hits = [] } = {}) {
   if (ok === false) {
-    return "I couldn't reach my developer vault right now — the brain server on :8000 isn't responding. Try again once it's up. 🤖";
+    return `I couldn't reach my developer vault right now — the brain server at ${_apiBase()} isn't responding. Try again once it's up. 🤖`;
   }
   if (hits.length === 0) {
     return "I didn't find matching notes in my developer vault for that. Try asking about my architecture, RAG pipeline or agents. 📚";

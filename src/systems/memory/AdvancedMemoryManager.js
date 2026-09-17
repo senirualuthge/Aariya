@@ -116,7 +116,7 @@ export class AdvancedMemoryManager {
     }
 
     /**
-     * Retrieves relevant context based on a query string (Simulation of Vector Search).
+     * Retrieves relevant context: real keyword scoring over the STM buffer.
      * @param {string} query - The user's input to find related memories for.
      */
     retrieveContext(query) {

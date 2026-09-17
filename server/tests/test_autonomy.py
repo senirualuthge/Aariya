@@ -1,3 +1,5 @@
+import json
+
 """
 Autonomy layer smoke test — verifies Aariya's proactive/autonomous loop.
 
@@ -145,8 +147,8 @@ async def _run_smoke_checks() -> list:
           len(actions) >= 1 and all(a["status"] in ("completed", "failed") for a in actions),
           str([(a["action_type"], a["status"]) for a in actions]))
     check("plan no longer awaiting approval",
-          store.get_plan(plan_id)["status"] in ("completed", "failed"),
-          store.get_plan(plan_id)["status"])
+          store.get_plan(plan_id)["status"] in ("completed", "failed"),  # type: ignore
+          store.get_plan(plan_id)["status"])  # type: ignore
 
     # 6. Inner world payload
     world = daemon.get_inner_world()
@@ -230,18 +232,25 @@ async def _reject_plan_flow() -> None:
     received = []
     daemon = await _new_daemon(received)
     store = daemon.store
+    sock = _FakeLogSocket()
     goal, plan_id = await _seed_awaiting_plan(daemon)
 
     # Reject → plan rejected, goal suspended, state broadcast
-    result = await daemon.reject_plan(plan_id)
-    assert result["ok"] is True and result["status"] == "rejected"
-    assert store.get_plan(plan_id)["status"] == "rejected"
-    assert store.get_goal(goal["id"])["status"] == "suspended"
+    await _collect_daemon_events(daemon, sock, daemon.reject_plan, plan_id)
+    assert store.get_plan(plan_id)["status"] == "rejected"  # type: ignore
+    assert store.get_goal(goal["id"])["status"] == "suspended"  # type: ignore
     assert any(m.get("type") == "autonomy.state" for m in received)
+    # The rejection produced a REAL PLANNER event in the log.
+    planner_sigs = [s for s in _signal_events(sock) if s["source"]["system"] == "PLANNER"]
+    assert len(planner_sigs) == 1
+    assert "rejected" in planner_sigs[0]["payload"]["title"].lower()
+    assert planner_sigs[0]["payload"]["plan_id"] == plan_id
 
     # A rejected plan can no longer be approved
+    sock.frames.clear()
     res2 = await daemon.approve_plan(plan_id)
     assert res2["ok"] is False
+    assert _signal_events(sock) == []  # nothing fabricated for a failed approve
 
     # Rejecting a missing plan fails gracefully
     res3 = await daemon.reject_plan("does_not_exist")
@@ -402,8 +411,8 @@ async def _goal_review_autoexecute_flow() -> None:
     await daemon._goal_review_tick()
 
     plan = store.get_plan(plan_id)
-    assert plan["status"] in ("completed", "failed")
-    assert store.get_goal(goal_id)["status"] in ("completed", "failed")
+    assert plan["status"] in ("completed", "failed")  # type: ignore
+    assert store.get_goal(goal_id)["status"] in ("completed", "failed")  # type: ignore
     # The run was audited
     actions = store.list_actions(plan_id=plan_id, limit=5)
     assert len(actions) >= 1
@@ -411,3 +420,197 @@ async def _goal_review_autoexecute_flow() -> None:
 
 def test_goal_review_auto_executes_proposed_plan(autonomy_db, offline_autonomy_stack):
     asyncio.run(_goal_review_autoexecute_flow())
+
+
+# ── Real Event Log feed (no synthetic events) ────────────────────────────────
+
+class _FakeLogSocket:
+    """Captures frames pushed by admin_signal_bus.emit_signal."""
+
+    def __init__(self):
+        self.frames = []
+
+    async def send_json(self, obj):
+        self.frames.append(obj)
+
+
+async def _collect_daemon_events(daemon, sock, fn, *args):
+    """Run an async daemon action while a fake log socket is attached."""
+    from server.systems.signal_bus import bus as admin_signal_bus
+    admin_signal_bus._connected_sockets.append(sock)
+    try:
+        await fn(*args)
+    finally:
+        if sock in admin_signal_bus._connected_sockets:
+            admin_signal_bus._connected_sockets.remove(sock)
+
+
+def _signal_events(sock):
+    """Extract the emitted signal frames (skip non-signal frames if any)."""
+    return [f["signal"] for f in sock.frames if f.get("type") == "signal"]
+
+
+async def _daemon_event_log_flow() -> None:
+    received = []
+    daemon = await _new_daemon(received)
+    sock = _FakeLogSocket()
+
+    # No action yet → nothing emitted (nothing fabricated at boot).
+    assert sock.frames == []
+
+    # 1. Proactive initiative → DAEMON signal with real trigger + message.
+    daemon._latest_snapshot = {
+        "valence": -0.55, "arousal": 0.3, "trust": 0.6, "attachment": 0.2,
+    }
+    daemon._history = [
+        {"valence": -0.1, "arousal": 0.2, "trust": 0.6, "ts": time.time() - 180},
+        {"valence": -0.3, "arousal": 0.25, "trust": 0.6, "ts": time.time() - 120},
+        {"valence": -0.55, "arousal": 0.3, "trust": 0.6, "ts": time.time() - 60},
+    ]
+    await _collect_daemon_events(daemon, sock, daemon._initiative_tick)
+    signals = _signal_events(sock)
+    daemon_sigs = [s for s in signals if s["source"]["system"] == "DAEMON"]
+    assert len(daemon_sigs) == 1
+    sig = daemon_sigs[0]
+    assert sig["severity"] == "info"
+    assert sig["timestamp"] > 0
+    assert sig["payload"]["trigger"] == "distress"
+    assert "Proactive (distress)" in sig["payload"]["title"]
+    assert sig["payload"]["urgency"]
+
+    # Steady re-fire of the same tick (guard cooldown) → no new signals.
+    sock.frames.clear()
+    await _collect_daemon_events(daemon, sock, daemon._initiative_tick)
+    assert _signal_events(sock) == []
+
+    # 2. Goal review → PLANNER signal for the new goal + approval request.
+    daemon._last_user_message = time.time() - 3600  # reset silence for a fresh pass
+    sock.frames.clear()
+    await _collect_daemon_events(daemon, sock, daemon._goal_review_tick)
+    signals = _signal_events(sock)
+    planner_sigs = [s for s in signals if s["source"]["system"] == "PLANNER"]
+    titles = [s["payload"].get("title", "") for s in planner_sigs]
+    assert any("New goal" in t for t in titles), titles
+    assert any("awaits approval" in t for t in titles), titles
+    # The approval signal carries real plan metadata.
+    approval = next(s for s in planner_sigs if "awaits approval" in s["payload"]["title"])
+    assert approval["severity"] == "warn"
+    assert approval["payload"]["risk_level"] in ("low", "medium", "high")
+    assert approval["payload"]["goal_type"]
+
+    # 3. Learning cycle completion → LEARNING signal (when research succeeded).
+    #    The cycle runs in a background task, so keep the socket attached until
+    #    the task finishes before detaching it (or the emit is dropped).
+    async def _fake_run_cycle(**kwargs):
+        return {"processed": 2, "gaps_left": 1}
+
+    daemon.learner.run_cycle = _fake_run_cycle  # type: ignore[method-assign]
+    from server.systems.signal_bus import bus as admin_signal_bus
+    sock.frames.clear()
+    admin_signal_bus._connected_sockets.append(sock)
+    try:
+        await daemon._learning_tick()
+        if daemon._learning_task:  # learning runs in its own task — wait for it
+            await daemon._learning_task
+    finally:
+        if sock in admin_signal_bus._connected_sockets:
+            admin_signal_bus._connected_sockets.remove(sock)
+    signals = _signal_events(sock)
+    learn_sigs = [s for s in signals if s["source"]["system"] == "LEARNING"]
+    assert len(learn_sigs) == 1
+    assert "Researched 2 topic(s)" in learn_sigs[0]["payload"]["title"]
+    assert learn_sigs[0]["payload"]["processed"] == 2
+    assert learn_sigs[0]["payload"]["gaps_left"] == 1
+
+
+def test_daemon_emits_real_events_to_log(autonomy_db, offline_autonomy_stack):
+    asyncio.run(_daemon_event_log_flow())
+
+
+async def _daemon_event_helper_flow() -> None:
+    """The helper is best-effort: never raises with no bus / dead sockets."""
+    daemon = await _new_daemon([])
+
+    # No connected sockets → emit is a cheap no-op, no crash.
+    from server.systems.signal_bus import bus as admin_signal_bus
+    admin_signal_bus._connected_sockets.clear()
+    await daemon._emit_real_event("MODEL", "info", "Retrained", {"id": 7})
+    # A bad payload shape still can't crash the daemon tick.
+    await daemon._emit_real_event("MODEL", "info", None, None)  # type: ignore[arg-type]
+
+    # With a live socket, the frame arrives shaped for the frontend.
+    sock = _FakeLogSocket()
+    admin_signal_bus._connected_sockets.append(sock)
+    try:
+        await daemon._emit_real_event(
+            "MODEL", "info", "Emotion predictor retrained (through snapshot 42)",
+            {"snapshot_id": 42, "reason": "enough new snapshots"},
+        )
+        sig = _signal_events(sock)[0]
+        assert sig["source"]["system"] == "MODEL"
+        assert sig["severity"] == "info"
+        assert sig["payload"]["snapshot_id"] == 42
+        assert "retrained" in sig["payload"]["title"].lower()
+    finally:
+        if sock in admin_signal_bus._connected_sockets:
+            admin_signal_bus._connected_sockets.remove(sock)
+
+
+def test_daemon_event_helper_is_best_effort(autonomy_db, offline_autonomy_stack):
+    asyncio.run(_daemon_event_helper_flow())
+
+
+# ── plan.ack carries plan_id (live strip contract) ───────────────────────────
+
+async def _control_command_ack_flow() -> None:
+    """The /ws/dashboard/stream control handler must echo plan_id in plan.ack
+    so the frontend's live plan-status chip can update after approve/reject.
+
+    Uses the pure build_control_ack helper (server.autonomy.daemon) rather than
+    importing server.main, which requires aiortc (missing in this venv) and
+    would fail collection for the whole file.
+    """
+    from server.autonomy.daemon import (
+        AutonomyDaemon,
+        build_control_ack,
+        set_daemon as _set_daemon,
+    )
+
+    async def _broadcast(_msg):
+        pass
+
+    daemon = AutonomyDaemon(broadcast=_broadcast)
+    _set_daemon(daemon)
+    goal, plan_id = await _seed_awaiting_plan(daemon)
+
+    # Approve via the real daemon → ack (built by the pure helper) carries plan_id.
+    result = await daemon.approve_plan(plan_id)
+    ack = build_control_ack("approve_plan", plan_id, result)
+    assert ack["type"] == "plan.ack"
+    assert ack["plan_id"] == plan_id
+    assert ack["ok"] is True
+    assert ack["status"] in ("completed", "failed")
+
+    # plan_id is echoed AFTER the result spread — a result containing plan_id
+    # can never override the echoed one.
+    ack_override = build_control_ack("approve_plan", "real_id", {"ok": True, "plan_id": "spoofed"})
+    assert ack_override["plan_id"] == "real_id"
+
+    # Reject a fresh plan → ack carries plan_id + status rejected.
+    goal2, plan2 = await _seed_awaiting_plan(daemon)
+    result2 = await daemon.reject_plan(plan2)
+    ack2 = build_control_ack("reject_plan", plan2, result2)
+    assert ack2["plan_id"] == plan2
+    assert ack2["ok"] is True
+    assert ack2["status"] == "rejected"
+
+    # autonomy_enabled → autonomy.ack (never a plan frame), unknown → plan.ack err.
+    en = build_control_ack("autonomy_enabled", "", {"ok": True, "enabled": True})
+    assert en["type"] == "autonomy.ack"
+    assert "plan_id" not in en
+    unknown = build_control_ack("nope", "", {})
+    assert unknown["type"] == "plan.ack" and unknown["ok"] is False
+
+
+def test_control_command_ack_carries_plan_id(autonomy_db, offline_autonomy_stack):
+    asyncio.run(_control_command_ack_flow())

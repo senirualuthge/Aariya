@@ -90,11 +90,11 @@ class _PythonFileHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         if not event.is_directory and str(event.src_path).endswith(".py"):
-            self._debounced_trigger(event.src_path)
+            self._debounced_trigger(str(event.src_path))
 
     def on_created(self, event):
         if not event.is_directory and str(event.src_path).endswith(".py"):
-            self._debounced_trigger(event.src_path)
+            self._debounced_trigger(str(event.src_path))
 
 
 # ── Main watcher ──────────────────────────────────────────────────────────────

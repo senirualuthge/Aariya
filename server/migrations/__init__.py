@@ -39,13 +39,18 @@ class MigrationRunner:
         """Get list of migrations that haven't been applied yet."""
         applied = set(self.get_applied_migrations())
         all_migrations = []
-        
-        # Find all .sql files in migrations directory
+
+        # Find all .sql files in migrations directory.
+        # *_rollback.sql files are rollback scripts, NOT migrations — they
+        # were previously applied as if they were migrations (dropping the
+        # tables migration 001 had just created).
         for file_path in sorted(self.migrations_dir.glob("*.sql")):
             migration_name = file_path.stem
+            if migration_name.endswith("_rollback"):
+                continue
             if migration_name not in applied:
                 all_migrations.append((migration_name, file_path))
-        
+
         return all_migrations
     
     def apply_migration(self, migration_name: str, file_path: Path) -> bool:
@@ -53,17 +58,47 @@ class MigrationRunner:
         try:
             print(f"[MIGRATION] Applying {migration_name}...")
             
-            # Read migration SQL
+            # Read migration SQL.
+            #
+            # Comments must be stripped BEFORE splitting on ';' — a comment
+            # containing a semicolon would otherwise split mid-comment and
+            # produce garbage statements. The "-- TOLERANT" prefix is swapped
+            # for a sentinel first so it survives this stripping: it marks
+            # best-effort statements (e.g. ADD COLUMN on a legacy table that
+            # already has the column) whose failure must not abort.
+            _TOL = "\x01TOLERANT\x01"
             with open(file_path, 'r', encoding='utf-8') as f:
-                sql = f.read()
-            
-            # Split into individual statements (simple split on semicolon)
-            statements = [s.strip() for s in sql.split(';') if s.strip()]
-            
-            # Execute each statement
-            for statement in statements:
-                if statement:
-                    self.db.execute_update(statement)
+                raw_sql = f.read().replace("-- TOLERANT", _TOL)
+            code_lines = []
+            for line in raw_sql.splitlines():
+                stripped = line.strip()
+                if stripped.startswith(_TOL):
+                    code_lines.append(_TOL + stripped[len(_TOL):].strip())
+                elif not stripped or stripped.startswith("--"):
+                    continue
+                else:
+                    code_lines.append(line)
+
+            # Execute each statement — a failed statement must fail the whole
+            # migration, otherwise it gets recorded as applied while its
+            # tables are missing (the original "no such table" bug).
+            for raw_statement in "\n".join(code_lines).split(';'):
+                if not raw_statement.strip():
+                    continue
+                statement = raw_statement.strip()
+                tolerant = statement.startswith(_TOL)
+                if tolerant:
+                    statement = statement.replace(_TOL, "", 1).strip()
+                if not statement:
+                    continue
+
+                ok = self.db.execute_update(statement)
+                if not ok and not tolerant:
+                    raise RuntimeError(
+                        f"Statement failed in {migration_name}: "
+                        f"{statement[:80]}...")
+                if not ok:
+                    print(f"[TOLERANT] Skipped failing statement in {migration_name}")
             
             # Record migration as applied
             self.db.execute_update(

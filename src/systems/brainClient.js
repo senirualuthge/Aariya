@@ -49,6 +49,9 @@ function handleServerMessage(data) {
       if (data.meta && data.meta.rag) {
         eventBus.publish(BRAIN_RAG_EVENT, data.meta.rag);
       }
+      if (data.meta && data.meta.gev_intent) {
+        useStore.getState().setGevPanel(true, data.meta.gev_focus || null);
+      }
       break;
     }
     case 'inner_thought':
@@ -62,17 +65,47 @@ function handleServerMessage(data) {
   }
 }
 
+// How long send() waits for the WebSocket to come up (VoiceSystem registers
+// wsSender in the socket's onopen). Submitting before the socket opens used to
+// reject instantly, silently falling back to the browser-side generator and
+// never reaching the brain — so allow a short grace window first.
+const CONNECT_GRACE_MS = 4000;
+
+/**
+ * Resolves with the current wsSender, waiting (bounded) for the socket to
+ * come up if it isn't registered yet. Rejects when no sender appears in time.
+ */
+function waitForSender(timeoutMs = CONNECT_GRACE_MS) {
+  return new Promise((resolve, reject) => {
+    const sender = useStore.getState().wsSender;
+    if (sender) return resolve(sender);
+
+    let unsub = () => {};
+    const timer = setTimeout(() => {
+      unsub();
+      reject(new Error('Brain connection not ready'));
+    }, timeoutMs);
+
+    // Poll the store — zustand subscribes fire on every state change, which is
+    // fine here since we only care about the sender slot becoming non-null.
+    unsub = useStore.subscribe((state) => {
+      if (state.wsSender) {
+        clearTimeout(timer);
+        unsub();
+        resolve(state.wsSender);
+      }
+    });
+  });
+}
+
 /**
  * Send a user message to the backend brain and await the reply.
  * @param {string} text       user message
  * @param {object} opts       { onChunk(streamedText, lastToken), timeoutMs }
  * @returns {Promise<{text, streamed, expression, thought}>}
  */
-function send(text, opts = {}) {
-  const sender = useStore.getState().wsSender;
-  if (!sender) {
-    return Promise.reject(new Error('Brain connection not ready'));
-  }
+async function send(text, opts = {}) {
+  const sender = await waitForSender();
   return new Promise((resolve, reject) => {
     const req = { resolve, reject, streamed: null, onChunk: opts.onChunk || null };
     req.timer = setTimeout(() => {

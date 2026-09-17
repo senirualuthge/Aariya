@@ -150,7 +150,7 @@ def _fetch_pulse_news(limit: int, category: Optional[str]) -> Optional[List[Dict
     try:
         params = {"limit": limit, "min_importance": 1}
         if category:
-            params["category"] = category
+            params["category"] = category  # type: ignore[assignment]
         resp = httpx.get(PULSE_API, params=params, timeout=2.5)
         if resp.status_code != 200:
             return None

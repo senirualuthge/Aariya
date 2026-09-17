@@ -3,7 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  flutter_tts
+  battery_plus
   flutter_webrtc
   permission_handler_windows
   record_windows

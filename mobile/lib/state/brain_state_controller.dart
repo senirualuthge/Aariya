@@ -14,6 +14,40 @@ class BrainStateController with ChangeNotifier {
   String activeMode = 'balanced';
   String emotion = 'neutral';
 
+  // ── Companion presence (parsed from synoptic on state.update frames) ───────
+  /// Raw synoptic dict from the server (trait_engine, transparency, health…).
+  Map<String, dynamic> synoptic = {};
+
+  /// Behavior mode (CALM / STEALTH / COMBAT) from trait_engine or behavior_mode.
+  String get behaviorMode {
+    final te = synoptic['trait_engine'];
+    if (te is Map && te['mode'] is String) return te['mode'] as String;
+    final bm = synoptic['behavior_mode'];
+    if (bm is Map && bm['mode'] is String) return bm['mode'] as String;
+    return '';
+  }
+
+  /// Active trait chips [{id, label, color}] from the trait engine bundle.
+  List<Map<String, dynamic>> get activeTraits {
+    final te = synoptic['trait_engine'];
+    if (te is Map && te['active_traits'] is List) {
+      return (te['active_traits'] as List)
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return const [];
+  }
+
+  /// Transparency satisfaction (0-1) from the transparency compute() result.
+  double get transparencySatisfaction {
+    final t = synoptic['transparency'];
+    if (t is Map && t['transparency_satisfaction'] is num) {
+      return ((t['transparency_satisfaction'] as num).toDouble()).clamp(0.0, 1.0);
+    }
+    return 0.5;
+  }
+
   // ── Transient UI flags ──────────────────────────────────────────────────────
   bool isThinking = false;
   bool isSpeaking = false;
@@ -27,6 +61,16 @@ class BrainStateController with ChangeNotifier {
 
   /// Last full AI response text (used by the voice overlay).
   String responseText = '';
+
+  // ── Kill-switch / feature flags (synced from server via WebSocket) ────────
+  Map<String, bool> killSwitchFlags = {};
+  double emotionCap = 0.8;
+
+  bool isKillSwitchEnabled(String flag) => killSwitchFlags[flag] ?? true;
+
+  // ── Multi-language (synced from server ASR detection) ──────────────────────
+  String ttsLanguage = 'en';
+  bool languageSwitched = false;
 
   // ── Derived ─────────────────────────────────────────────────────────────────
 
@@ -104,6 +148,12 @@ class BrainStateController with ChangeNotifier {
     final text = data['response_text'] as String? ?? data['text'] as String?;
     if (text != null && text.isNotEmpty) responseText = text;
 
+    // Companion presence: keep the raw synoptic so any surface (chat app bar,
+    // orb, future widgets) can read the REAL mode / active traits / health
+    // without its own connection.
+    final syn = data['synoptic'];
+    if (syn is Map) synoptic = Map<String, dynamic>.from(syn);
+
     notifyListeners();
   }
 
@@ -139,6 +189,20 @@ class BrainStateController with ChangeNotifier {
     isSpeaking = false;
     isListening = false;
     energy = idleEnergy;
+    notifyListeners();
+  }
+
+  // ── Kill-switch / feature-flag sync ────────────────────────────────────────
+
+  /// Applies a `killswitch.update` frame from the server.
+  /// Called by the chat controller when it receives the frame.
+  void applyKillSwitchUpdate(Map<String, dynamic> data) {
+    final flags = data['flags'];
+    if (flags is Map) {
+      killSwitchFlags = flags.map((k, v) => MapEntry(k.toString(), v == true));
+    }
+    final cap = data['emotion_cap'];
+    if (cap is num) emotionCap = cap.toDouble();
     notifyListeners();
   }
 }

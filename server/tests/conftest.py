@@ -35,3 +35,48 @@ def isolated_db(tmp_path, monkeypatch):
     monkeypatch.setattr(server_db, "DB_PATH", str(tmp_path / "brain_test.db"))
     server_db.init_db()
     return server_db
+
+
+def _tmp_postgres_sqlite(self, tmp_path):
+    import sqlite3
+    # Hermetic test store: force the SQLite fallback dialect. Without this, a
+    # developer machine running live Postgres (per .env) would silently bind
+    # the fixture to it — the exact mismatch that hid the pattern_memory bug.
+    self.use_fallback = True
+    self.pool = None
+    conn = sqlite3.connect(str(tmp_path / "analytics.db"), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    self.sqlite_conn = conn
+
+
+def _tmp_postgres_init(self):
+    """Replacement Postgres init: never connects, always uses the tmp store."""
+    # Called from __init__ when use_fallback is False; must force fallback.
+    _tmp_postgres_sqlite(self, self._pytest_tmp_path)
+
+
+@pytest.fixture()
+def fresh_postgres_store(tmp_path, monkeypatch):
+    """Point the PostgresManager singleton at a throwaway SQLite file and
+    reset dependent singletons (memory hierarchy) so they bind to it."""
+    import server.infrastructure.postgres_manager as pgm
+    import server.systems.memory_hierarchy as mh_mod
+
+    old_singleton = pgm._postgres_manager
+    old_mh = mh_mod._memory_hierarchy
+    # Patch the POSTGRES init path (not just the fallback): when a live
+    # Postgres is reachable, __init__ takes that path and would silently bind
+    # tests to the developer's real database. Both paths now land on the
+    # throwaway SQLite store.
+    pgm.PostgresManager._pytest_tmp_path = tmp_path
+    monkeypatch.setattr(pgm.PostgresManager, "_init_postgres_pool",
+                        lambda self: _tmp_postgres_init(self))
+    monkeypatch.setattr(pgm.PostgresManager, "_init_sqlite_fallback",
+                        lambda self: _tmp_postgres_sqlite(self, tmp_path))
+    pgm._postgres_manager = None
+    mh_mod._memory_hierarchy = None
+    yield
+    pgm._postgres_manager = old_singleton
+    mh_mod._memory_hierarchy = old_mh
+    if hasattr(pgm.PostgresManager, "_pytest_tmp_path"):
+        del pgm.PostgresManager._pytest_tmp_path

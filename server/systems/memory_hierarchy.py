@@ -11,8 +11,8 @@ Implements:
 Memory retrieval is trust-gated (depth limited by trust level).
 """
 
-from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from typing import Any, List, Dict, Optional
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
 from server.infrastructure.postgres_manager import get_postgres
@@ -211,7 +211,8 @@ class MemoryHierarchy:
         """, (user_id,))
         
         # Simple keyword matching (replace with semantic similarity in production)
-        count = sum(1 for mem in recent_memories if behavior_description.lower() in mem['summary'].lower())
+        count = sum(1 for mem in (recent_memories or [])
+                    if behavior_description.lower() in mem['summary'].lower())
         
         if count >= 3:
             # Pattern detected!
@@ -226,6 +227,130 @@ class MemoryHierarchy:
         """Clear short-term memory for ended session."""
         if session_id in self.short_term_buffer:
             del self.short_term_buffer[session_id]
+
+    # ── Consolidation + decay (AdvancedPrediction §Memory-Decay) ──────────────
+
+    @staticmethod
+    def _parse_ts(val):
+        """Epoch float or DATETIME string → epoch seconds.
+
+        SQLite's CURRENT_TIMESTAMP is UTC but returns naive strings; parsing
+        them as *local* time skewed every age by the machine's TZ offset.
+        Naive strings are therefore interpreted as UTC.
+        """
+        if isinstance(val, (int, float)):
+            return float(val)
+        if val is None:
+            return None
+        try:
+            dt = datetime.fromisoformat(str(val))
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+
+    def decay(self, days: float = 30.0, floor: float = 0.05) -> Dict[str, Any]:
+        """
+        Age-based importance decay (Ebbinghaus curve): episodic and pattern
+        memories lose importance the older they get, unless recently accessed.
+        Computed in Python for Postgres/SQLite portability. Returns counts.
+        """
+        result = {"episodic_decayed": 0, "patterns_decayed": 0}
+        half_life_secs = days * 86400.0
+
+        def _factor(ts) -> float:
+            age = max(0.0, (datetime.now().timestamp() - ts))
+            return 0.5 ** (age / half_life_secs)
+
+        for table, time_col in (("episodic_memory", "timestamp"), ("pattern_memory", "last_observed")):
+            rows = self.db.execute_query(f"SELECT id, {time_col} AS ts, importance FROM {table}" if table == "episodic_memory" else f"SELECT id, {time_col} AS ts, confidence FROM {table}")
+            for r in rows or []:
+                ts = self._parse_ts(r.get("ts"))
+                if ts is None:
+                    continue
+                factor = _factor(ts)
+                if factor >= 1.0:
+                    continue
+                # Floor computed here — GREATEST() is Postgres-only and fails
+                # on the SQLite fallback store.
+                if table == "episodic_memory":
+                    new_val = max(floor, float(r.get("importance") or 0.0) * factor)
+                    self.db.execute_update(
+                        "UPDATE episodic_memory SET importance = ? WHERE id = ?",
+                        (new_val, r["id"]))
+                else:
+                    new_val = max(floor, float(r.get("confidence") or 0.0) * factor)
+                    self.db.execute_update(
+                        "UPDATE pattern_memory SET confidence = ? WHERE id = ?",
+                        (new_val, r["id"]))
+                result[f"{'episodic_decayed' if table == 'episodic_memory' else 'patterns_decayed'}"] += 1
+        return result
+
+    def consolidate(self, min_occurrences: int = 3) -> Dict[str, Any]:
+        """
+        Merge near-duplicate episodic summaries (same emotional_context within a
+        12h rolling window) into a single higher-importance entry, deleting the
+        originals. Portable across Postgres/SQLite. Returns {merged, groups}.
+        """
+        rows = self.db.execute_query("""
+            SELECT id, emotional_context, importance, timestamp
+            FROM episodic_memory
+            WHERE emotional_context IS NOT NULL AND emotional_context != ''
+            ORDER BY timestamp DESC
+        """) or []
+        # Group by emotional_context + 12h window bucket.
+        buckets: Dict[Any, List[dict]] = {}
+        for r in rows:
+            ts = self._parse_ts(r.get("timestamp"))
+            if ts is None:
+                continue
+            bucket = int(ts) // 43200
+            key = (r["emotional_context"], bucket)
+            buckets.setdefault(key, []).append(r)
+
+        merged = 0
+        groups = 0
+        for key, group in buckets.items():
+            if len(group) < min_occurrences:
+                continue
+            groups += 1
+            newest = group[0]  # rows sorted DESC
+            old_ids = [r["id"] for r in group[1:]]
+            for oid in old_ids:
+                self.db.execute_update("DELETE FROM episodic_memory WHERE id = ?", (oid,))
+            merged += len(old_ids)
+            self.db.execute_update("""
+                UPDATE episodic_memory
+                SET importance = LEAST(1.0, importance + ?)
+                WHERE id = ?
+            """, (0.05 * len(old_ids), newest["id"]))
+        return {"merged": merged, "groups": groups}
+
+    def reinforce(self, user_id: str, n: int = 3) -> Dict[str, Any]:
+        """Boost importance of the most-recently relevant episodic memories for
+        a user (hippocampal re-access simulation)."""
+        rows = self.db.execute_query("""
+            SELECT id FROM episodic_memory
+            WHERE user_id = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """, (user_id, n))
+        for r in rows or []:
+            self.db.execute_update("""
+                UPDATE episodic_memory
+                SET importance = LEAST(1.0, importance + 0.02), timestamp = now()
+                WHERE id = ?
+            """, (r["id"],))
+        return {"reinforced": len(rows or [])}
+
+    def run_maintenance(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """One-shot housekeeping pass: decay → consolidate → reinforce."""
+        return {
+            "decay": self.decay(),
+            "consolidation": self.consolidate(),
+            "reinforcement": self.reinforce(user_id) if user_id else {},
+        }
 
 
 # Global instance

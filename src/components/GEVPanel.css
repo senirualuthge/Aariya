@@ -1,0 +1,122 @@
+.gev-panel {
+  background: rgba(18, 12, 16, 0.75) !important;
+  backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid rgba(255, 143, 163, 0.15) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 143, 163, 0.1) !important;
+  border-radius: 16px !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.gev-icon-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #ff8fa3;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gev-icon-btn:hover {
+  background: rgba(255, 143, 163, 0.2);
+  color: #fff;
+}
+
+/* --- HUD & Layout Styling --- */
+.gev-content-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+}
+
+.gev-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  opacity: 0.9;
+  mix-blend-mode: screen;
+}
+
+.gev-refreshing-state {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 143, 163, 0.8);
+  font-family: monospace;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  animation: pulse 1.5s infinite;
+}
+
+/* --- HUD Overlays --- */
+.hud-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Scanning Line */
+.scanning-line {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(to right, transparent, rgba(255, 143, 163, 0.8), transparent);
+  box-shadow: 0 0 10px rgba(255, 143, 163, 0.5);
+  animation: scan 4s linear infinite;
+}
+
+@keyframes scan {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Reticles */
+.reticle {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 143, 163, 0.5);
+}
+
+.reticle.top-left {
+  top: 10px;
+  left: 10px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.reticle.top-right {
+  top: 10px;
+  right: 10px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.reticle.bottom-left {
+  bottom: 10px;
+  left: 10px;
+  border-right: none;
+  border-top: none;
+}
+
+.reticle.bottom-right {
+  bottom: 10px;
+  right: 10px;
+  border-left: none;
+  border-top: none;
+}

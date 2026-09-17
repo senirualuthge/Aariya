@@ -65,15 +65,16 @@ class EpisodicMemory:
         if score < self.SIGNIFICANCE_THRESHOLD:
             return False
 
-        timestamp = int(time.time())
+        timestamp = time.time()
         doc_id = hashlib.md5(f"{self.user_id}{timestamp}{user_text[:30]}".encode()).hexdigest()
 
-        # Store the episode
-        self.collection.add(
+        # Store the episode (use upsert to avoid duplicate-ID warnings when
+        # the same text arrives within the same millisecond).
+        self.collection.upsert(
             ids=[doc_id],
             documents=[f"User: {user_text}\nAI: {ai_response}"],
             metadatas=[{
-                "timestamp": timestamp,
+                "timestamp": int(timestamp),
                 "valence": round(valence, 3),
                 "arousal": round(arousal, 3),
                 "trust_delta": round(trust_delta, 4),
@@ -104,8 +105,8 @@ class EpisodicMemory:
         )
 
         memories = []
-        for i, doc in enumerate(results["documents"][0]):
-            meta = results["metadatas"][0][i]
+        for i, doc in enumerate(results["documents"][0]):  # type: ignore[index]
+            meta = results["metadatas"][0][i]  # type: ignore[index]
             memories.append({
                 "text": doc,
                 "significance": meta.get("significance", 0),
@@ -137,16 +138,16 @@ class EpisodicMemory:
         )
 
         candidates = []
-        for i, doc in enumerate(results["documents"][0]):
-            meta = results["metadatas"][0][i]
+        for i, doc in enumerate(results["documents"][0]):  # type: ignore[index]
+            meta = results["metadatas"][0][i]  # type: ignore[index]
             # dist is often returned by chroma depending on settings, if not we assume distance 0
-            dist = results.get("distances", [[0]*n_results])[0][i]
+            dist = results.get("distances", [[0]*n_results])[0][i]  # type: ignore[index]
             # convert distance to similarity (cosine distance is [0, 2], sim = 1 - dist/2 or similar)
             # but usually hnsw:space cosine returns 1-similarity or similar.
             sim = 1.0 - dist 
 
             candidates.append({
-                "id": results["ids"][0][i],
+                "id": results["ids"][0][i],  # type: ignore[index]
                 "content": doc,
                 "metadata": meta,
                 "semantic_similarity": sim

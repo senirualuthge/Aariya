@@ -44,9 +44,9 @@ def test_web_search_returns_results(monkeypatch):
     payload = asyncio.run(web_search("hello world"))
 
     assert payload["query"] == "hello world"
-    # No keys configured in tests → provider resolves to mock, but the results
-    # (and the flag) still flow through so the frontend can decide what to show.
-    assert payload["provider"] == "mock"
+    # No keys configured → the keyless DuckDuckGo provider is the first the
+    # router will try; results flow through with their true provider label.
+    assert payload["provider"] == "duckduckgo"
     assert payload["results"] == SAMPLE_RESULTS
     assert fake.last_query == "hello world"
 
@@ -69,11 +69,11 @@ def test_web_search_clamps_num(monkeypatch):
 
 
 def test_active_provider_priority(monkeypatch):
-    # Nothing configured → mock
+    # Nothing configured → keyless DuckDuckGo is next in the chain
     monkeypatch.setattr(config, "BING_API_KEY", None)
     monkeypatch.setattr(config, "SERPAPI_KEY", None)
     monkeypatch.setattr(config, "SERPER_API_KEY", None)
-    assert _active_provider() == "mock"
+    assert _active_provider() == "duckduckgo"
 
     # Bing outranks the rest
     monkeypatch.setattr(config, "BING_API_KEY", "bing-key")

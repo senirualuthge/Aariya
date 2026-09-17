@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from .base import Agent
 import asyncio
 
@@ -10,7 +10,7 @@ class CriticAgent(Agent):
     def __init__(self):
         super().__init__("critic")
 
-    async def act(self, state: Dict[str, Any], proposals: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def act(self, state: Dict[str, Any], proposals: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Scores parallel plans or full responses.
         Proposals should be a list of dicts.

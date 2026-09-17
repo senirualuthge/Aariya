@@ -67,6 +67,7 @@ def _status_payload(user_id: str, window: int) -> dict:
     return {
         "status": "trained" if model is not None else "untrained",
         "predictor": "lstm" if model is not None else None,
+        "method": "lstm" if model is not None else "heuristic",
         "meta": meta,
         "corpus": {
             "snapshots": store.get_snapshot_count(),
@@ -94,6 +95,7 @@ async def predictor_status(user_id: str = "user_default", window: int = 40):
         return {
             "status": "untrained",
             "predictor": None,
+            "method": "heuristic",
             "meta": {"trained_at": 0.0, "max_snapshot_id": 0,
                      "count": 0, "seed_count": 0},
             "corpus": {"snapshots": 0, "sessions": 0},

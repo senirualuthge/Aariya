@@ -5,19 +5,25 @@
   "main": "main.js",
   "type": "module",
   "dependencies": {
+    "@mapbox/vector-tile": "^3.0.0",
     "@mediapipe/face_detection": "^0.4.1646425229",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.2",
     "@tensorflow-models/face-detection": "^1.0.3",
     "@tensorflow/tfjs": "^4.22.0",
     "better-sqlite3": "^12.6.2",
+    "cesium": "^1.144.0",
+    "egm96-universal": "^1.1.1",
     "face-api.js": "^0.22.2",
     "framer-motion": "^10.12.16",
     "lucide-react": "^0.244.0",
+    "mgrs": "^2.2.0",
     "openai": "^6.16.0",
+    "pbf": "^5.1.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "recharts": "^2.6.2",
+    "satellite.js": "^7.1.0",
     "three": "^0.182.0",
     "zustand": "^5.0.9"
   },
@@ -29,7 +35,8 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",
     "electron": "^40.0.0",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vite-plugin-cesium": "^1.2.23"
   },
   "scripts": {
     "backend": "bash scripts/backend.sh",
@@ -47,7 +54,7 @@
     "start": "electron .",
     "security:audit": "npm audit --json 2>&1 || true",
     "security:audit:fix": "npm audit fix",
-    "test": "node --test build-summary.test.js vault-context.test.js vault-search.test.js",
+    "test": "node --test build-summary.test.js vault-context.test.js vault-search.test.js background-polls.test.js",
     "test:backend": "bash run_backend_tests.sh",
     "test:backend:win": "run_backend_tests.bat",
     "test:all": "npm test && npm run test:backend"

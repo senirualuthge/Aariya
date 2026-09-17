@@ -119,16 +119,23 @@ class MemoryManager {
   }
 
   getContext() {
+    // Background mood is derived from the emotions actually recorded on
+    // recent turns (majority vote) — never hardcoded.
+    const counts = {};
+    for (const turn of this.contextWindow) {
+      if (turn.emotion) counts[turn.emotion] = (counts[turn.emotion] || 0) + 1;
+    }
+    const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
     return {
         recentTurns: this.contextWindow,
         topic: this.currentTopic,
-        bgMood: "neutral" // Placeholder for overall conversation tone
+        bgMood: dominant ? dominant[0] : "neutral"
     };
   }
 
   updateTopic(text) {
     const lower = text.toLowerCase();
-    // Simple keyword extraction (Simulation)
+    // Lexical topic classifier — real keyword rules over the user's text.
     if (lower.includes("tech") || lower.includes("code") || lower.includes("ai")) this.currentTopic = "technology";
     else if (lower.includes("weather") || lower.includes("rain") || lower.includes("sun")) this.currentTopic = "weather";
     else if (lower.includes("love") || lower.includes("hate") || lower.includes("fear")) this.currentTopic = "feelings";

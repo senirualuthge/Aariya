@@ -263,12 +263,9 @@ def start_runtime_telemetry() -> bool:
         if _loop_started:
             return True
         _loop_started = True
-        # Trim any stale runtime logs from previous boots right away, before
-        # the first tick (30 s after boot) catches up.
-        try:
-            cleanup_runtime_logs()
-        except Exception as exc:
-            logger.warning("Startup runtime log cleanup failed: %s", exc)
+        # NOTE: the first _loop tick handles stale-log cleanup so startup
+        # never blocks on _SYNC_LOCK (which the obsidian vault sync thread
+        # may hold for minutes while indexing thousands of chunks).
         threading.Thread(target=_loop, daemon=True, name="runtime-telemetry").start()
         logger.info("Runtime telemetry logger started (every %s min).", INTERVAL_MIN)
         return True

@@ -5,15 +5,12 @@ FastAPI router exposing web search to the React frontend.
 
 Endpoints:
   GET /api/web-search?q=...&num=5 — web search via WebIntelligence
-                                    (provider priority: Bing > SerpAPI > Serper > mock)
+                                    (Bing > SerpAPI > Serper > DuckDuckGo >
+                                    Wikipedia; the last two need no API key)
 
-The provider is reported in the response so the frontend can distinguish real
-results from the mock fallback (a "mock" provider means no search API key is
-configured server-side).
-
-Mount in main.py:
-  from server.routers.web_search_router import router as web_search_router
-  app.include_router(web_search_router)
+The provider is reported in the response so the frontend knows exactly which
+engine produced the results. Results are never fabricated — if every provider
+is unreachable the endpoint returns an explicit "Search Unavailable" row.
 """
 
 import asyncio
@@ -32,10 +29,8 @@ MAX_RESULTS = 10
 
 def _active_provider() -> str:
     """
-    Report which provider WebIntelligence.search() will use.
-
-    Mirrors the priority chain in WebIntelligence.search() (Bing > SerpAPI >
-    Serper > mock) so the frontend knows whether results are real.
+    Report which provider WebIntelligence.search() will try first in the
+    keyless tail so the frontend knows whether results are real.
     """
     if config.BING_API_KEY:
         return "bing"
@@ -43,7 +38,7 @@ def _active_provider() -> str:
         return "serpapi"
     if getattr(config, "SERPER_API_KEY", None):
         return "serper"
-    return "mock"
+    return "duckduckgo"
 
 
 @router.get("")

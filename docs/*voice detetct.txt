@@ -2275,3 +2275,115 @@ HumanAI SDK meets SOC-2 and ISO 27001 standards for operational security, proces
 All modules — voice, TTS, emotion/trust, avatar — are deterministic, auditable, and GDPR-compliant.
 
 Safety & ethical rules, trust gating, and barge-in support ensure human-believable, low-risk AI interactions.
+
+1️⃣6️⃣ SYSTEM GAPS & IMPLEMENTATION FIXES
+This section addresses critical gaps in the above architecture: Echo Cancellation, Speaker Diarization, LLM Latency mitigation, Distributed Scale, and WebSocket Auth.
+
+### A. Acoustic Echo Cancellation (AEC) & AGC
+Without AEC, the avatar will hear its own TTS output and falsely trigger the barge-in.
+✅ Fix (Client-Side AudioWorklet / Unity):
+Instead of raw microphone capture, you must apply AEC against the TTS playback stream.
+
+For Web (using WebRTC's built-in AEC):
+```javascript
+navigator.mediaDevices.getUserMedia({ 
+  audio: { 
+    echoCancellation: true, 
+    noiseSuppression: true, 
+    autoGainControl: true 
+  } 
+}).then(stream => {
+  // Feed into AudioWorklet
+});
+```
+
+### B. Speaker Diarization & Verification
+Without this, the system will reply to background noise or someone else entering the room.
+✅ Fix (Brain Side):
+Use a fast embedding model (like `pyannote.audio` or `speechbrain`) to verify the primary user before processing intent.
+```python
+from speechbrain.inference.speaker import SpeakerRecognition
+
+verification = SpeakerRecognition.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
+score, prediction = verification.verify_batch(audio_chunk, primary_user_embedding)
+
+if prediction == True:
+    process_asr(audio_chunk)
+else:
+    ignore_audio() # Background noise / different speaker
+```
+
+### C. LLM Latency Mitigation (Filler Sounds)
+LLMs take time for the first token. Dead silence kills realism.
+✅ Fix:
+Immediately play a pre-computed "filler" sound when speech ends, while the LLM thinks.
+```python
+async def on_speech_end():
+    await ws.send_json({"type": "voice.event", "event": "speech_end"})
+    
+    # Instantly send a filler sound (e.g. "Hmm", "Let me see")
+    await stream_filler_audio(ws, "hmm") 
+    
+    text, lang = transcribe_audio(audio_buffer)
+    reply = await ctx.generate_reply_async(text, lang) # Takes 1-2 seconds
+    
+    # Stop filler, start actual TTS
+    await ws.send_json({"type": "voice.event", "event": "stop_filler"})
+    await stream_tts(ws, reply, lang)
+```
+
+### D. Distributed State & Concurrency (Redis)
+If the WebSocket drops, reconnecting to a different load-balanced server drops the context.
+✅ Fix (Redis Backed Context):
+Use Redis to persist the `ContextManager` session state globally.
+```python
+import redis
+r = redis.Redis(host='localhost', port=6379, db=0)
+
+class DistributedContextManager:
+    def __init__(self, session_id):
+        self.session_id = session_id
+        
+    def add_user(self, text):
+        r.rpush(f"session:{self.session_id}:history", f"User: {text}")
+        r.expire(f"session:{self.session_id}:history", 3600) # 1 hour TTL
+```
+
+### E. WebSocket Authentication
+Unsecured endpoints can be hijacked.
+✅ Fix:
+Require a JWT in the WebSocket connection path or headers, and ensure only one active connection exists per user session to prevent duplication or hijacking.
+```python
+from fastapi import WebSocket, WebSocketException
+import jwt
+
+# Store active connections to prevent duplicates
+active_connections: dict[str, WebSocket] = {}
+
+@app.websocket("/ws/voice/{token}")
+async def voice_endpoint(ws: WebSocket, token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        session_id = payload.get("sub")
+        
+        await ws.accept()
+        
+        # Prevent duplicate connections
+        if session_id in active_connections:
+            old_ws = active_connections[session_id]
+            # Disconnect the older connection (or reject the new one based on policy)
+            await old_ws.close(code=1008, reason="Duplicate connection detected")
+            
+        active_connections[session_id] = ws
+        
+        try:
+            await voice_ws(ws, session_id)
+        finally:
+            if active_connections.get(session_id) == ws:
+                del active_connections[session_id]
+                
+    except jwt.ExpiredSignatureError:
+        await ws.close(code=1008, reason="Token Expired")
+    except jwt.InvalidTokenError:
+        await ws.close(code=1008, reason="Invalid Token")
+```

@@ -103,12 +103,12 @@ class PPOPolicy:
         state_tensor      = encode_state(context)
         action, lp, value = select_action(self.model, state_tensor)
 
-        self._last_action   = action
+        self._last_action   = action  # type: ignore[assignment]
         self._last_log_prob = lp
         self._last_value    = value
         self._last_state    = state_tensor
 
-        return ACTION_STYLE_MAP[action]
+        return ACTION_STYLE_MAP[action]  # type: ignore[index]
 
     def observe_outcome(self, prev_context: Dict, curr_context: Dict) -> float:
         """

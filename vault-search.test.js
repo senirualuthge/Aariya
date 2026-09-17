@@ -10,6 +10,7 @@ import {
   formatRuntimeReply,
   formatDeveloperReply,
 } from "./src/systems/vaultSearch.js";
+import { apiBase } from "./src/utils/apiHost.js";
 
 // ── detectVaultIntent ────────────────────────────────────────────────────────
 
@@ -137,7 +138,8 @@ test("runtime reply appends an 'also relevant' section for extra hits", () => {
 
 test("runtime reply handles offline brain", () => {
   const reply = formatRuntimeReply("running details", { ok: false, latest: [], hits: [] });
-  assert.ok(reply.includes(":8000"));
+  // Points at the real configured backend host (no hardcoded port assumption).
+  assert.ok(reply.includes(apiBase()));
   assert.ok(reply.includes("isn't responding"));
 });
 
@@ -156,6 +158,6 @@ test("developer reply formats semantic hits with sources", () => {
 });
 
 test("developer reply handles offline and empty", () => {
-  assert.ok(formatDeveloperReply("codebase", { ok: false }).includes(":8000"));
+  assert.ok(formatDeveloperReply("codebase", { ok: false }).includes(apiBase()));
   assert.ok(formatDeveloperReply("codebase", { ok: true, hits: [] }).includes("didn't find"));
 });
