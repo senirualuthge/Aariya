@@ -80,3 +80,17 @@ def fresh_postgres_store(tmp_path, monkeypatch):
     mh_mod._memory_hierarchy = old_mh
     if hasattr(pgm.PostgresManager, "_pytest_tmp_path"):
         del pgm.PostgresManager._pytest_tmp_path
+
+
+@pytest.fixture()
+def mock_security_safe(monkeypatch):
+    """Stub the security-agent swarm to always return SAFE so that tests
+    asserting on exact reply text aren't polluted by the security-prefix
+    injection that fires when run_security_agents detects a HIGH-risk event
+    (e.g. an unexpected network connection on the CI runner)."""
+    from server.systems.swarm.orchestrator import SwarmSystem
+
+    async def _always_safe(self, data):  # noqa: ARG001
+        return {"risk": {"risk_level": "SAFE"}, "issues": []}
+
+    monkeypatch.setattr(SwarmSystem, "run_security_agents", _always_safe)

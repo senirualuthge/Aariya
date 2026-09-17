@@ -107,7 +107,7 @@ class ScriptedLLM:
         return self.replies.pop(0) if self.replies else ""
 
 
-def test_grounding_guard_corrects_contradicting_reply(isolated_db, monkeypatch):
+def test_grounding_guard_corrects_contradicting_reply(isolated_db, monkeypatch, mock_security_safe):
     """A reply that negates a remembered fact must trigger ONE corrective
     regeneration; the corrected text becomes the final reply."""
     import server.systems.brain_v2 as brain_v2
@@ -138,7 +138,7 @@ def test_grounding_guard_corrects_contradicting_reply(isolated_db, monkeypatch):
     assert "grounding" not in out.meta
 
 
-def test_grounding_issues_surfaced_when_correction_fails(isolated_db, monkeypatch):
+def test_grounding_issues_surfaced_when_correction_fails(isolated_db, monkeypatch, mock_security_safe):
     """If the model keeps contradicting after correction, the residual issues
     must ride out in meta so the guard's action is observable."""
     import server.systems.brain_v2 as brain_v2
@@ -167,7 +167,7 @@ def test_grounding_issues_surfaced_when_correction_fails(isolated_db, monkeypatc
     assert "stargazing" in grounding[0]["reply"]
 
 
-def test_grounding_guard_silent_on_clean_reply(isolated_db, monkeypatch):
+def test_grounding_guard_silent_on_clean_reply(isolated_db, monkeypatch, mock_security_safe):
     """A grounded reply must NOT trigger regeneration or meta noise."""
     import server.systems.brain_v2 as brain_v2
     from server.systems.memory.conversation_log import ConversationLog
