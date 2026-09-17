@@ -730,7 +730,7 @@ def test_governor_delegates_and_executes_agent():
     assert gov.merge_results([{"a": [1]}, {"a": [2], "b": "x"}]) == {"a": [1, 2], "b": "x"}
 
 
-def test_brain_meta_route_surfaces_routing():
+def test_brain_meta_route_surfaces_routing(isolated_db):
     import asyncio
     from server.protocol import MultimodalInput
     from server.systems.prediction.prediction_core import PredictionEngine
@@ -770,7 +770,7 @@ def test_world_state_snapshot_roundtrip():
     os.remove(path)
 
 
-def test_brain_turn_writes_world_state():
+def test_brain_turn_writes_world_state(isolated_db):
     """A brain turn must fold its cognitive state into the persisted world
     state so the daemon/routers read one canonical store, not disjoint copies."""
     import asyncio, tempfile, os
@@ -793,7 +793,7 @@ def test_brain_turn_writes_world_state():
     assert b.get_state().synoptic.get("world_state_ts") is not None
 
 
-def test_brain_turn_surfaces_meta_policy_gate():
+def test_brain_turn_surfaces_meta_policy_gate(isolated_db):
     """A brain turn must run the turn forecast through the MetaPolicy gate and
     surface the governed decision (REQUEST_MORE_DATA/CAUTION/ABSTAIN/ACCEPT)
     under synoptic['policy'] (NEWPredictionPRT2 §"Meta-Policy")."""
@@ -847,7 +847,7 @@ def test_scenario_planner_low_confidence_flips_dominant():
     assert low["scenarios"]["worst"]["value"] < high["scenarios"]["worst"]["value"]
 
 
-def test_multi_scenario_via_engine_and_brain_synoptic():
+def test_multi_scenario_via_engine_and_brain_synoptic(isolated_db):
     """multi_scenario() must pick a chosen action and expose all three branches;
     a brain turn must surface them under synoptic['scenarios']."""
     import asyncio
@@ -1061,7 +1061,7 @@ def test_goal_manager_persists_across_instances():
     os.remove(path)
 
 
-def test_brain_turn_folds_goals_into_world_state_tasks():
+def test_brain_turn_folds_goals_into_world_state_tasks(isolated_db):
     """A brain turn must surface the long-term goal registry under the world
     state's tasks category (§1 Goal Management + Single Source of Truth)."""
     import asyncio, tempfile
