@@ -55,6 +55,11 @@ export async function handleMessage(userId, input, opts = {}) {
                         intimacyLevel: 2,
                         accent: 'neutral',
                     },
+                    // Schema defaults (memory/schema.js): consumers like
+                    // flirtController read memory.safety.dependencyRisk, so a
+                    // memory without `safety` crashed the whole chat pipeline.
+                    safety: { dependencyRisk: "low", romanticAttempts: 0 },
+                    context: { mood: "neutral", energy: "medium", recentTopics: [] },
                     thought: brain.thought || null,
                 },
             };
@@ -138,13 +143,16 @@ export async function handleMessage(userId, input, opts = {}) {
     await contextManager.addMessage({ role: 'assistant', content: text });
     memoryManager.addToContext('assistant', text);
 
-    // Mock memory object for UI compatibility
+    // Memory object for UI compatibility — must carry the safety/context
+    // defaults (memory/schema.js) or safety consumers crash on undefined.
     const memory = {
         profile: {
             name: "User",
             intimacyLevel: 2,
             accent: 'neutral'
-        }
+        },
+        safety: { dependencyRisk: "low", romanticAttempts: 0 },
+        context: { mood: "neutral", energy: "medium", recentTopics: [] }
     };
 
     return { text, memory };

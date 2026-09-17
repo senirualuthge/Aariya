@@ -159,6 +159,15 @@ class AutonomyConfig(BaseModel):
         default_factory=lambda: _float_env("AARIYA_ATTACHMENT_BLOCK_THRESHOLD", 0.85)
     )
 
+    # ── Desktop automation (AccessFIles §"DESKTOP AUTOMATION") ─────────────
+    # When true AND pyautogui is available, ActionExecutor actually performs
+    # OS-level actions (open app / type / click). Default off: the executor
+    # only *proposes* desktop actions (Cloud proposes, local enforces).
+    EXECUTE_DESKTOP_ACTIONS: bool = Field(
+        default_factory=lambda: os.getenv("AARIYA_EXECUTE_DESKTOP_ACTIONS", "").lower()
+        in ("1", "true", "yes", "on")
+    )
+
 
 # Global configuration instance (values frozen at import time)
 config = AutonomyConfig()

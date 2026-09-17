@@ -8,9 +8,12 @@ Evolves slowly based on sustained interaction patterns.
 """
 
 import json
+import logging
 import os
 import time
 from typing import Optional
+
+logger = logging.getLogger("aariya.identity")
 
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -67,8 +70,8 @@ class IdentitySystem:
             try:
                 with open(self.path, "r") as f:
                     return json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning("[Identity] failed to load %s, using defaults: %s", self.path, exc)
 
         identity = dict(DEFAULT_IDENTITY)
         identity["created_at"] = time.time()
@@ -81,8 +84,8 @@ class IdentitySystem:
         try:
             with open(self.path, "w") as f:
                 json.dump(identity, f, indent=2)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.warning("[Identity] failed to save %s: %s", self.path, exc)
 
     # ── Evolution ─────────────────────────────────────────────────────────────
     def evolve(self, interaction_data: dict):

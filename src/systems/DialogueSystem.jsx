@@ -2,19 +2,15 @@
 import { useEffect, useCallback, useRef } from 'react';
 import useStore from '../store';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
-import { useAudioAnalyzer } from '../hooks/useAudioAnalyzer'; 
-import { enhancedSpeak } from './voicePresets';
+import { useAudioAnalyzer } from '../hooks/useAudioAnalyzer';
 import { handleMessage, analyzeUserEmotion } from './aiEngine';
 import { getFlirtMode } from './safety/flirtController';
-import { detectStress } from './safety/stressDetector'; 
-import { detectFatigue, shortenResponse } from './safety/fatigueDetector';
 import { resolveIntimacy } from './safety/intimacyController';
 import { updateEmotions, calculateEmotionTargets } from './emotionEngine'; 
 import { eventBus } from '../core/EventBus';
 import { neuralEngine } from './ai/NeuralEngine'; // NEW
 import { personalitySystem } from './ai/PersonalitySystem'; // NEW
 import { analytics } from './analytics/AnalyticsSystem'; // NEW
-import { detectSleepTime, getCircadianPhase, getSilentResponse } from './voice/voiceIntelligence';
 import { detectUserMood, applyPersonalityNudge } from './userMoodDetector';
 
 export default function DialogueSystem() {
@@ -28,8 +24,6 @@ export default function DialogueSystem() {
         manualInput,
         setSpeaking, // Kept from original
         addLog,
-        voicePitch,
-        voiceRate,
         setThinking, // Kept from original
         conversationContext = { userName: 'Player', lastInteraction: null, relationshipLevel: 0 },
         currentPersonality,
@@ -49,8 +43,8 @@ export default function DialogueSystem() {
     // So, this line is redundant if the destructuring is used.
     // useSpeechRecognition(); // Removed as per new structure implied by instruction's snippet
 
-    // Updated params ref to include isStressed, isFatigued, accent, isNightMode, etc.
-    // ...
+    // Voice-pipeline params (stress/fatigue/night/silent/circadian) were
+    // removed with the voice pipeline; only the personality mode remains.
 
     // --- ANALYTICS SESSION LIFECYCLE ---
     useEffect(() => {
@@ -62,17 +56,9 @@ export default function DialogueSystem() {
 
     // --- MAIN DIALOGUE LOOP ---
     const conversationHistoryRef = useRef([]); // To keep track of full context for API
-    const silentModeCounter = useRef(0);
     const params = useRef({ 
         mode: currentPersonality, 
-        isStressed: false, 
-        isFatigued: false, 
         accent: 'neutral',
-        isNightMode: false,
-        isAccessibility: false, 
-        userVoiceStats: null,
-        circadianPhase: 'day', 
-        isSilentMode: false 
     }); 
 
     // Sync ref mode with store's currentPersonality
@@ -105,30 +91,23 @@ export default function DialogueSystem() {
         }
     }, [listening, addLog, setSpeaking]); // Added setSpeaking to dependencies
 
-    const speak = useCallback((text, overrideMode = null) => {
-        const mode = overrideMode || params.current.mode;
-        // Check safety/context for whisper
-        const isWhisperAllowed = (mode === 'flirty' || mode === 'cutie' || mode === 'calm');
-        
-        enhancedSpeak(
-            text, 
-            setSpeaking, 
-            addLog, 
-            voicePitch, 
-            voiceRate, 
-            mode, 
-            params.current.isStressed, 
-            isWhisperAllowed,
-            params.current.isFatigued,
-            params.current.accent,
-            params.current.isNightMode,
-            params.current.isAccessibility,
-            params.current.userVoiceStats,
-            params.current.circadianPhase,
-            params.current.isSilentMode
-        );
-
-    }, [setSpeaking, addLog, voicePitch, voiceRate]);
+    // Plain browser-TTS fallback. The server-side voice pipeline (and this
+    // file's former client-side prosody stack) was removed; spoken output is
+    // deliberately unstyled — no emotion, no modes, no prosody decisions.
+    const speak = useCallback((text) => {
+        if (typeof window === 'undefined' || !window.speechSynthesis) return;
+        const cleanText = String(text || '')
+            .replace(/\*[^*]+\*/g, '')
+            .trim();
+        if (!cleanText) return;
+        setSpeaking(true);
+        addLog('bot', cleanText);
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.onend = () => setSpeaking(false);
+        utterance.onerror = () => setSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+    }, [setSpeaking, addLog]);
 
     const markHabitDone = async (habitName) => {
         try {
@@ -146,7 +125,7 @@ export default function DialogueSystem() {
             if (!audioRef.current) return;
             const audio = audioRef.current;
             audio.volume = 0.08; 
-            const isMusicMood = (params.current.isNightMode || params.current.mode === 'calm' || params.current.isStressed);
+            const isMusicMood = (params.current.mode === 'calm');
             if (isMusicMood) { /*...*/ } else { audio.pause(); }
         };
         const interval = setInterval(checkMusic, 2000); 
@@ -310,53 +289,8 @@ export default function DialogueSystem() {
         }
 
         try {
-            // 0. Detect Stress, Fatigue, Sleep (Immediate reaction)
-            const isStressed = detectStress(input);
-            const isFatigued = detectFatigue(input);
-            const currentHour = new Date().getHours();
-            const isNightMode = detectSleepTime(input, currentHour);
-            const circadianPhase = getCircadianPhase(currentHour);
-
-            // Silent Mode Trigger
-            if (input.toLowerCase().includes("just listen") || input.toLowerCase().includes("stay quiet")) {
-                params.current.isSilentMode = true;
-                silentModeCounter.current = 0;
-            } else if (input.toLowerCase().includes("help") || input.includes("?")) {
-                params.current.isSilentMode = false;
-            }
-            
-            params.current.isStressed = isStressed;
-            params.current.isFatigued = isFatigued;
-            params.current.isNightMode = isNightMode;
-            params.current.circadianPhase = circadianPhase;
-
-            // Handle Silent Mode Logic
-            if (params.current.isSilentMode) {
-                silentModeCounter.current += 1;
-                const silentResp = getSilentResponse(null, silentModeCounter.current);
-                // ... (rest of silent logic)
-                if (silentResp) {
-                     setThinking(false);
-                     speak(silentResp);
-                     setMessages(prev => [...prev, { role: 'user', text: input }, { role: 'bot', text: silentResp }]);
-                     return;
-                } else {
-                     setThinking(false);
-                     setMessages(prev => [...prev, { role: 'user', text: input }]);
-                     return;
-                }
-            }
-
-            // --- AUTO GOOD NIGHT RESPONSE ---
-            let autoResponse = null;
-            if (isNightMode && input.toLowerCase().includes("good night")) {
-                autoResponse = "It sounds like it’s time to rest… Sleep well!";
-                // We skip LLM processing to avoid high energy or lengthy goodbyes
-                setThinking(false);
-                setMessages(prev => [...prev, { role: 'user', text: input }, { role: 'bot', text: autoResponse }]);
-                speak(autoResponse);
-                return;
-            }
+            // Silent-mode style triggers were removed with the voice pipeline;
+            // stress/fatigue detection stays for text-only UX.
 
             // Call new Modular Architecture
             // We pass unmodified input to LLM mostly, but could modify context if needed.
@@ -401,16 +335,11 @@ export default function DialogueSystem() {
                  // Let's rely on getFlirtMode for now as it handles safety risk primarily.
                  let currentVoiceMode = getFlirtMode(memory);
                  
-                 params.current.accent = memory.profile?.accent || 'neutral';
                  params.current.mode = currentVoiceMode;
             }
 
             let response = text;
-            
-            // Post-Process: Shorten if Fatigued
-            if (isFatigued) {
-                response = shortenResponse(response);
-            }
+            // (Client-side fatigue shortening removed with the voice pipeline)
 
             // 4. (Optional) Legacy Habit Parsing
             const habitDoneMatch = response.match(/\[DONE:([^\]]+)\]/i);
@@ -479,13 +408,15 @@ export default function DialogueSystem() {
     }, [transcript, addLog, processInput, clearInputs]);
 
     // Effect for Manual Text Input
+    // Note: submitText already appends the user message to chatHistory, so the
+    // user bubble must NOT be added here again — doing so duplicated every
+    // "YOU" line (doubled again by StrictMode). Only process + clear.
     useEffect(() => {
         if (manualInput) {
-            addLog('user', manualInput);
             processInput(manualInput);
             clearInputs();
         }
-    }, [manualInput, addLog, processInput, clearInputs]);
+    }, [manualInput, processInput, clearInputs]);
 
     // Load voices
     useEffect(() => {

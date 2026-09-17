@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { isBuildSummaryFresh } from '../utils/buildFreshness.js';
+import { apiBase } from '../utils/apiHost';
 
 /**
  * BuildWarningsBanner.jsx
@@ -54,8 +55,7 @@ export default function BuildWarningsBanner() {
         if (window.electronAPI?.getBuildSummary) {
           data = await window.electronAPI.getBuildSummary();
         } else {
-          const host = window.location.hostname || 'localhost';
-          const res = await fetch(`http://${host}:8000/api/build/summary`);
+          const res = await fetch(`${apiBase()}/api/build/summary`);
           if (res.ok) data = await res.json();
         }
       } catch {

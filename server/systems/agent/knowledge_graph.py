@@ -38,6 +38,21 @@ class KnowledgeGraph:
                 })
         return facts
 
+    def query_incoming(self, entity: str) -> List[Dict[str, Any]]:
+        """Facts where the entity is the OBJECT (e.g. which files define
+        a given function/class). Complements query()."""
+        facts = []
+        if entity in self.graph:
+            for subject in self.graph.predecessors(entity):
+                edge_data = self.graph.get_edge_data(subject, entity)
+                facts.append({
+                    "subject": subject,
+                    "relation": edge_data.get("relation"),
+                    "object": entity,
+                    "meta": edge_data
+                })
+        return facts
+
     def _save_graph(self):
         """Persist graph to JSON."""
         try:

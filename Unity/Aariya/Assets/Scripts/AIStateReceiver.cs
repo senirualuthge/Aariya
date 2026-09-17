@@ -13,6 +13,12 @@ using Newtonsoft.Json.Linq;
 
 public class AIStateReceiver : MonoBehaviour
 {
+    // Motion-bridge hook (*AI Girl 2* §"AVATAR RENDERER"): raised whenever an
+    // `avatar.update` frame arrives so the gaze / micro-motion / smile
+    // controller (GazeAndMicroMotion) can react without owning a second
+    // WebSocket connection to the brain.
+    public static event System.Action<JObject> OnAvatarFrame;
+
     [Header("Connections")]
     public Animator       avatarAnimator;
     public BlinkController blinkController;
@@ -92,6 +98,15 @@ public class AIStateReceiver : MonoBehaviour
         try
         {
             var root = JObject.Parse(json);
+
+            // Motion bridge (real, from the cognitive loop + idle daemon):
+            // `avatar.update` frames carry the doc's avatar floats — hand off
+            // to GazeAndMicroMotion without touching mood state here.
+            if (root["type"]?.Value<string>() == "avatar.update")
+            {
+                OnAvatarFrame?.Invoke(root);
+                return;
+            }
 
             // Support both wire protocols:
             //   §8  ServerOutput → brain_state.emotion_target

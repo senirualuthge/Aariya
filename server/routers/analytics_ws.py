@@ -44,25 +44,32 @@ def _get_brain_snapshot() -> dict:
         from server.systems.brain_v2 import _registry  # type: ignore[attr-defined]
         if _registry:
             brain = next(iter(_registry.values()))
-            trust = brain.trust_sys.get_state("user_default").get("trust", 0.5)
+            trust_sys = getattr(brain, "trust_sys", None)
+            if trust_sys is not None:
+                get_state = getattr(trust_sys, "get_state", None)
+                if callable(get_state):
+                    state = get_state("user_default")
+                    if isinstance(state, dict):
+                        trust = state.get("trust", 0.5)  # type: ignore[assignment]
             emotion_state = getattr(brain, "_last_emotion", "neutral")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"[AnalyticsWS] brain state read failed: {exc}")
 
     # Pull full agent list from AgentRegistry
     agents_list: list[dict] = []
     try:
-        from server.infrastructure.agent_registry import AgentRegistry  # type: ignore
+        from server.infrastructure.agent_registry import AgentRegistry
         registry = AgentRegistry()
-        for a in registry.get_active_agents():
+        active = registry.get_active_agents()
+        for a in active:
             agents_list.append({
                 "name": a.get("name", "Unknown"),
                 "kind": a.get("kind", "unknown"),
                 "status": a.get("status", "existing"),
                 "first_seen": a.get("first_seen", ""),
             })
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"[AnalyticsWS] agent registry read failed: {exc}")
 
     return {
         "trust": round(trust, 3),

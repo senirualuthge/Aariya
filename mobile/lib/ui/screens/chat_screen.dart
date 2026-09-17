@@ -5,6 +5,7 @@ import '../../state/chat_controller.dart';
 import '../../services/connection_monitor.dart';
 import '../../services/server_config.dart';
 import '../../services/websocket_service.dart';
+import '../widgets/companion_presence.dart';
 import '../widgets/voice_conversation_overlay.dart';
 import 'control_panel.dart';
 import 'server_settings_sheet.dart';
@@ -149,6 +150,14 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
+          // Compact presence chip: Aariya's real mode + trait count from the
+          // live synoptic; tap for the Companion summary sheet.
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Center(
+              child: CompanionPresenceChip(controller: _chatController.brain),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.cyanAccent),
             tooltip: 'Server Settings',

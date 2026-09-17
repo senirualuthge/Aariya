@@ -7,7 +7,7 @@ Converts contradiction into trust decay pressure, uncertainty modifiers, and sus
 """
 
 import math
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from dataclasses import dataclass
 
 from server.infrastructure.postgres_manager import get_postgres
@@ -113,7 +113,7 @@ class ContradictionDetector:
         face: EmotionVector,
         voice: EmotionVector,
         text: EmotionVector
-    ) -> Tuple[float, float]:
+    ) -> Tuple[float, float, float, float]:
         """
         Calculate instantaneous contradiction score for current turn.
         
@@ -145,7 +145,7 @@ class ContradictionDetector:
         confidence_mean = (face.confidence + voice.confidence + text.confidence) / 3.0
         contradiction_weighted = contradiction_raw * confidence_mean
         
-        return contradiction_raw, contradiction_weighted, direction_score, intensity_score
+        return contradiction_raw, contradiction_weighted, direction_score, intensity_score  # type: ignore[return-value]
     
     def update_contradiction_history(
         self,
@@ -244,7 +244,7 @@ class ContradictionDetector:
         voice_emotion: Dict[str, float],
         text_sentiment: float,
         confidences: Dict[str, float]
-    ) -> Dict[str, float]:
+    ) -> Dict[str, Any]:
         """
         Process a complete turn and update contradiction metrics.
         
@@ -283,7 +283,7 @@ class ContradictionDetector:
         # Calculate instantaneous contradiction
         contradiction_raw, contradiction_weighted, direction_score, intensity_score = self.calculate_instantaneous_contradiction(
             face, voice, text
-        )
+        )  # type: ignore
         
         # Update temporal memory (EMA)
         contradiction_ema = self.update_contradiction_history(

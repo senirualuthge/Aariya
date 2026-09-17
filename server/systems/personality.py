@@ -320,9 +320,8 @@ class PersonalitySystem:
                 data = json.loads(row[0])
                 self._apply_dict(data)
                 logger.debug(f"[Personality] Loaded snapshot for {self.user_id}")
-        except Exception:
-            # Table may not exist yet — silently use defaults
-            pass
+        except Exception as exc:
+            logger.debug("[Personality] load snapshot for %s failed (using defaults): %s", self.user_id, exc)
 
     def save(self) -> None:
         """Persist current baseline to DB."""
@@ -371,6 +370,30 @@ class PersonalitySystem:
         return sorted(PERSONALITY_PRESETS.keys())
 
     # ── Evolution ──────────────────────────────────────────────────────────────
+
+    def apply_arc_drift(self, delta: Dict[str, float]) -> None:
+        """
+        Apply a small arc-driven drift to the baseline traits (doc §178/§182).
+
+        Accepts simple trait keys ("curiosity", "empathy", "warmth", "openness",
+        "logic") as produced by narrative_arcs.apply_personality_drift, maps them
+        onto the 3-axis model, clamps, and persists. Unknown keys are ignored.
+        """
+        mapping = {
+            "curiosity": ("cognitive", "curiosity"),
+            "logic":     ("cognitive", "logic_bias"),
+            "warmth":    ("emotional", "warmth"),
+            "empathy":   ("emotional", "empathy"),
+            "openness":  ("social",    "openness"),
+        }
+        for simple_key, (axis, trait) in mapping.items():
+            if simple_key in delta:
+                axis_obj = getattr(self, axis)
+                setattr(axis_obj, trait, _clamp(getattr(axis_obj, trait) + delta[simple_key]))
+        self.cognitive.clamp()
+        self.emotional.clamp()
+        self.social.clamp()
+        self.save()
 
     def evolve(
         self,

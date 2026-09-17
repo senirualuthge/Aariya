@@ -18,6 +18,7 @@ import { BRAIN_RAG_EVENT } from '../systems/brainClient';
 import { subscribeMetrics, sendMetricsCommand } from '../systems/metricsClient';
 import { isBuildSummaryFresh, BUILD_WARN_MAX_AGE_HOURS } from '../utils/buildFreshness.js';
 import { apiBase, apiWsBase } from '../utils/apiHost';
+import { schedulePredictorPoll, startUptimeTicker } from '../utils/backgroundPolls';
 import CveScannerPanel from './security/CveScannerPanel';
 import { useSignalsStore } from '../admin/store/useSignalsStore';
 import { useAdminUIStore } from '../admin/store/useAdminUIStore';
@@ -25,6 +26,7 @@ import AgentDiscoveryPanel from './AgentDiscoveryPanel';
 import AgentVisualizer from './AgentVisualizer';
 import RAGDashboard from './rag/RAGDashboard';
 import SystemHealthTab from './SystemHealthTab';
+import SessionHistoryCard from './SessionHistoryCard';
 import BrainScene from './BrainScene';
 import './AnalyticsDashboard.css';
 
@@ -225,8 +227,9 @@ function usePredictorStatus(pollMs = 15000, enabled = true) {
   useEffect(() => {
     // Lazy: the hidden main-window mount renders this card off-route, so it
     // must not fire the 15s predictor REST poll (nor the initial fetch). Only
-    // when the analytics surface is actually visible does polling run.
-    if (!enabled) return undefined;
+    // when the analytics surface is actually visible does polling run. The
+    // gating lives in schedulePredictorPoll (src/utils/backgroundPolls.js) so
+    // the contract is unit-testable without React.
     let mounted = true;
     const url = `${apiBase()}/api/emotion/predictor`;
     const fallbackUrl = `${apiBase()}/api/autonomy/state`;
@@ -306,23 +309,24 @@ function usePredictorStatus(pollMs = 15000, enabled = true) {
     // Event-driven refresh: the daemon broadcasts autonomy.model_trained
     // (with fresh telemetry) to every connected surface after a retrain.
     // Reuses the shared /ws/brain_metrics connection — no separate socket.
-    const unsubModelTrained = subscribeMetrics(
-      (m) => m.type === 'autonomy.model_trained',
-      () => {
-        if (inFlightRef.current) {
-          pendingRefreshRef.current = true; // retry right after the in-flight poll
-        } else {
-          poll();
+    const cleanup = schedulePredictorPoll({
+      enabled,
+      pollMs,
+      poll,
+      subscribe: () => subscribeMetrics(
+        (m) => m.type === 'autonomy.model_trained',
+        () => {
+          if (inFlightRef.current) {
+            pendingRefreshRef.current = true; // retry right after the in-flight poll
+          } else {
+            poll();
+          }
         }
-      }
-    );
-
-    poll();
-    const timer = setInterval(poll, pollMs);
+      ),
+    });
     return () => {
       mounted = false;
-      clearInterval(timer);
-      unsubModelTrained();
+      if (cleanup) cleanup();
     };
   }, [pollMs, enabled]);
 
@@ -358,7 +362,6 @@ export default function AnalyticsDashboard({ isPopup = false }) {
   // A log line the Autonomy panel's live strip asked us to focus
   // ({ tag, text, ts, nonce } — nonce re-triggers the focus effect).
   const [logFocus, setLogFocus] = useState(null);
-  const mountTimeRef = useRef(0);
 
   // ── Route guard (computed early so effects can gate on it) ────────────────
   const urlParams = new URLSearchParams(window.location.search);
@@ -500,14 +503,17 @@ export default function AnalyticsDashboard({ isPopup = false }) {
     return unsub;
   }, []);
 
-  // uptime — mountTimeRef is set on first paint via useEffect to avoid Date.now() at render time.
-  // Gated on the analytics route: the hidden main-window mount renders this component off-route,
-  // and a 1s interval just to count seconds it never displays would be pure waste.
+  // uptime — a 1s ticker counting seconds since mount. Gated on the analytics
+  // route: the hidden main-window mount renders this component off-route, and
+  // a 1s interval just to count seconds it never displays would be pure waste.
+  // The gating lives in startUptimeTicker (src/utils/backgroundPolls.js) so the
+  // contract is unit-testable without React.
   useEffect(() => {
-    if (!isAnalyticsRoute) return undefined;
-    mountTimeRef.current = Date.now();
-    const t = setInterval(() => setUptime(Math.floor((Date.now() - mountTimeRef.current) / 1000)), 1000);
-    return () => clearInterval(t);
+    const cleanup = startUptimeTicker({
+      enabled: isAnalyticsRoute,
+      onTick: setUptime,
+    });
+    return cleanup ?? undefined;
   }, [isAnalyticsRoute]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -1195,6 +1201,9 @@ function OverviewTab({ allSignals, trust, personality, emotions, personalityPres
 
       {/* Emotion Predictor status (polls /api/emotion/predictor) */}
       <PredictorStatusCard enabled={predictorEnabled} />
+
+      {/* Real session + memory history (polls /api/analytics/*) */}
+      <SessionHistoryCard />
 
       {/* Active Mode + States */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

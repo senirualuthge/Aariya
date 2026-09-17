@@ -20,7 +20,7 @@ class AnalyticsSystem {
     // --- DATA LAYER (Simulating SQL Tables) ---
 
     loadUser() {
-        if (typeof window === 'undefined') return { user_id: 'server-mock', install_date: Date.now() };
+        if (typeof window === 'undefined') return { user_id: 'no-window-env', install_date: Date.now() };
         let user = JSON.parse(localStorage.getItem(this.userKey));
         if (!user) {
             user = {

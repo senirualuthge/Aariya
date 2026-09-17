@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import useStore from '../store';
 import DraggablePanel from './DraggablePanel';
+import PresenceChip from './PresenceChip';
+import GEVPanel from './GEVPanel';
+import { apiBase } from '../utils/apiHost';
 
 // Mood bar colors
 const moodColors = {
@@ -21,17 +24,43 @@ const moodColors = {
 export default function Overlay() {
   const {
     started, listening, speaking, chatHistory, submitText,
-    voicePitch, setVoicePitch, voiceRate, setVoiceRate, thinking, faceDetected, emotions, userEmotion
+    voicePitch, setVoicePitch, voiceRate, setVoiceRate, thinking, faceDetected, emotions, userEmotion,
+    showChatPanel, showMoodPanel, showUserMoodPanel, showStatusPanel, showVoiceLabPanel,
+    toggleChatPanel, toggleMoodPanel, toggleUserMoodPanel, toggleStatusPanel, toggleVoiceLabPanel,
+    showBrainMonitor, toggleBrainMonitor,
+    showNewsPanel, toggleNewsPanel,
+    showAutonomyPanel, toggleAutonomyPanel,
+    showGovernancePanel, toggleGovernancePanel,
+    showGevPanel, toggleGevPanel
   } = useStore();
 
   const [inputValue, setInputValue] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const chatEndRef = useRef(null);
 
   // Auto-scroll to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
+
+  // Fetch system health to determine voice availability
+  useEffect(() => {
+    fetch(`${apiBase()}/api/system/health`)
+      .then(res => res.json())
+      .then(data => {
+        const checks = Array.isArray(data?.checks) ? data.checks : [];
+        const voiceCheck = checks.find(c => c.name === 'voice');
+        const status = voiceCheck?.status;
+        const meta = voiceCheck?.meta || {};
+        const whisperUp = meta.whisper !== false && meta.whisper !== undefined;
+        const vadUp = meta.vad !== false && meta.vad !== undefined;
+        if (status === 'down' || status === 'unknown' || !whisperUp || !vadUp) {
+          setVoiceEnabled(false);
+        }
+      })
+      .catch(err => console.error('Failed to fetch system health:', err));
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -78,47 +107,29 @@ export default function Overlay() {
         defaultPosition={{ x: 32, y: 32 }}
         autoHeight={true}
         className="ui-panel"
-        style={{ borderLeft: '4px solid #ff8fa3', zIndex: 20 }}
+        style={{ borderLeft: '4px solid #ff8fa3' }}
       >
         <h1 className="drag-handle" style={{ margin: 0, fontSize: '2rem', letterSpacing: '2px', background: 'linear-gradient(90deg, #fff, #ffc0cb)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', cursor: 'grab' }}>
           AARIYA
         </h1>
         <div className="subtitle drag-handle" style={{ color: '#ff8fa3', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '4px', cursor: 'grab' }}>Anime Companion</div>
-      </DraggablePanel>      {/* LEFT SIDE: Chat Panel - Draggable */}
+        {/* Companion presence chip — real mode + trait count from the synoptic,
+            visible on the orb home screen without opening chat. */}
+        <PresenceChip />
+      </DraggablePanel>
+
+      {showGevPanel && <GEVPanel />}
+
+      {/* LEFT SIDE: Chat Panel - Draggable */}
+      {showChatPanel && (
       <DraggablePanel
         id="aariya_chat"
         defaultPosition={{ x: 32, y: 128 }}
         defaultSize={{ width: '380px', height: '550px' }}
         className="ui-panel chat-panel"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '0',
-          overflow: 'hidden',
-          transition: 'opacity 0.5s ease',
-          zIndex: 10,
-          background: 'rgba(20, 10, 15, 0.65)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          border: '1px solid rgba(255, 143, 163, 0.2)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 0 20px rgba(255, 143, 163, 0.05)'
-        }}
       >
         {/* Drag Handle */}
-        <div className="drag-handle" style={{ 
-          cursor: 'grab', 
-          padding: '0.8rem 1.2rem', 
-          background: 'linear-gradient(90deg, rgba(255, 143, 163, 0.15), rgba(255, 143, 163, 0.05))', 
-          borderBottom: '1px solid rgba(255, 143, 163, 0.2)', 
-          fontSize: '0.75rem', 
-          fontWeight: '600',
-          color: '#ff8fa3', 
-          textTransform: 'uppercase', 
-          letterSpacing: '2px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
+        <div className="drag-handle panel-title-bar">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           Chat Stream
         </div>
@@ -259,6 +270,7 @@ export default function Overlay() {
           </button>
         </form>
       </DraggablePanel>
+      )}
 
       {/* AI Control Center Button (Always visible on top right) */}
       <button 
@@ -323,15 +335,16 @@ export default function Overlay() {
       {/* RIGHT SIDE: Status & Settings - Always mounted, hidden when not started */}
       <div style={{ visibility: started ? 'visible' : 'hidden', pointerEvents: started ? 'auto' : 'none', position: 'absolute', inset: 0 }}>
           {/* Mood Meter - Draggable */}
+          {showMoodPanel && (
           <DraggablePanel
             id="aariya_mood"
             defaultPosition={{ x: window.innerWidth - 270, y: window.innerHeight - 450 }}
             defaultSize={{ width: '220px' }}
             autoHeight={true}
             className="ui-panel"
-            style={{ minWidth: '220px', zIndex: 15 }}
+            style={{ minWidth: '220px' }}
           >
-            <div className="drag-handle" style={{ cursor: 'grab', fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', marginBottom: '0.3rem' }}>⋮⋮ Drag</div>
+            <div className="drag-handle drag-handle-mini">⋮⋮ Drag</div>
             <h3 style={{ margin: '0 0 0.5rem 0', color: '#ff8fa3', fontSize: '0.9rem' }}>🎭 Aariya's Mood</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
               {Object.entries(emotions).map(([emotion, value]) => {
@@ -356,17 +369,19 @@ export default function Overlay() {
               })}
             </div>
           </DraggablePanel>
+          )}
 
           {/* User Mood Meter - Draggable with More Moods */}
+          {showUserMoodPanel && (
           <DraggablePanel
             id="aariya_user_mood"
             defaultPosition={{ x: window.innerWidth - 270, y: window.innerHeight - 280 }}
             defaultSize={{ width: '220px' }}
             autoHeight={true}
             className="ui-panel"
-            style={{ minWidth: '220px', zIndex: 15 }}
+            style={{ minWidth: '220px' }}
           >
-            <div className="drag-handle" style={{ cursor: 'grab', fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', marginBottom: '0.3rem' }}>⋮⋮ Drag</div>
+            <div className="drag-handle drag-handle-mini">⋮⋮ Drag</div>
             <h3 style={{ margin: '0 0 0.5rem 0', color: '#a8e6cf', fontSize: '0.9rem' }}>👤 Your Mood</h3>
             
             {faceDetected ? (
@@ -466,17 +481,18 @@ export default function Overlay() {
               </div>
             )}
           </DraggablePanel>
+          )}
 
           {/* Status Panel - Draggable */}
+          {showStatusPanel && (
           <DraggablePanel
             id="aariya_status"
             defaultPosition={{ x: window.innerWidth - 270, y: window.innerHeight - 100 }}
             defaultSize={{ width: '200px' }}
             autoHeight={true}
             className="ui-panel"
-            style={{ zIndex: 15 }}
           >
-            <div className="drag-handle" style={{ cursor: 'grab', fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', marginBottom: '0.3rem' }}>⋮⋮ Drag</div>
+            <div className="drag-handle drag-handle-mini">⋮⋮ Drag</div>
             <div style={{ marginBottom: '0.5rem' }}>
               <span className={`status-indicator ${listening ? 'active' : ''}`} />
               <span>{listening ? 'Listening...' : 'Standby'}</span>
@@ -494,17 +510,18 @@ export default function Overlay() {
             )}
 
           </DraggablePanel>
+          )}
 
           {/* Voice Lab Button & Panel - Draggable */}
+          {voiceEnabled && showVoiceLabPanel && (
           <DraggablePanel
             id="aariya_voicelab"
-            defaultPosition={{ x: window.innerWidth - 270, y: 32 }}
+            defaultPosition={{ x: window.innerWidth - 270, y: 128 }}
             defaultSize={{ width: '220px' }}
             autoHeight={true}
             className="ui-panel"
-            style={{ zIndex: 15 }}
           >
-            <div className="drag-handle" style={{ cursor: 'grab', fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', marginBottom: '0.3rem' }}>⋮⋮ Drag</div>
+            <div className="drag-handle drag-handle-mini">⋮⋮ Drag</div>
             <button
               onClick={() => setShowSettings(!showSettings)}
               style={{
@@ -557,6 +574,23 @@ export default function Overlay() {
               </div>
             )}
           </DraggablePanel>
+          )}
+      </div>
+
+      {/* Layout Manager Dock */}
+      <div className="layout-dock">
+        <button className={`dock-btn ${showChatPanel ? 'active' : ''}`} onClick={toggleChatPanel}>Chat</button>
+        {voiceEnabled && (
+            <button className={`dock-btn ${showVoiceLabPanel ? 'active' : ''}`} onClick={toggleVoiceLabPanel}>Voice Lab</button>
+        )}
+        <button className={`dock-btn ${showMoodPanel ? 'active' : ''}`} onClick={toggleMoodPanel}>Aariya Mood</button>
+        <button className={`dock-btn ${showUserMoodPanel ? 'active' : ''}`} onClick={toggleUserMoodPanel}>User Mood</button>
+        <button className={`dock-btn ${showStatusPanel ? 'active' : ''}`} onClick={toggleStatusPanel}>Status</button>
+        <button className={`dock-btn ${showBrainMonitor ? 'active' : ''}`} onClick={toggleBrainMonitor}>Telemetry</button>
+        <button className={`dock-btn ${showNewsPanel ? 'active' : ''}`} onClick={toggleNewsPanel}>News</button>
+        <button className={`dock-btn ${showAutonomyPanel ? 'active' : ''}`} onClick={toggleAutonomyPanel}>Autonomy</button>
+        <button className={`dock-btn ${showGovernancePanel ? 'active' : ''}`} onClick={toggleGovernancePanel}>Governance</button>
+        <button className={`dock-btn ${showGevPanel ? 'active' : ''}`} onClick={toggleGevPanel}>GEV Map</button>
       </div>
     </div>
   );

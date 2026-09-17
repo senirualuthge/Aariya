@@ -88,7 +88,7 @@ def test_register_probe_appears_automatically():
 
 def test_broken_probe_never_raises():
     monitor = get_system_health()
-    monitor.register_probe("exploding", lambda: 1 / 0)
+    monitor.register_probe("exploding", lambda: 1 / 0)  # type: ignore
 
     checks = {c["name"]: c for c in monitor.collect()["checks"]}
     assert checks["exploding"]["status"] == "down"
@@ -104,7 +104,7 @@ def test_functions_from_registry():
     for f in functions:
         assert f["name"]
         assert f["status"] in {"new", "existing", "removed"}
-        assert f["kind"] in {"class", "function"}
+        assert f["kind"] in {"class", "function", "geospatial"}  # GEV agent
 
 
 def test_mobile_folding_is_safe():

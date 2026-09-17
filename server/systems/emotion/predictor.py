@@ -88,7 +88,7 @@ _predictor_lock = threading.Lock()
 
 if _TORCH_AVAILABLE:
 
-    class EmotionPredictor(nn.Module):
+    class EmotionPredictor(nn.Module):  # type: ignore[reportRedeclaration,reportOptionalMemberAccess]
         """
         LSTM-based predictor modeling the trajectory of a user's emotional state
         to warn the AI of impending frustration / drops in valence.
@@ -103,10 +103,10 @@ if _TORCH_AVAILABLE:
             self.input_dim = input_dim
             self.hidden_dim = hidden_dim
             self.num_classes = num_classes
-            self.lstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,
+            self.lstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,  # type: ignore[union-attr]
                                 batch_first=True)
-            self.fc_regression = nn.Linear(hidden_dim, 2)          # Valence & Arousal
-            self.fc_classification = nn.Linear(hidden_dim, num_classes)
+            self.fc_regression = nn.Linear(hidden_dim, 2)          # Valence & Arousal  # type: ignore[union-attr]
+            self.fc_classification = nn.Linear(hidden_dim, num_classes)  # type: ignore[union-attr]
 
         def forward(self, x):
             out_lstm, (h_n, _c_n) = self.lstm(x)
@@ -158,9 +158,9 @@ def build_sequences(records: List[dict], seq_len: int = 8):
         X.append(window)
         Y.append([nxt[0], nxt[1]])
     if not X:
-        return (torch.tensor([]), torch.tensor([]))
-    return (torch.tensor(X, dtype=torch.float32),
-            torch.tensor(Y, dtype=torch.float32))
+        return (torch.tensor([]), torch.tensor([]))  # type: ignore[union-attr]
+    return (torch.tensor(X, dtype=torch.float32),  # type: ignore[union-attr]
+            torch.tensor(Y, dtype=torch.float32))  # type: ignore[union-attr]
 
 
 def _pseudo_class(valence: float) -> int:
@@ -191,28 +191,28 @@ def train_predictor(records: List[dict], epochs: int = 30, seq_len: int = 8,
                        seq_len + 1, len(records))
         return None
 
-    torch.manual_seed(seed)
+    torch.manual_seed(seed)  # type: ignore[union-attr]
     X, Y = build_sequences(records, seq_len)
     if len(X) == 0:
         return None
 
-    labels = torch.tensor([_pseudo_class(y[0].item()) for y in Y],
-                          dtype=torch.long)
+    labels = torch.tensor([_pseudo_class(y[0].item()) for y in Y],  # type: ignore[union-attr]
+                          dtype=torch.long)  # type: ignore[union-attr]
 
-    model = EmotionPredictor(input_dim=INPUT_DIM, hidden_dim=hidden_dim,
+    model = EmotionPredictor(input_dim=INPUT_DIM, hidden_dim=hidden_dim,  # type: ignore[call-arg]
                              num_classes=NUM_CLASSES)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    mse = torch.nn.MSELoss()
-    ce = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)  # type: ignore[union-attr]
+    mse = torch.nn.MSELoss()  # type: ignore[union-attr]
+    ce = torch.nn.CrossEntropyLoss()  # type: ignore[union-attr]
 
-    model.train()
+    model.train()  # type: ignore[union-attr]
     for _epoch in range(epochs):
         optimizer.zero_grad()
-        pred_cont, pred_cls = model(X)
+        pred_cont, pred_cls = model(X)  # type: ignore[call-arg]
         loss = mse(pred_cont, Y) + 0.2 * ce(pred_cls, labels)
         loss.backward()
         optimizer.step()
-    model.eval()
+    model.eval()  # type: ignore[union-attr]
     logger.info("[EmotionPredictor] Trained %d epochs on %d windows "
                 "(final loss %.4f).", epochs, len(X), float(loss.item()))
     return model
@@ -222,22 +222,22 @@ def save_model(model: "EmotionPredictor", path: Any) -> None:
     """Persist the model with its hyperparameters."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({
-        "state_dict": model.state_dict(),
-        "input_dim": model.input_dim,
-        "hidden_dim": model.hidden_dim,
-        "num_classes": model.num_classes,
+    torch.save({  # type: ignore[union-attr]
+        "state_dict": model.state_dict(),  # type: ignore[union-attr]
+        "input_dim": model.input_dim,  # type: ignore[union-attr]
+        "hidden_dim": model.hidden_dim,  # type: ignore[union-attr]
+        "num_classes": model.num_classes,  # type: ignore[union-attr]
     }, path)
 
 
 def load_model(path: Any) -> "EmotionPredictor":
     """Load a checkpoint saved by save_model()."""
-    ckpt = torch.load(Path(path), map_location="cpu", weights_only=True)
-    model = EmotionPredictor(input_dim=ckpt["input_dim"],
+    ckpt = torch.load(Path(path), map_location="cpu", weights_only=True)  # type: ignore[union-attr]
+    model = EmotionPredictor(input_dim=ckpt["input_dim"],  # type: ignore[call-arg]
                              hidden_dim=ckpt["hidden_dim"],
                              num_classes=ckpt["num_classes"])
-    model.load_state_dict(ckpt["state_dict"])
-    model.eval()
+    model.load_state_dict(ckpt["state_dict"])  # type: ignore[union-attr]
+    model.eval()  # type: ignore[union-attr]
     return model
 
 
@@ -261,14 +261,14 @@ def predict_future_state(model: "EmotionPredictor", history: list) -> dict:
             "velocity_valence": 0.0, "confidence": 0.0,
         }
 
-    x = torch.tensor([seq], dtype=torch.float32)
-    with torch.no_grad():
-        pred_cont, pred_cls = model(x)
+    x = torch.tensor([seq], dtype=torch.float32)  # type: ignore[union-attr]
+    with torch.no_grad():  # type: ignore[union-attr]
+        pred_cont, pred_cls = model(x)  # type: ignore[call-arg]
 
-    future_valence = float(torch.clamp(pred_cont[0, 0], -1.0, 1.0))
-    future_arousal = float(torch.clamp(pred_cont[0, 1], 0.0, 1.0))
+    future_valence = float(torch.clamp(pred_cont[0, 0], -1.0, 1.0))  # type: ignore[union-attr]
+    future_arousal = float(torch.clamp(pred_cont[0, 1], 0.0, 1.0))  # type: ignore[union-attr]
     velocity = seq[-1][0] - seq[-2][0] if len(seq) >= 2 else 0.0
-    probs = torch.softmax(pred_cls, dim=-1)[0]
+    probs = torch.softmax(pred_cls, dim=-1)[0]  # type: ignore[union-attr]
 
     return {
         "future_valence":   round(future_valence, 4),

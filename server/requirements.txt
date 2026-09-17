@@ -62,3 +62,15 @@ idna>=3.15              # PYSEC-2026-215
 msgpack>=1.2.1          # PYSEC-2026-3625
 setuptools>=83.0.0      # PYSEC-2026-3447
 pip>=26.1.2             # PYSEC-2026-196/2875/2876
+
+# ── Filesystem + desktop gap-closing modules (server/systems/*) ─────────────
+# watchdog/psutil power drive_monitor.py + live_watcher.py; the rest are
+# guarded imports (graceful no-op when absent) so core remains installable
+# on headless boxes.
+watchdog>=4.0.0
+psutil>=5.9.0
+# Optional OCR (ocr_engine.py): pytesseract + tesseract binary, pymupdf
+# pytesseract>=0.3.10
+# pymupdf>=1.24.0
+# Optional desktop automation (desktop_controller.py / desktop_vision.py)
+# pyautogui>=0.9.54

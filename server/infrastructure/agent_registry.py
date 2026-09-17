@@ -93,6 +93,41 @@ class AgentRegistry:
             self._save()
             return diff
 
+    def register_static_agent(self, record: dict) -> dict:
+        """
+        Register a single static agent without treating missing agents as absent.
+        Returns a diff object describing what changed.
+        """
+        with self._lock:
+            now = datetime.now(timezone.utc).isoformat()
+            aid = record["id"]
+            
+            diff = {"new": [], "updated": [], "removed": []}
+            
+            if aid not in self._data["agents"]:
+                entry = self._make_entry(record, status="new", first_seen=now)
+                self._data["agents"][aid] = entry
+                diff["new"].append(entry)
+            else:
+                prev = self._data["agents"][aid]
+                changed = prev["file_hash"] != record["file_hash"]
+                entry = self._make_entry(
+                    record,
+                    status="new" if prev["status"] == "new" else "existing",
+                    first_seen=prev["first_seen"],
+                )
+                entry["last_seen"] = now
+                entry["absent_scans"] = 0
+                self._data["agents"][aid] = entry
+                if changed:
+                    diff["updated"].append(entry)
+                    
+            self._data["total_agents"] = len(
+                [a for a in self._data["agents"].values() if a["status"] != "removed"]
+            )
+            self._save()
+            return diff
+
     def get_all(self) -> dict:
         """Return full registry snapshot."""
         with self._lock:

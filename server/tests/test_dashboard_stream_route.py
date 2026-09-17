@@ -114,7 +114,7 @@ def test_dashboard_stream_registered_once():
     assert len(matches) == 1, (
         f"expected exactly one /ws/dashboard/stream route, got {len(matches)}"
     )
-    ep = matches[0].endpoint
+    ep = matches[0].endpoint  # type: ignore
     assert ep.__module__ == "server.main"
     assert ep.__name__ == "websocket_dashboard_stream"
 

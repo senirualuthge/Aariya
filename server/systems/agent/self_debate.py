@@ -56,7 +56,7 @@ class SelfDebate:
                 {"role": "user", "content": f"Final Answer: {refined_answer}"}
             ])
             confidence = float(score_str.strip())
-        except:
+        except Exception:
             confidence = 0.85
             
         return refined_answer, confidence

@@ -31,10 +31,10 @@ def test_broadcast_state_reaches_every_surface():
     dashboard = _FakeSocket()  # surfaces["dashboard"]
     unity = _FakeSocket()      # surfaces["main"]
 
-    manager.add_surface("mobile", "user_default", phone_a)
-    manager.add_surface("mobile", "user_default", phone_b)
-    manager.add_surface("dashboard", "user_default", dashboard)
-    manager.add_surface("main", "user_default", unity)
+    manager.add_surface("mobile", "user_default", phone_a)  # type: ignore
+    manager.add_surface("mobile", "user_default", phone_b)  # type: ignore
+    manager.add_surface("dashboard", "user_default", dashboard)  # type: ignore
+    manager.add_surface("main", "user_default", unity)  # type: ignore
 
     asyncio.run(manager.broadcast_state(
         "user_default",
@@ -57,8 +57,8 @@ def test_broadcast_state_is_scoped_to_user():
     alice = _FakeSocket()
     bob = _FakeSocket()
 
-    manager.add_surface("mobile", "alice", alice)
-    manager.add_surface("mobile", "bob", bob)
+    manager.add_surface("mobile", "alice", alice)  # type: ignore
+    manager.add_surface("mobile", "bob", bob)  # type: ignore
 
     asyncio.run(manager.broadcast_state("alice", BrainState()))
 

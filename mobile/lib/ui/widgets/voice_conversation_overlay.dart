@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/audio_analyser.dart';
 import '../../state/chat_controller.dart';
 import '../../services/websocket_service.dart';
+import 'companion_presence.dart';
 import 'voice_reactive_orb.dart';
 import 'emotion_ring.dart';
 import 'animated_text_stream.dart';
@@ -460,14 +461,6 @@ class _VoiceConversationOverlayState extends State<VoiceConversationOverlay>
   Widget build(BuildContext context) {
     final brain = widget.chatController.brain;
 
-    final Color statusColor = _isMicMuted
-        ? Colors.redAccent
-        : switch (_state) {
-            VoiceState.listening  => Colors.greenAccent,
-            VoiceState.processing => Colors.orangeAccent,
-            VoiceState.speaking   => const Color(0xFF3BAFDA),
-          };
-
     final bool cameraReady = _isCameraEnabled &&
         _cameraController != null &&
         _cameraController!.value.isInitialized;
@@ -519,6 +512,13 @@ class _VoiceConversationOverlayState extends State<VoiceConversationOverlay>
                     letterSpacing: 2.5,
                   ),
                 ),
+
+                const SizedBox(height: 10),
+
+                // ── Companion presence chip (live during the call) ────────────
+                // Real mode + trait count from the synoptic; tap for the
+                // summary sheet — same chip as the chat app bar.
+                CompanionPresenceChip(controller: widget.chatController.brain),
 
                 const Spacer(),
 
@@ -612,24 +612,34 @@ class _VoiceConversationOverlayState extends State<VoiceConversationOverlay>
                     mainAxisSize: MainAxisSize.min,
                     children: [
 
-                      // Status pill
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 250),
-                        child: _isMicMuted
-                            ? const _StatusPill(
-                                key: ValueKey('muted'),
-                                label: 'MICROPHONE MUTED',
-                                color: Colors.redAccent,
-                              )
-                            : _StatusPill(
-                                key: ValueKey(_state.name),
-                                label: switch (_state) {
-                                  VoiceState.listening  => 'LISTENING',
-                                  VoiceState.processing => 'THINKING',
-                                  VoiceState.speaking   => 'SPEAKING',
-                                },
-                                color: statusColor,
-                              ),
+                      // Status pill — tinted by the live behavior mode (the
+                      // same controller the presence chip reads) so the pill
+                      // and chip stay in sync when a state.update changes the
+                      // mode mid-call. Muted stays the emergency red; the
+                      // AnimatedBuilder repaints on any brain notify so a mode
+                      // change without a speech-state change still re-tints.
+                      AnimatedBuilder(
+                        animation: widget.chatController.brain,
+                        builder: (context, _) => AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: _isMicMuted
+                              ? const _StatusPill(
+                                  key: ValueKey('muted'),
+                                  label: 'MICROPHONE MUTED',
+                                  color: Colors.redAccent,
+                                )
+                              : _StatusPill(
+                                  key: ValueKey(_state.name),
+                                  label: switch (_state) {
+                                    VoiceState.listening  => 'LISTENING',
+                                    VoiceState.processing => 'THINKING',
+                                    VoiceState.speaking   => 'SPEAKING',
+                                  },
+                                  color: statusPillColor(
+                                      _state,
+                                      widget.chatController.brain.behaviorMode),
+                                ),
+                        ),
                       ),
 
                       const SizedBox(height: 20),
@@ -689,6 +699,20 @@ class _VoiceConversationOverlayState extends State<VoiceConversationOverlay>
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+/// Status-pill tint — mirrors the presence chip's mode color so the pill and
+/// chip stay in sync during a call. Falls back to state-accent colors only
+/// before the first synoptic (mode) arrives, so a no-data call is never
+/// miscolored as CALM.
+@visibleForTesting
+Color statusPillColor(VoiceState state, String mode) {
+  if (mode.isNotEmpty) return modeColor(mode);
+  return switch (state) {
+    VoiceState.listening  => Colors.greenAccent,
+    VoiceState.processing => Colors.orangeAccent,
+    VoiceState.speaking   => const Color(0xFF3BAFDA),
+  };
+}
 
 class _StatusPill extends StatelessWidget {
   final String label;

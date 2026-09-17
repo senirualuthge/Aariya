@@ -276,3 +276,234 @@ def _goal_to_text(goal: Any) -> str:
         return str(goal)
     text = str(goal or "").strip()
     return text or "general goal"
+
+
+# ── TaskPlanner (AccessFIles §21 — "TASK PLANNER (MOST IMPORTANT)") ───────────
+
+class TaskPlanner:
+    """Goal → concrete-action-plan translator (AccessFIles §21).
+
+    Given a goal string, returns an ordered list of whitelisted action dicts
+    the ActionExecutor can dispatch (launch_app, navigate, wait, type,
+    create_document, observe, research, check_in). Unknown goals degrade to an
+    empty plan rather than inventing side effects.
+    """
+
+    RECIPES: Dict[str, List[Dict[str, Any]]] = {
+        "open chrome": [{"action": "launch_app", "app": "chrome"}],
+        "open browser": [{"action": "launch_app", "app": "chrome"}],
+        "search youtube": [
+            {"action": "launch_app", "app": "chrome"},
+            {"action": "navigate", "url": "https://youtube.com"},
+        ],
+        "create document": [
+            {"action": "launch_app", "app": "word"},
+            {"action": "wait", "seconds": 2},
+            {"action": "type", "text": "New document"},
+        ],
+        "check email": [
+            {"action": "launch_app", "app": "mail"},
+            {"action": "observe", "what": "email inbox"},
+        ],
+        "write notes": [
+            {"action": "create_document", "title": "notes"},
+            {"action": "type", "text": "Capturing a thought..."},
+        ],
+        "do research": [{"action": "research", "topic": "current events"}],
+        "check in": [{"action": "check_in", "context": "warm, natural check-in"}],
+    }
+
+    # Cognitive goal-type recipes (GoalSystem + HierarchicalGoalSystem types).
+    # These map internal state goals — which the brain feeds in every turn — onto
+    # concrete whitelisted ActionExecutor steps, so the planner→executor chain
+    # actually fires instead of degrading to an empty plan (AccessFIles §21-22).
+    GOAL_TYPE_RECIPES: Dict[str, List[Dict[str, Any]]] = {
+        "stabilize": [
+            {"action": "observe", "what": "current cognitive state"},
+            {"action": "wait", "seconds": 2},
+            {"action": "check_in", "context": "calm, grounded check-in"},
+        ],
+        "maintain stability": [
+            {"action": "observe", "what": "current cognitive state"},
+            {"action": "wait", "seconds": 2},
+            {"action": "check_in", "context": "calm, grounded check-in"},
+        ],
+        "build trust": [
+            {"action": "observe", "what": "user context"},
+            {"action": "check_in", "context": "warm, attentive check-in"},
+        ],
+        "build relationship": [
+            {"action": "observe", "what": "user context"},
+            {"action": "check_in", "context": "warm, attentive check-in"},
+        ],
+        "increase curiosity": [
+            {"action": "research", "topic": "an interesting current topic"},
+            {"action": "create_document", "title": "curiosity notes"},
+        ],
+        "expand knowledge": [
+            {"action": "research", "topic": "an interesting current topic"},
+            {"action": "create_document", "title": "knowledge notes"},
+        ],
+        "reduce risk": [
+            {"action": "observe", "what": "current state"},
+            {"action": "wait", "seconds": 1},
+            {"action": "check_in", "context": "gentle safety check-in"},
+        ],
+    }
+
+    def generate_plan(self, goal: str) -> List[Dict[str, Any]]:
+        """Translate a goal string into an ordered action plan."""
+        if not goal:
+            return []
+        key = goal.strip().lower()
+        if key in self.RECIPES:
+            return [dict(step) for step in self.RECIPES[key]]
+
+        # Normalized goal-type lookup — strips punctuation/underscores so both
+        # "build_trust" and "build trust" resolve to the same recipe.
+        norm = key.replace("_", " ").strip()
+        if norm in self.GOAL_TYPE_RECIPES:
+            return [dict(step) for step in self.GOAL_TYPE_RECIPES[norm]]
+
+        lowered = key
+        if "research" in lowered or "learn about" in lowered:
+            topic = lowered.replace("research", "").replace("learn about", "").strip(" :")
+            return [{"action": "research", "topic": topic or "current events"}]
+        if "search" in lowered:
+            query = lowered.replace("search", "").replace("search for", "").strip(" :")
+            return [
+                {"action": "launch_app", "app": "chrome"},
+                {"action": "navigate", "url": f"https://www.google.com/search?q={query.replace(' ', '+')}"},
+            ]
+        logger.debug("[TaskPlanner] no recipe for goal '%s' → empty plan", goal)
+        return []
+
+    def plan_goal(self, goal: str) -> Dict[str, Any]:
+        """Return a full plan object (steps + metadata) for downstream use."""
+        steps = self.generate_plan(goal)
+        return {
+            "goal": goal,
+            "steps": steps,
+            "step_count": len(steps),
+            "first_action": steps[0]["action"] if steps else None,
+        }
+
+
+class Replanner:
+    """Replanning (NEWPredictionPRT2 §8): when something fails, produce an
+    alternative strategy instead of dropping the plan.
+
+        Weather API offline → use backup provider → continue plan
+
+    `replan(failed_task)` returns a list of alternative-strategy descriptors.
+    Each carries a human-readable strategy, the concrete whitelisted fallback
+    steps (reusable by the ActionExecutor), and the reason it was chosen.
+    """
+
+    # Action-specific fallback strategies. Each fallback maps the FAILED action
+    # to a replacement plan (steps the ActionExecutor can dispatch) plus a
+    # short description of the alternative approach.
+    ACTION_FALLBACKS: Dict[str, Dict[str, Any]] = {
+        "launch_app": {
+            "strategy": "Use browser fallback instead of the desktop app",
+            "steps": [
+                {"action": "navigate", "url": "https://www.google.com"},
+                {"action": "observe", "what": "landing page"},
+            ],
+        },
+        "navigate": {
+            "strategy": "Retry via search engine instead of the direct URL",
+            "steps": [
+                {"action": "navigate", "url": "https://www.google.com"},
+                {"action": "type", "text": "topic"},
+                {"action": "observe", "what": "search results"},
+            ],
+        },
+        "type": {
+            "strategy": "Create a document instead of typing in the live app",
+            "steps": [
+                {"action": "create_document", "title": "captured note"},
+                {"action": "type", "text": "Saved offline after typing failure"},
+            ],
+        },
+        "research": {
+            "strategy": "Use a backup information provider",
+            "steps": [
+                {"action": "navigate", "url": "https://www.google.com/search?q=fallback"},
+                {"action": "observe", "what": "backup search results"},
+            ],
+        },
+        "run_code": {
+            "strategy": "Analyze offline instead of executing code",
+            "steps": [
+                {"action": "create_document", "title": "analysis note"},
+                {"action": "type", "text": "Code execution unavailable; recorded for offline analysis."},
+            ],
+        },
+        "check_in": {
+            "strategy": "Continue the plan and check in later",
+            "steps": [
+                {"action": "wait", "seconds": 3},
+                {"action": "observe", "what": "current state"},
+            ],
+        },
+    }
+
+    def replan(self, failed_task: Any) -> List[Dict[str, Any]]:
+        """Given a failed task/step, return alternative strategies."""
+        if isinstance(failed_task, str):
+            failed = {"action": failed_task}
+        elif isinstance(failed_task, dict):
+            failed = failed_task
+        else:
+            return []
+
+        action = str(failed.get("action", "")).lower().strip()
+        goal = str(failed.get("goal", "") or failed.get("reason", "")).strip()
+        alternatives: List[Dict[str, Any]] = []
+
+        fallback = self.ACTION_FALLBACKS.get(action)
+        if fallback:
+            alternatives.append({
+                "failed_action": action,
+                "strategy": fallback["strategy"],
+                "steps": [dict(step) for step in fallback["steps"]],
+                "reason": f"fallback for '{action}'",
+            })
+
+        # Goal-level replan: ask the TaskPlanner for a fresh plan, which may
+        # sidestep the failed action entirely ("Continue plan").
+        if goal:
+            replanned = TaskPlanner().generate_plan(goal)
+            if replanned:
+                alternatives.append({
+                    "failed_action": action,
+                    "strategy": f"Replan goal '{goal}' with a fresh action sequence",
+                    "steps": [dict(step) for step in replanned],
+                    "reason": "goal-level replan",
+                })
+
+        # Generic last-resort strategy so the plan never dies silently.
+        alternatives.append({
+            "failed_action": action,
+            "strategy": "Fall back to observation and re-check the current state",
+            "steps": [
+                {"action": "observe", "what": "current state"},
+                {"action": "check_in", "context": "gentle status check"},
+            ],
+            "reason": "last-resort replan",
+        })
+        return alternatives
+
+    def continue_plan(self, failed_task: Any) -> Dict[str, Any]:
+        """Replan() then report whether the plan can continue (the doc's
+        'Use backup provider → Continue plan' shape)."""
+        alternatives = self.replan(failed_task)
+        action = failed_task.get("action") if isinstance(failed_task, dict) else str(failed_task)
+        return {
+            "failed_action": action,
+            "can_continue": bool(alternatives),
+            "alternative_count": len(alternatives),
+            "alternatives": alternatives,
+        }
+

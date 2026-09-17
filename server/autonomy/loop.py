@@ -46,8 +46,19 @@ _LLM_MODEL = os.getenv("LLM_MODEL",    "llama3")
 _llm_engine: Optional[LLMEngine] = None
 
 def _get_llm() -> LLMEngine:
+    """Proactive messages are a LIGHT task (AccessFIles §48/§78): when the
+    operator runs a local model the router sends these there instead of
+    spending hosted tokens. Falls back to the remote engine unchanged."""
     global _llm_engine
     if _llm_engine is None:
+        try:
+            from server.systems.llm_router import get_llm_router
+            engine = get_llm_router().engine_for("route")
+            if engine is not None:
+                _llm_engine = engine
+                return engine
+        except Exception:
+            pass  # router unavailable — default engine below
         _llm_engine = LLMEngine(
             base_url=_LLM_BASE,
             api_key=_LLM_KEY,
@@ -187,8 +198,8 @@ async def generate_proactive_message(trigger: dict, trust: float) -> str:
         from server.systems.identity_kernel import get_identity_kernel
         kernel = get_identity_kernel()
         identity_block = f"{kernel.get_core_summary()}\n{kernel.get_style_directive()}\n"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("[AutonomyLoop] identity kernel unavailable: %s", exc)
 
     memory_block = ""
     try:
@@ -196,8 +207,8 @@ async def generate_proactive_message(trigger: dict, trust: float) -> str:
         mem = ConversationLog().recall_prompt(hint, limit=2)
         if mem:
             memory_block = f"Shared history she remembers:\n{mem}\n"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("[AutonomyLoop] conversation log recall failed: %s", exc)
 
     system_prompt = (
         "You are Aariya, an emotionally intelligent AI companion — a living "

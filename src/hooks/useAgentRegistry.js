@@ -13,7 +13,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 
-const WS_URL = import.meta.env.VITE_AGENT_WS_URL || `ws://${window.location.hostname}:8000/api/agents/ws`;
+import { apiWsBase } from '../utils/apiHost';
+
+// Centralised config from Vite env or fallback to apiWsBase
+const WS_URL = import.meta.env.VITE_AGENT_WS_URL || `${apiWsBase()}/api/agents/ws`;
 const RECONNECT_DELAY_MS = 3000;
 // If no ping arrives within this window, the connection is silently dead
 const PING_WATCHDOG_MS = 60_000;

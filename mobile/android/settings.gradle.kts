@@ -1,3 +1,5 @@
+rootProject.name = "mobile_android"
+
 pluginManagement {
     val flutterSdkPath =
         run {

@@ -100,7 +100,20 @@ class ProactiveAIEngine:
             return self._fire("escalation", trust, now, "medium",
                 "Notice the conversation energy is shifting and gently redirect.")
 
-        # Priority 3: Insight ready — she learned something while away
+        # Priority 3: Proactive alert — a high-impact / high-relevance world
+        # event deserves unprompted follow-up (NEWPredictionPRT2 §Proactive).
+        alerts = extra.get("proactive_alerts") or []
+        if alerts and now - self._last_fire_by_type.get("followup", 0) > INSIGHT_COOLDOWN_SECONDS:
+            top = alerts[0]
+            if top.get("actionable"):
+                return self._fire("followup", trust, now, "medium",
+                    f"A {'recent' if now - float(top.get('timestamp', now)) < 3600 else 'significant'} "
+                    f"{top.get('domain')} event matters to you (impact {top.get('impact', 0):.2f}). "
+                    "Bring it up naturally and ask how they're feeling about it.",
+                    payload={"domain": top.get("domain"), "impact": top.get("impact"),
+                             "valence": top.get("valence")})
+
+        # Priority 4: Insight ready — she learned something while away
         pending_insights = extra.get("pending_insights") or []
         if pending_insights and now - self._last_fire_by_type.get("insight", 0) > INSIGHT_COOLDOWN_SECONDS:
             top = pending_insights[0]
@@ -109,7 +122,7 @@ class ProactiveAIEngine:
                 f"as if it just came to you, not a report.",
                 payload={"insight_id": top.get("id"), "topic": top.get("topic")})
 
-        # Priority 4: Opportunity — an autonomous plan needs approval
+        # Priority 5: Opportunity — an autonomous plan needs approval
         plan = extra.get("plan_awaiting_approval")
         if plan and now - self._last_fire_by_type.get("opportunity", 0) > OPPORTUNITY_COOLDOWN_SECONDS:
             return self._fire("opportunity", trust, now, "low",
@@ -117,14 +130,14 @@ class ProactiveAIEngine:
                 "Briefly present it and ask if they want you to proceed.",
                 payload={"plan_id": plan.get("id")})
 
-        # Priority 5: Curiosity — boredom / entropy trigger
+        # Priority 6: Curiosity — boredom / entropy trigger
         boredom = extra.get("boredom", 0.0)
         has_gaps = extra.get("has_gaps", False)
         if has_gaps and boredom > 0.6 and now - self._last_fire_by_type.get("curiosity", 0) > CURIOSITY_COOLDOWN_SECONDS:
             return self._fire("curiosity", trust, now, "low",
                 "You've been quiet — share a small thought or observation to spark something new.")
 
-        # Priority 6: Long silence
+        # Priority 7: Long silence
         silence = now - self._last_user_message
         if silence > SILENCE_TRIGGER_SECONDS and trust > 0.3:
             return self._fire("silence", trust, now, "low",

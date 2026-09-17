@@ -135,8 +135,13 @@ start() {
     return 0
   fi
   if [ ! -f "$PLIST" ]; then
-    warn "plist missing — recreating at $PLIST"
-    write_plist
+    fail "launchd agent plist not found ($PLIST)."
+    fail "Aariya auto-start is intentionally DISABLED on this Mac — the launchd agent was removed so the server never starts at login, after restart, or after shutdown."
+    fail "To run it manually from a terminal (dies with the terminal):"
+    fail "    npm run dev"
+    fail "    # or directly:"
+    fail "    \"$ROOT/venv/bin/uvicorn\" server.main:app --host 0.0.0.0 --port $PORT"
+    return 1
   fi
   # A just-stopped instance drains gracefully and can leave the socket bound
   # (refusing connections) for a while. Let it go before bootstrapping, or

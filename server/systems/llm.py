@@ -1,9 +1,10 @@
 import asyncio
 import os
 import json
-from typing import List, Dict, Optional
+from typing import Iterable, List, Dict, Optional
 
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 # ── Configuration (reads .env, falls back to a local Ollama/LM-Studio) ─────────
 # The brain's chat model is configured via env vars:
@@ -36,7 +37,7 @@ def resolve_llm_config() -> dict:
 
 
 class LLMEngine:
-    def __init__(self, base_url: str = None, api_key: str = None, model: str = None):
+    def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None, model: Optional[str] = None):
         """
         Initialize LLM Engine.
         Resolves configuration from the environment when args are omitted.
@@ -48,7 +49,7 @@ class LLMEngine:
         self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)
         print(f"[LLM] Initialized with model: {self.model} at {self.base_url}")
 
-    def chat_completion(self, messages: List[Dict[str, str]], temperature: float = 0.7, max_tokens: int = 150) -> str:
+    def chat_completion(self, messages: Iterable[ChatCompletionMessageParam], temperature: float = 0.7, max_tokens: int = 150) -> str:
         """
         Get a chat completion from the LLM.
         """
@@ -59,12 +60,13 @@ class LLMEngine:
                 temperature=temperature,
                 max_tokens=max_tokens
             )
-            return response.choices[0].message.content.strip()
+            content = response.choices[0].message.content
+            return content.strip() if content else ""
         except Exception as e:
             print(f"[LLM] Error in chat_completion: {e}")
             return ""
 
-    async def chat_completion_async(self, messages: List[Dict[str, str]], temperature: float = 0.7, max_tokens: int = 150) -> str:
+    async def chat_completion_async(self, messages: Iterable[ChatCompletionMessageParam], temperature: float = 0.7, max_tokens: int = 150) -> str:
         """
         Async wrapper around the (CPU/IO-bound) sync chat call. Runs the sync
         OpenAI call in an executor thread so the event loop is never blocked.
@@ -75,7 +77,7 @@ class LLMEngine:
             lambda: self.chat_completion(messages=messages, temperature=temperature, max_tokens=max_tokens),
         )
 
-    async def chat_completion_stream(self, messages: List[Dict[str, str]], temperature: float = 0.7, max_tokens: int = 150):
+    async def chat_completion_stream(self, messages: Iterable[ChatCompletionMessageParam], temperature: float = 0.7, max_tokens: int = 150):
         """
         Stream a chat completion from the LLM as an async generator.
         """
@@ -97,7 +99,7 @@ class LLMEngine:
             print(f"[LLM] Error in chat_completion_stream: {e}")
             yield ""
 
-    async def stream_to_callback(self, messages: List[Dict[str, str]], on_token, temperature: float = 0.7, max_tokens: int = 150) -> str:
+    async def stream_to_callback(self, messages: Iterable[ChatCompletionMessageParam], on_token, temperature: float = 0.7, max_tokens: int = 150) -> str:
         """
         Stream a completion while accumulating the full text.
         `on_token` is an async callable receiving each token string.

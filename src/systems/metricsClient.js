@@ -9,8 +9,9 @@
 // per client. This module keeps ONE shared connection (ref-counted) and fans
 // each message out to subscribers that match it.
 import { eventBus } from '../core/EventBus';
+import { apiWsBase } from '../utils/apiHost';
 
-const METRICS_WS_URL = `ws://${window.location.hostname || 'localhost'}:8000/ws/brain_metrics`;
+const METRICS_WS_URL = `${apiWsBase()}/ws/brain_metrics`;
 const RECONNECT_DELAY_MS = 4000;
 
 // Every metrics message is also published on the shared bus, keyed by type.

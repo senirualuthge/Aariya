@@ -4,37 +4,23 @@
  *
  * Real searches are routed through the Aariya brain server's /api/web-search
  * endpoint, which fans out to the configured provider (Bing → SerpAPI →
- * Serper.dev → mock) so API keys never leave the backend. If the brain server
- * is unreachable but a VITE_SERPER_API_KEY is set, the browser calls
- * Serper.dev directly as a fallback. When neither path yields real results we
- * drop back to the local simulated knowledge base so the demo always answers.
+ * Serper.dev → DuckDuckGo → Wikipedia) so API keys never leave the backend.
+ * If the brain server is unreachable but a VITE_SERPER_API_KEY is set, the
+ * browser calls Serper.dev directly as a fallback. There is NO simulated
+ * knowledge base: when no real provider answers, search() returns
+ * success:false and callers show an honest "couldn't search" message. Only
+ * genuinely local facts (the user's actual clock) are answerable offline.
  */
 
 import { connectivityManager } from './ConnectivityManager';
 
-// Backend brain server — same convention as NewsPanel (`http://<host>:8000/api/...`).
-const BRAIN_API = `http://${window.location.hostname}:8000`;
+import { apiBase } from '../../utils/apiHost';
+
+const BRAIN_API = apiBase();
 
 const SERPER_ENDPOINT = 'https://google.serper.dev/search';
 const MAX_RESULTS = 5;
 const TIMEOUT_MS = 12000;
-
-// Mock database for "Simulated Internet"
-const KNOWLEDGE_BASE = {
-    "current events": [
-        "Global climate summit reaches new carbon reduction agreement.",
-        "SpaceX successfully launches Starship v3 for Mars cargo test.",
-        "New AI model breaks barrier in solving mathematical theorems."
-    ],
-    "news": [
-        "Tech stocks rally as interest rates stabilize.",
-        "Local cat elected mayor of historic village in novelty election.",
-        "Breakthrough in fusion energy announced by European researchers."
-    ],
-    "weather": "It looks like it's sunny with a chance of digital clouds.",
-    "time": () => `The current local time is ${new Date().toLocaleTimeString()}.`,
-    "date": () => `Today is ${new Date().toLocaleDateString()}.`
-};
 
 class SearchSystem {
     constructor() {
@@ -47,7 +33,7 @@ class SearchSystem {
     }
 
     /**
-     * Performs a web search (or simulation).
+     * Performs a web search; falls back to honest offline answers.
      * @param {string} query - The search term.
      */
     async search(query) {
@@ -65,8 +51,9 @@ class SearchSystem {
         const real = await this.performRealSearch(query);
         if (real.success) return real;
 
-        // 2. Fallback to the local simulated knowledge base.
-        return await this.performSimulatedSearch(query);
+        // 2. Only genuinely local facts (the real system clock) are
+        //    answerable offline; everything else stays honestly unanswered.
+        return this.performLocalRealtimeSearch(query);
     }
 
     /**
@@ -76,7 +63,7 @@ class SearchSystem {
      * 2. Fallback: direct Serper.dev call when a VITE_SERPER_API_KEY is set.
      *
      * Returns { success, source, content, results? } — success:false means the
-     * caller should fall back to the simulated search.
+     * caller should fall back to the honest offline path.
      */
     async performRealSearch(query) {
         // 1. Route through the brain server.
@@ -89,7 +76,7 @@ class SearchSystem {
             if (direct.success) return direct;
         }
 
-        // 3. Neither worked — let the caller fall back to simulated results.
+        // 3. Neither worked — report honestly; no results are fabricated.
         return { success: false, error: backend.error || "Web search unavailable" };
     }
 
@@ -102,9 +89,10 @@ class SearchSystem {
             if (!res.ok) throw new Error(`Search API ${res.status}`);
             const json = await res.json();
 
-            // A "mock" provider means no real key is configured server-side —
-            // treat as not-real so we fall through to the simulated results.
-            if (json.provider === 'mock' || !json.results || !json.results.length) {
+            // No usable provider/results server-side → fall through to the
+            // honest local path below.
+            if (!json.provider || json.provider === 'mock' ||
+                !json.results || !json.results.length) {
                 return { success: false, error: 'Backend has no search provider configured' };
             }
 
@@ -155,44 +143,26 @@ class SearchSystem {
         return { success: true, source, results, content };
     }
 
-    async performSimulatedSearch(query) {
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
+    performLocalRealtimeSearch(query) {
+        // The only offline truths available in a browser are its own clock.
         const lowerQuery = query.toLowerCase();
-        let result = "I searched the web, but I couldn't find a specific answer to that yet.";
 
-        // Basic Keyword Matching for Simulation
-        if (lowerQuery.includes("time")) {
-            result = KNOWLEDGE_BASE.time();
-        } 
-        else if (lowerQuery.includes("date") || lowerQuery.includes("day")) {
-            result = KNOWLEDGE_BASE.date();
+        if (lowerQuery.includes("time") && !lowerQuery.includes("times")) {
+            const content = `The current local time is ${new Date().toLocaleTimeString()}.`;
+            this.searchHistory.push({ query, result: content, timestamp: Date.now() });
+            return { success: true, source: "local_clock", content };
         }
-        else if (lowerQuery.includes("weather")) {
-            result = KNOWLEDGE_BASE.weather;
-        }
-        else if (lowerQuery.includes("news") || lowerQuery.includes("headline")) {
-            const news = KNOWLEDGE_BASE.news;
-            result = "Here are some headlines I found: " + news.join(" | ");
-        }
-        else if (lowerQuery.includes("event") || lowerQuery.includes("happening")) {
-            const events = KNOWLEDGE_BASE["current events"];
-            result = "Searching current events... Found these: " + events.join(" | ");
-        }
-        else if (lowerQuery.includes("who is")) {
-             result = `Search Result: ${query.replace("who is", "").trim()} is a notable figure or entity, but my offline database is limited on specific biographies right now.`;
-        }
-        else if (lowerQuery.includes("what is")) {
-             result = `Search Result: Definition for ${query.replace("what is", "").trim()} found. It is generally defined as a concept or object relevant to your query.`;
+        if (lowerQuery.includes("date") || lowerQuery.includes("what day")) {
+            const content = `Today is ${new Date().toLocaleDateString()}.`;
+            this.searchHistory.push({ query, result: content, timestamp: Date.now() });
+            return { success: true, source: "local_clock", content };
         }
 
-        this.searchHistory.push({ query, result, timestamp: Date.now() });
-
+        // No fabricated headlines/definitions — report honestly instead.
         return {
-            success: true,
-            source: "simulated_web",
-            content: result
+            success: false,
+            source: "none",
+            error: "No search provider reachable and no local answer exists",
         };
     }
 }

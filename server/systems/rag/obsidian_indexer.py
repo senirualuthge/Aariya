@@ -21,7 +21,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     import chromadb
@@ -240,7 +240,11 @@ class ObsidianIndexer:
                 existing = self.collection.get(ids=[doc_id], include=[])
                 if existing and existing.get("ids"):
                     return False
-                self.collection.add(ids=[doc_id], documents=[document], metadatas=[meta])
+                # Use upsert instead of add to avoid ChromaDB warnings when
+                # an embedding ID already exists in the HNSW index but the
+                # collection-level dedup check missed it (race condition on
+                # re-indexing the same vault content).
+                self.collection.upsert(ids=[doc_id], documents=[document], metadatas=[meta])
                 return True
             except Exception as exc:
                 logger.warning("ChromaDB write failed (%s) — falling back to in-memory.", exc)
@@ -323,7 +327,7 @@ class ObsidianIndexer:
                 if self.collection.count() == 0:
                     return []
                 # Build a ChromaDB `where` clause only from filters actually present.
-                filters = []
+                filters: List[Dict[str, Any]] = []
                 if mem_type:
                     filters.append({"mem_type": mem_type})
                 if sources:
@@ -334,17 +338,30 @@ class ObsidianIndexer:
                 qres = self.collection.query(
                     query_texts=[query],
                     n_results=n,
-                    where=where,
+                    where=where,  # type: ignore
                 )
-                for i, doc in enumerate(qres["documents"][0]):
-                    meta = qres["metadatas"][0][i]
-                    dist = qres.get("distances", [[0.0] * n])[0][i]
+                
+                docs = qres.get("documents")
+                if not docs or not docs[0]:
+                    return []
+                    
+                metas = qres.get("metadatas")
+                distances = qres.get("distances")
+                
+                for i, doc in enumerate(docs[0]):
+                    # Check that meta is not None before assigning
+                    meta_list = metas[0] if metas and metas[0] else []
+                    meta = meta_list[i] if i < len(meta_list) and meta_list[i] is not None else {}
+                    
+                    dist_list = distances[0] if distances and distances[0] else []
+                    dist = dist_list[i] if i < len(dist_list) and dist_list[i] is not None else 0.0
+                    
                     results.append({
                         "text": doc,
                         "mem_type": meta.get("mem_type"),
                         "source": meta.get("source"),
                         "chunk_index": meta.get("chunk_index"),
-                        "similarity": round(1.0 - dist, 4),
+                        "similarity": round(1.0 - float(dist), 4),
                     })
                 return results
             except Exception as exc:

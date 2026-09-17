@@ -1,15 +1,16 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import useStore from '../store';
 import DraggablePanel from './DraggablePanel';
+import { subscribeMetrics } from '../systems/metricsClient';
+import { apiBase } from '../utils/apiHost';
 
-// Helper component for progress bars - moved outside to avoid recreation on each render
-const ProgressBar = ({ label, value, color, min = -1, max = 1 }) => {
+const ProgressBar = ({ label, value, color, min = 0, max = 100 }) => {
     const pct = ((value - min) / (max - min)) * 100;
     return (
         <div style={{ marginBottom: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#ccc', marginBottom: '2px' }}>
                 <span>{label}</span>
-                <span>{value.toFixed(2)}</span>
+                <span>{typeof value === 'number' ? value.toFixed(1) : value}%</span>
             </div>
             <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
                 <div style={{ width: `${Math.min(100, Math.max(0, pct))}%`, height: '100%', background: color, transition: 'width 0.2s ease' }} />
@@ -19,13 +20,56 @@ const ProgressBar = ({ label, value, color, min = -1, max = 1 }) => {
 };
 
 export default function BrainMonitor() {
-    const { 
-        personalityAxes, 
-        userAudioStats, 
-        currentPersonality, 
-        emotions,
-        thinking
-    } = useStore();
+    const { thinking } = useStore();
+    const [health, setHealth] = useState(null);
+    const [conn, setConn] = useState(false);
+
+    // Primary: poll the REST health endpoint (confirmed live) so the panel
+    // always shows real data even if the metrics websocket isn't connected.
+    // Secondary: the shared /ws/brain_metrics stream pushes fresh frames every
+    // 2 s — whichever arrives last wins.
+    useEffect(() => {
+        let cancelled = false;
+        const load = () => {
+            fetch(`${apiBase()}/api/system/health`)
+                .then(r => r.ok ? r.json() : null)
+                .then(d => { if (!cancelled && d) setHealth(d); })
+                .catch(() => {});
+        };
+        load();
+        const timer = setInterval(load, 3000);
+
+        const unsub = subscribeMetrics(
+            (m) => m.type === 'system_health',
+            (m) => { if (m.data) setHealth(m.data); }
+        );
+        // Brain online status — same `__conn` event the dashboard's BRAIN chip
+        // uses, so this panel is ONLINE exactly when the brain is ONLINE.
+        const unsubConn = subscribeMetrics(
+            (m) => m.type === '__conn',
+            (m) => setConn(!!m.connected)
+        );
+
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+            unsub();
+            unsubConn();
+        };
+    }, []);
+
+    const server = health?.server || {};
+    const cpu = server.cpu_percent ?? 0;
+    const ram = server.ram_percent ?? 0;
+    const swap = server.swap_percent ?? 0;
+    const processCpu = server.process?.cpu_percent ?? 0;
+    const processRss = server.process?.rss_mb ?? 0;
+    const loadAvg = server.load_avg ? server.load_avg[0] : 0;
+
+    // ONLINE = brain metrics socket connected AND real health data present.
+    const ts = health?.ts ?? 0;
+    const stale = (Date.now() / 1000) - ts > 10;
+    const online = conn && !!health && !stale;
 
     return (
         <DraggablePanel 
@@ -39,48 +83,60 @@ export default function BrainMonitor() {
                 zIndex: 40
             }}
         >
-            <div className="drag-handle" style={{ cursor: 'grab', fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', marginBottom: '0.3rem' }}>⋮⋮ Drag</div>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#ff8fa3', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
-                🧠 NEURAL MONITOR
+            <div className="drag-handle drag-handle-mini">⋮⋮ Drag</div>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#00f2ff', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
+                🖥️ SYSTEM TELEMETRY
             </h3>
 
             {/* STATUS */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                <div style={{ background: '#10b981', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '10px' }}>
+                    ● REAL TELEMETRY
+                </div>
                 <div style={{ background: thinking ? '#fff' : 'rgba(255,255,255,0.1)', color: thinking ? '#000' : '#ccc', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '10px' }}>
-                    {thinking ? '⚡ THINKING' : '💤 IDLE'}
+                    {thinking ? '⚡ AI INFERENCE: THINKING' : '💤 AI INFERENCE: IDLE'}
                 </div>
-                <div style={{ background: 'rgba(255, 143, 163, 0.2)', color: '#ff8fa3', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>
-                    {currentPersonality?.toUpperCase()}
+                <div style={{ background: online ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', color: online ? '#10b981' : '#ef4444', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>
+                    {online ? 'SERVER ONLINE' : 'OFFLINE'}
                 </div>
             </div>
 
-            {/* AXES */}
+            {/* SERVER RESOURCES */}
             <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '6px' }}>PERSONALITY AXES</div>
-                <ProgressBar label="Energy" value={personalityAxes?.energy || 0} color="#ffeb3b" min={-1} max={1} />
-                <ProgressBar label="Warmth" value={personalityAxes?.warmth || 0} color="#ff9800" min={-1} max={1} />
-                <ProgressBar label="Dominance" value={personalityAxes?.dominance || 0} color="#f44336" min={-1} max={1} />
+                <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '6px' }}>SYSTEM RESOURCES</div>
+                <ProgressBar label="CPU Usage" value={cpu} color={cpu > 80 ? "#ef4444" : cpu > 50 ? "#ffd93d" : "#00f2ff"} />
+                <ProgressBar label="RAM Usage" value={ram} color={ram > 80 ? "#ef4444" : ram > 50 ? "#ffd93d" : "#00f2ff"} />
+                <ProgressBar label="Swap Memory" value={swap} color={swap > 50 ? "#ef4444" : "#a78bfa"} />
             </div>
 
-            {/* INPUTS */}
+            {/* PROCESS METRICS */}
             <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '6px' }}>SENSORY INPUT</div>
-                <ProgressBar label="Audio Energy" value={(userAudioStats?.energy || 0) / 255} color="#00bcd4" min={0} max={1} />
-                <div style={{ fontSize: '10px', color: userAudioStats?.isLoud ? '#f44336' : '#ccc' }}>
-                    {userAudioStats?.isLoud ? '⚠ LOUD DETECTED' : '✓ Audio Safe'}
+                <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '6px' }}>PROCESS METRICS</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '4px' }}>
+                    <span style={{ color: '#ccc' }}>Process CPU</span>
+                    <span style={{ color: '#fff', fontFamily: 'monospace' }}>{processCpu.toFixed(1)}%</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '4px' }}>
+                    <span style={{ color: '#ccc' }}>Process RAM (RSS)</span>
+                    <span style={{ color: '#fff', fontFamily: 'monospace' }}>{processRss} MB</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '4px' }}>
+                    <span style={{ color: '#ccc' }}>Load Avg (1m)</span>
+                    <span style={{ color: '#fff', fontFamily: 'monospace' }}>{loadAvg.toFixed(2)}</span>
                 </div>
             </div>
-
-            {/* EMOTIONS */}
+            
+            {/* NETWORK I/O */}
             <div>
-                 <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '6px' }}>EMOTION STATE</div>
-                 {Object.entries(emotions || {})
-                    .sort(([, a], [, b]) => b - a)
-                    .slice(0, 3)
-                    .map(([key, val]) => (
-                        <ProgressBar key={key} label={key.toUpperCase()} value={val} color="#e91e63" min={0} max={1.5} />
-                    ))
-                 }
+                 <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '6px' }}>NETWORK I/O (MB)</div>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                    <span style={{ color: '#ccc' }}>Total Sent</span>
+                    <span style={{ color: '#34d399', fontFamily: 'monospace' }}>{server.network?.bytes_sent_mb ?? 0} MB</span>
+                 </div>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginTop: '4px' }}>
+                    <span style={{ color: '#ccc' }}>Total Recv</span>
+                    <span style={{ color: '#a78bfa', fontFamily: 'monospace' }}>{server.network?.bytes_recv_mb ?? 0} MB</span>
+                 </div>
             </div>
         </DraggablePanel>
     );

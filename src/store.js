@@ -1,4 +1,94 @@
 import { create } from 'zustand';
+import { apiBase } from './utils/apiHost';
+
+// ── Autonomy live-strip persistence ──────────────────────────────────────────
+// The daemon's real activity (latest proactive action, plan lifecycle status,
+// rolling event ring) is saved to localStorage so the Mind panel's live strip
+// shows what happened while the tab / panel was closed. The daemon only
+// broadcasts NEW events on reconnect, so without persistence the strip would
+// start blank after every reload. Wrapped in try/catch: storage can be
+// unavailable (private mode, disabled) — the strip simply starts empty.
+const AUTONOMY_STRIP_KEY = 'AIGirl_autonomy_strip';
+
+function loadAutonomyStrip() {
+  try {
+    const raw = localStorage.getItem(AUTONOMY_STRIP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const now = Date.now() / 1000;
+    return {
+      lastProactive: parsed.lastProactive || null,
+      planStatus: parsed.planStatus || null,
+      activity: Array.isArray(parsed.activity) ? parsed.activity.slice(0, 8) : [],
+      rate: Array.isArray(parsed.rate)
+        ? parsed.rate
+            .filter((b) => b && Number.isFinite(b.t) && b.t > now - RATE_WINDOW_SECONDS)
+            .slice(-60)
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Long texts (e.g. stream_of_consciousness) are trimmed on persist so the key
+// can't grow unbounded; the in-memory ring keeps the full text for this session.
+function _trimForStorage(entry) {
+  if (!entry || typeof entry !== 'object') return entry;
+  const out = { ...entry };
+  for (const k of ['text', 'content', 'title']) {
+    if (typeof out[k] === 'string' && out[k].length > 300) out[k] = `${out[k].slice(0, 300)}…`;
+  }
+  return out;
+}
+
+function persistAutonomyStrip(autonomy) {
+  try {
+    const now = Date.now() / 1000;
+    localStorage.setItem(AUTONOMY_STRIP_KEY, JSON.stringify({
+      lastProactive: _trimForStorage(autonomy.lastProactive) || null,
+      planStatus: autonomy.planStatus || null,
+      activity: (autonomy.activity || []).slice(0, 8).map(_trimForStorage),
+      rate: (autonomy.rate || [])
+        .filter((b) => b && Number.isFinite(b.t) && b.t > now - RATE_WINDOW_SECONDS)
+        .slice(-60),
+    }));
+  } catch {
+    /* storage unavailable — strip just won't persist */
+  }
+}
+
+// ── Activity rate (sparkline data) ─────────────────────────────────────────
+// Real daemon events bucketed per minute, kept for the last hour. Buckets are
+// appended in time order; a new event in the same minute just increments the
+// current bucket. Old buckets age out on the next event / persist / load.
+const RATE_BUCKET_SECONDS = 60;
+const RATE_WINDOW_SECONDS = 3600;
+
+// ts is an event timestamp in epoch SECONDS (as the daemon frames carry);
+// bucketing math assumes seconds, so callers must not pass milliseconds.
+function bumpActivityRate(rate, ts) {
+  const now = Date.now() / 1000;
+  const t = Number.isFinite(ts) ? ts : now;
+  const bucketStart = Math.floor(t / RATE_BUCKET_SECONDS) * RATE_BUCKET_SECONDS;
+  // Events older than the window don't count toward the last hour at all.
+  if (bucketStart <= now - RATE_WINDOW_SECONDS) return rate || [];
+  const prev = (rate || []).filter((b) => b && b.t > now - RATE_WINDOW_SECONDS);
+  // Insert in sorted (newest-first) position: an out-of-order timestamp (e.g.
+  // a lagging server clock on plan.ack) must not land at the wrong end of the
+  // ring, which would corrupt the same-minute merge and slice(-60) persistence.
+  // The first bucket with t <= bucketStart is where this one belongs (all
+  // earlier buckets are newer); if none, this bucket is the oldest → append.
+  const idx = prev.findIndex((b) => b.t <= bucketStart);
+  if (idx === -1) return [...prev, { t: bucketStart, c: 1 }]; // oldest yet
+  if (prev[idx].t === bucketStart) {
+    prev[idx] = { t: bucketStart, c: prev[idx].c + 1 };
+    return prev;
+  }
+  prev.splice(idx, 0, { t: bucketStart, c: 1 });
+  return prev;
+}
 
 const useStore = create((set) => ({
   // ── Core lifecycle ──────────────────────────────────────────────────────────
@@ -105,6 +195,8 @@ const useStore = create((set) => ({
 
   // ── Trust / Relationship ────────────────────────────────────────────────────
   trust:             0.5,
+  valence:           0.0,
+  arousal:           0.0,
   relationshipLevel: 0,
   conversationContext: {
     userName: 'Player',
@@ -143,12 +235,23 @@ const useStore = create((set) => ({
 
   clearSignals: () => set({ signals: [] }),
 
+  // ── Planetary cognition / synoptic observability (from backend) ────────────
+  synoptic:  {},   // { dominant_domain, coherence, conflict, domains }
+  planetary: [],   // [{ id, name, radius, orbit_speed, glow, ... }]
+
+  setSynoptic:  (s) => set({ synoptic: s }),
+  setPlanetary: (p) => set({ planetary: p }),
+
   // ── Brain state (from backend) ──────────────────────────────────────────────
   updateState: (brainState) =>
     set({
-      trust:             brainState.trust ?? 0.5,
-      personalityPreset: brainState.current_mode ?? 'balanced',
+      trust:              brainState.trust ?? 0.5,
+      valence:            brainState.valence ?? 0.0,
+      arousal:            brainState.arousal ?? 0.0,
+      personalityPreset:  brainState.current_mode ?? 'balanced',
       currentPersonality: brainState.current_mode ?? 'balanced',
+      synoptic:           brainState.synoptic ?? {},
+      planetary:          brainState.planetary ?? [],
     }),
 
   // ── Autonomy / Proactivity (Aariya's inner world) ───────────────────────────
@@ -161,11 +264,55 @@ const useStore = create((set) => ({
     insights: [],
     gaps: [],
     actions: [],
+    // ── Live strip (latest daemon actions, beyond the chat log) ───────────
+    // lastProactive: the most recent real proactive_message from the daemon.
+    // planStatus: current plan lifecycle state (awaiting/running/completed/…).
+    // activity: rolling ring of recent daemon events for the live strip feed.
+    // These three are rehydrated from localStorage so past activity survives
+    // reloads (the daemon only broadcasts new events).
+    lastProactive: null,   // { content, trigger, urgency, timestamp }
+    planStatus: null,      // { plan_id, goal, status, risk_level }
+    activity: [],          // [{ kind, title, text, severity, timestamp }]
+    rate: [],              // [{ t, c }] real events per 60s bucket (last hour)
+    // Persisted snapshot (spread last so it wins over the defaults above;
+    // {...null} is a no-op when storage was unavailable).
+    ...loadAutonomyStrip(),
   },
   wsSender: null,   // registered by VoiceSystem — sends control commands
 
   setAutonomyState: (state) =>
     set((prev) => ({ autonomy: { ...prev.autonomy, ...state } })),
+
+  // Prepend a real daemon event to the live-activity ring (newest first,
+  // capped) and bump the per-minute activity rate feeding the strip's
+  // sparkline. This action is the single funnel for every real daemon event
+  // (proactive, plan, thought, model), so the rate counts events, not views.
+  pushAutonomyActivity: (entry) =>
+    set((prev) => {
+      const autonomy = {
+        ...prev.autonomy,
+        activity: [entry, ...(prev.autonomy.activity || [])].slice(0, 8),
+        rate: bumpActivityRate(prev.autonomy.rate, entry && entry.timestamp),
+      };
+      persistAutonomyStrip(autonomy);
+      return { autonomy };
+    }),
+
+  // The most recent proactive message the daemon actually sent.
+  setLastProactive: (entry) =>
+    set((prev) => {
+      const autonomy = { ...prev.autonomy, lastProactive: entry };
+      persistAutonomyStrip(autonomy);
+      return { autonomy };
+    }),
+
+  // Current plan lifecycle status (awaiting_approval / running / completed / …).
+  setPlanStatus: (entry) =>
+    set((prev) => {
+      const autonomy = { ...prev.autonomy, planStatus: entry };
+      persistAutonomyStrip(autonomy);
+      return { autonomy };
+    }),
 
   // Add a proactive (unprompted) Aariya message to the chat stream
   addProactiveMessage: (text, meta = {}) =>
@@ -187,7 +334,7 @@ const useStore = create((set) => ({
       sender({ type: 'command', action, ...payload });
     } else {
       // Fallback: REST API when WebSocket is not registered yet
-      const base = `http://${window.location.hostname || 'localhost'}:8000`;
+      const base = apiBase();
       if (action === 'approve_plan') {
         fetch(`${base}/api/autonomy/plans/${payload.plan_id}/approve`, { method: 'POST' });
       } else if (action === 'reject_plan') {
@@ -218,6 +365,31 @@ const useStore = create((set) => ({
     const sender = useStore.getState().wsSender;
     if (sender) sender({ type: 'user_activity' });
   },
+
+  // ── Panel Toggles ───────────────────────────────────────────────────────────
+  showChatPanel: true,
+  showMoodPanel: true,
+  showUserMoodPanel: true,
+  showStatusPanel: true,
+  showVoiceLabPanel: false,
+  showBrainMonitor: true,
+  showNewsPanel: true,
+  showAutonomyPanel: true,
+  showGovernancePanel: true,
+  showGevPanel: false,
+  gevFocus: null,
+
+  toggleChatPanel: () => set((state) => ({ showChatPanel: !state.showChatPanel })),
+  toggleMoodPanel: () => set((state) => ({ showMoodPanel: !state.showMoodPanel })),
+  toggleUserMoodPanel: () => set((state) => ({ showUserMoodPanel: !state.showUserMoodPanel })),
+  toggleStatusPanel: () => set((state) => ({ showStatusPanel: !state.showStatusPanel })),
+  toggleVoiceLabPanel: () => set((state) => ({ showVoiceLabPanel: !state.showVoiceLabPanel })),
+  toggleBrainMonitor: () => set((state) => ({ showBrainMonitor: !state.showBrainMonitor })),
+  toggleNewsPanel: () => set((state) => ({ showNewsPanel: !state.showNewsPanel })),
+  toggleAutonomyPanel: () => set((state) => ({ showAutonomyPanel: !state.showAutonomyPanel })),
+  toggleGovernancePanel: () => set((state) => ({ showGovernancePanel: !state.showGovernancePanel })),
+  toggleGevPanel: () => set((state) => ({ showGevPanel: !state.showGevPanel })),
+  setGevPanel: (val, focus = null) => set({ showGevPanel: val, gevFocus: focus }),
 }));
 
 export default useStore;

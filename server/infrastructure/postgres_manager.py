@@ -4,6 +4,7 @@ Provides connection pooling, migration runner, and fallback to SQLite.
 """
 
 import os
+import re
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
@@ -31,6 +32,79 @@ class PostgresManager:
             self._init_postgres_pool()
         else:
             self._init_sqlite_fallback()
+
+    # ── SQL dialect conversion (SQLite dialect → Postgres-native) ────────────
+    #
+    # The project's SQL (migrations + every module in server/systems that talks
+    # to this manager) is written in the SQLITE dialect: '?' placeholders,
+    # AUTOINCREMENT, TEXT/REAL/INTEGER columns, DATETIME columns with
+    # CURRENT_TIMESTAMP defaults. While the SQLite fallback speaks that
+    # dialect natively, Postgres needs '%s' placeholders and its own DDL —
+    # and before this conversion layer existed, every '?'-parameterized
+    # statement silently FAILED against a live Postgres (pattern_memory,
+    # episodic_memory, trust_history … were never written). Conversion happens
+    # HERE, at the single choke point, so the whole codebase keeps writing
+    # SQLite-dialect SQL while Postgres deployments get native SQL.
+
+    _PG_INT_IDENT = re.compile(
+        r"\b(INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT)\b", re.IGNORECASE)
+
+    @staticmethod
+    def _is_identifier_char(ch: str) -> bool:
+        return ch.isalnum() or ch == '_'
+
+    @classmethod
+    def _replace_placeholders_outside_quotes(cls, sql: str) -> str:
+        """Replace every '?' outside single-quoted literals with %s."""
+        out: List[str] = []
+        in_str = False
+        for ch in sql:
+            if ch == "'":
+                in_str = not in_str
+                out.append(ch)
+            elif ch == '?' and not in_str:
+                out.append('%s')
+            else:
+                out.append(ch)
+        return "".join(out)
+
+    @classmethod
+    def sqlite_to_postgres(cls, sql: str) -> str:
+        """Convert one SQLite-dialect statement to Postgres-native SQL.
+
+        Handles the dialect features this project actually uses:
+          * '?' placeholders → %s (skipping string literals)
+          * INTEGER PRIMARY KEY AUTOINCREMENT → BIGSERIAL PRIMARY KEY
+          * AUTOINCREMENT / DATETIME / REAL / TEXT column types → native
+          * CREATE INDEX IF NOT EXISTS / CREATE TABLE IF NOT EXISTS stay
+            (Postgres ≥ 9.5 supports both)
+        """
+        converted = cls._PG_INT_IDENT.sub("BIGSERIAL PRIMARY KEY", sql)
+
+        # Remaining standalone AUTOINCREMENT (defensive; the INT-PK form is
+        # the only one this project emits).
+        converted = re.sub(
+            r"\bAUTOINCREMENT\b", "", converted, flags=re.IGNORECASE)
+
+        # Type mapping — only inside CREATE TABLE column defs matters, but a
+        # global word-boundary swap is safe for these type words.
+        converted = re.sub(r"\bDATETIME\b", "TIMESTAMP",
+                           converted, flags=re.IGNORECASE)
+        converted = re.sub(r"\bREAL\b", "DOUBLE PRECISION",
+                           converted, flags=re.IGNORECASE)
+
+        # TEXT is a valid Postgres type; INTEGER stays INTEGER. No swap needed.
+
+        # 'id INTEGER PRIMARY KEY' (no autoincrement) is a valid Postgres
+        # integer PK — left untouched.
+
+        return cls._replace_placeholders_outside_quotes(converted)
+
+    def _convert_sql(self, sql: str) -> str:
+        """Dialect-convert `sql` only when the active backend is Postgres."""
+        if getattr(self, "use_fallback", False):
+            return sql
+        return self.sqlite_to_postgres(sql)
     
     def _init_postgres_pool(self):
         """Initialize PostgreSQL connection pool."""
@@ -85,6 +159,7 @@ class PostgresManager:
     
     def execute_query(self, query: str, params: Optional[tuple] = None) -> Optional[List[Dict]]:
         """Execute a SELECT query and return results."""
+        query = self._convert_sql(query)
         conn = self.get_connection()
         if not conn:
             return None
@@ -112,6 +187,7 @@ class PostgresManager:
     
     def execute_update(self, query: str, params: Optional[tuple] = None) -> bool:
         """Execute an INSERT/UPDATE/DELETE query."""
+        query = self._convert_sql(query)
         conn = self.get_connection()
         if not conn:
             return False
@@ -134,6 +210,7 @@ class PostgresManager:
     
     def execute_many(self, query: str, params_list: List[tuple]) -> bool:
         """Execute batch INSERT/UPDATE."""
+        query = self._convert_sql(query)
         conn = self.get_connection()
         if not conn:
             return False

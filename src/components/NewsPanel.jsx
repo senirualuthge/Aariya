@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import DraggablePanel from './DraggablePanel';
+import { apiBase } from '../utils/apiHost';
 
-const API = `http://${window.location.hostname}:8000/api/news`;
+const API = `${apiBase()}/api/news`;
 
 const CATEGORIES = [
   { key: 'all', label: 'All' },
@@ -428,31 +429,10 @@ export default function NewsPanel() {
       id="aariya_news"
       defaultPosition={{ x: Math.max(0, window.innerWidth - 460), y: 32 }}
       defaultSize={{ width: '420px', height: '640px' }}
-      className="ui-panel"
-      style={{
-        fontSize: '12px',
-        zIndex: 45,
-        padding: 0,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'rgba(20, 10, 15, 0.72)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        border: '1px solid rgba(255, 143, 163, 0.2)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 0 20px rgba(255, 143, 163, 0.05)',
-      }}
+      className="ui-panel chat-panel"
     >
       {/* Header / drag handle */}
-      <div className="drag-handle" style={{
-        cursor: 'grab',
-        padding: '0.8rem 1.2rem',
-        background: 'linear-gradient(90deg, rgba(255, 143, 163, 0.15), rgba(255, 143, 163, 0.05))',
-        borderBottom: '1px solid rgba(255, 143, 163, 0.2)',
-        fontSize: '0.75rem', fontWeight: '600',
-        color: '#ff8fa3', textTransform: 'uppercase', letterSpacing: '2px',
-        display: 'flex', alignItems: 'center', gap: '8px',
-      }}>
+      <div className="drag-handle panel-title-bar">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"></path><path d="M18 14h-8"></path><path d="M15 18h-5"></path><path d="M10 6h8v4h-8V6z"></path></svg>
         News Teller
         <button

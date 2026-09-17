@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import logging
 from server.systems.llm import LLMEngine
@@ -11,7 +11,7 @@ class QueryRewriter:
     the LLMEngine into multiple distinct search strategies to maximize coverage.
     """
     
-    def __init__(self, llm: LLMEngine = None):
+    def __init__(self, llm: Optional[LLMEngine] = None):
         self.llm = llm or LLMEngine()
         
     async def generate_strategies(self, base_query: str, num_strategies: int = 3) -> List[Dict[str, str]]:

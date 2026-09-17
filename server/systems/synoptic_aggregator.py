@@ -3,6 +3,17 @@ from typing import Dict, List, Any
 from dataclasses import dataclass, field
 import time
 
+from server.systems.synoptic_smoother import SynopticSmoother
+
+# Agent-level key → synoptic domain (raw agent activations get folded in).
+DOMAIN_MAP = {
+    "emotion": ["emotion_agent", "emotion"],
+    "reasoning": ["planner", "planner_agent", "critic", "reasoning_agent"],
+    "memory": ["memory_agent", "memory"],
+    "risk": ["risk_agent", "risk_engine", "guard_agent"],
+    "perception": ["vision", "vision_agent", "perception"],
+}
+
 @dataclass
 class SynopticState:
     domains: Dict[str, float] = field(default_factory=lambda: {
@@ -15,10 +26,12 @@ class SynopticState:
     dominant_domain: str = "reasoning"
     coherence: float = 1.0  # 1.0 = stable, 0.0 = chaos
     conflict: float = 0.0
+    velocity: Dict[str, float] = field(default_factory=dict)
 
 class SynopticAggregator:
     def __init__(self):
         self.state = SynopticState()
+        self.smoother = SynopticSmoother(alpha=0.15)
         # For EMA smoothing
         self.smoothed_domains = {
             "emotion": 0.1,
@@ -38,18 +51,39 @@ class SynopticAggregator:
             "perception": "#2ecc71"
         }
 
+    def _fold_agent_activations(self, activations: Dict[str, float]) -> Dict[str, float]:
+        """Fold raw agent-level keys into domain-level values via DOMAIN_MAP.
+        Domain keys passed directly win over folded agent scores."""
+        folded: Dict[str, float] = {}
+        domain_scores: Dict[str, float] = {}
+        for domain, members in DOMAIN_MAP.items():
+            scores = [activations.get(m, 0.0) for m in members if m in activations]
+            domain_scores[domain] = max(scores) if scores else 0.0
+        for k, v in activations.items():
+            if k in DOMAIN_MAP:
+                folded[k] = float(v)
+        for domain, score in domain_scores.items():
+            folded.setdefault(domain, score)
+        return folded
+
     def aggregate_synoptic(self, agent_activations: Dict[str, float]) -> SynopticState:
         """
         Maps raw agent activations -> High level domains
-        Expects dict mapping domain names to a 0.0-1.0 activation level.
-        In the future this maps individual nodes to their overarching synoptic domain.
+        Accepts either domain-level keys (emotion/reasoning/memory/risk/
+        perception) or agent-level keys (planner, critic, vision, ...) which
+        are folded through DOMAIN_MAP.
         """
+        normalized = self._fold_agent_activations(agent_activations or {})
+
         # Apply EMA smoothing to incoming activations
         for key in self.smoothed_domains:
-            incoming_val = agent_activations.get(key, 0.0)
+            incoming_val = normalized.get(key, 0.0)
             self.smoothed_domains[key] = (self.alpha * incoming_val) + ((1 - self.alpha) * self.smoothed_domains[key])
         
         self.state.domains = dict(self.smoothed_domains)
+        # Velocity tracking for the frontend's predictive easing.
+        self.smoother.smooth(self.state.domains)
+        self.state.velocity = self.smoother.snapshot()["velocity"]
 
         # Calculate dominant domain
         max_domain = max(self.state.domains.items(), key=lambda x: x[1])

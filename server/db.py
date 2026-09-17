@@ -148,6 +148,45 @@ def init_db():
             kind TEXT DEFAULT 'private',  -- 'private' | 'idle' | 'proactive'
             ts REAL NOT NULL
         );
+
+        -- Filesystem confirmation gate (AccessFIles §6/§17): destructive or
+        -- mutating FS operations queue here until the user explicitly
+        -- confirms via the API. Nothing is executed while status='pending'.
+        CREATE TABLE IF NOT EXISTS fs_pending_actions (
+            id TEXT PRIMARY KEY,
+            action TEXT NOT NULL,          -- 'write_file' | 'append_file' | 'delete_file' | 'run_code'
+            path TEXT,
+            content TEXT,
+            actor TEXT DEFAULT 'ai',       -- who originated: 'ai' | 'user' | agent name
+            status TEXT DEFAULT 'pending', -- 'pending' | 'executed' | 'cancelled' | 'failed'
+            result TEXT,
+            created_ts REAL NOT NULL,
+            resolved_ts REAL
+        );
+
+        -- External telemetry ingest (/ingest/signal): signals pushed by
+        -- mobile / desktop / web clients. Persisted for the history API and
+        -- mirrored onto the admin signal bus (dashboard Event Log).
+        CREATE TABLE IF NOT EXISTS signals (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            severity TEXT DEFAULT 'info',
+            source TEXT DEFAULT 'external',
+            payload TEXT NOT NULL,         -- JSON
+            timestamp REAL NOT NULL
+        );
+
+        -- Device registry (/ingest/device): which clients are connected.
+        CREATE TABLE IF NOT EXISTS devices (
+            device_id TEXT PRIMARY KEY,
+            user_id TEXT,
+            platform TEXT,
+            model TEXT,
+            os_version TEXT,
+            app_version TEXT,
+            first_seen REAL,
+            last_seen REAL
+        );
     """)
     conn.commit()
     conn.close()

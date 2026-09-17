@@ -1,14 +1,10 @@
 # server/systems/goal_generator.py
-import random
+import json
+import logging
 from typing import Dict, List, Any
+from server.systems.llm import get_llm
 
-BASE_GOALS = [
-    "increase system stability",
-    "improve agent efficiency",
-    "reduce latency",
-    "expand capability coverage",
-    "increase prediction accuracy"
-]
+logger = logging.getLogger("aariya.goal_generator")
 
 def generate_goals(system_state: Dict[str, Any]) -> List[str]:
     """
@@ -27,9 +23,23 @@ def generate_goals(system_state: Dict[str, Any]) -> List[str]:
         goals.append("optimize execution speed")
 
     # Exploration (Curiosity) - ensures the system never stagnates
-    goals.append(random.choice(BASE_GOALS))
+    try:
+        llm = get_llm()
+        system_prompt = (
+            "You are the autonomous drive engine for an AI. "
+            "Based on the system state, generate ONE short, concrete, technical goal (under 5 words). "
+            "Example outputs: 'Optimize memory allocation', 'Learn new conversation patterns', 'Reduce background latency'.\n\n"
+            f"SYSTEM STATE: {json.dumps(system_state, indent=2)}"
+        )
+        thought = llm.chat_completion([{"role": "system", "content": system_prompt}], temperature=0.8, max_tokens=15)
+        if thought and len(thought) > 3:
+            goals.append(thought.replace('"', '').strip().lower())
+    except Exception as exc:
+        # LLM unavailable — do NOT fall back to a hardcoded goal string; the
+        # deterministic stability/performance goals above are the real signal.
+        logger.debug("[GoalGenerator] LLM curiosity goal generation failed: %s", exc)
 
-    return goals
+    return list(dict.fromkeys(goals))
 
 def curiosity_signal(state: Dict[str, Any]) -> float:
     """

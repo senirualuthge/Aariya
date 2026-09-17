@@ -1,13 +1,11 @@
 """
-Dashboard WebSocket — /ws/dashboard/stream
+Dashboard stream helpers.
 
-Mirrors the AI Brain state at ~100 ms intervals to connected clients:
-  - swarm_activations : list of active agent IDs + states
-  - brain_logs        : last N brain activity log entries
-  - metrics snapshot  : reward history from MetricsTracker
-
-Uses the redis_bus swarm channel and the AgentRegistry for live agent data.
-Falls back gracefully when neither Redis nor agent data is available.
+The live /ws/dashboard/stream WebSocket lives in server/main.py
+(_run_cognitive_loop — it handles chat frames, file-access telemetry, and
+state updates). This module deliberately defines NO routes: it only provides
+the shared snapshot helpers that /ws/mobile/analytics reuses plus the
+brain-log ring that server-side activity feeds.
 """
 import asyncio
 import json
@@ -15,13 +13,9 @@ import time
 from collections import deque
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-
 from server.infrastructure.observability import logger
 from server.infrastructure.session_manager import manager
 from server.systems.agent.mobile_dashboard_agent import get_mobile_dashboard
-
-router = APIRouter()
 
 # ── Shared ring buffer for recent brain log lines ─────────────────────────────
 _brain_log_ring: deque[str] = deque(maxlen=20)
@@ -67,31 +61,3 @@ def _build_payload() -> dict[str, Any]:
         "metrics": _get_metrics_snapshot(),
     }
 
-
-# ── WebSocket endpoint ─────────────────────────────────────────────────────────
-@router.websocket("/ws/dashboard/stream")
-async def dashboard_ws(websocket: WebSocket) -> None:
-    await websocket.accept()
-    manager.dashboard_clients.add(websocket)
-    agent = get_mobile_dashboard()
-    agent.on_client_connected()
-    logger.info("Dashboard Stream client connected")
-
-    try:
-        # Send initial snapshot immediately on connect
-        await websocket.send_json(_build_payload())
-
-        while True:
-            t0 = time.monotonic()
-            await asyncio.sleep(0.1)  # 10 Hz refresh
-            await websocket.send_json(_build_payload())
-            agent.on_payload_sent()
-            agent.record_latency((time.monotonic() - t0) * 1000)
-
-    except WebSocketDisconnect:
-        logger.info("Dashboard Stream client disconnected")
-    except Exception as exc:
-        logger.error(f"Dashboard Stream WebSocket error: {exc}")
-    finally:
-        manager.dashboard_clients.discard(websocket)
-        agent.on_client_disconnected()

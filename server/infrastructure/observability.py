@@ -33,31 +33,40 @@ class StructuredLogger:
             **kwargs
         }
         print(json.dumps(log_entry), file=sys.stderr if level == 'ERROR' else sys.stdout)
-        
+
+        # Feed the dashboard brain-log ring (mobile analytics shows these).
+        try:
+            from server.routers.dashboard_ws import push_brain_log
+            push_brain_log(f"[{level}] {message}")
+        except Exception:
+            pass
+
         # --- PHASE 1: Emit Signal for important events ---
         if level in ["ERROR", "WARN"]:
             try:
-                from server.infrastructure.signal_bus import get_signal_bus, Signal, SignalSource, SignalPayload, SignalContext
+                from server.infrastructure.signal_bus import get_signal_bus, Signal
                 bus = get_signal_bus()
-                
-                # Construct the signal
+
                 signal = Signal(
                     type="bug" if level == "ERROR" else "system",
-                    severity="critical" if level == "ERROR" else "medium",
-                    source=SignalSource(system=self.service_name, file=kwargs.get('file')),
-                    context=SignalContext(
-                        session_id=kwargs.get('session_id'),
-                        user_id=kwargs.get('user_id')
-                    ),
-                    payload=SignalPayload(
-                        title=message,
-                        description=str(kwargs.get('error', message)),
-                        meta=kwargs
-                    )
+                    severity="critical" if level == "ERROR" else "warning",
+                    source=self.service_name,
+                    payload={
+                        "title": message,
+                        "description": str(kwargs.get('error', message)),
+                        "meta": kwargs,
+                    },
                 )
-                
+
                 # Emit via task to avoid blocking the synchronous logging call
-                asyncio.ensure_future(bus.emit(signal))
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(bus.emit(signal))
+                except RuntimeError:
+                    # No running loop (early startup / sync context): persist
+                    # and mirror synchronously so the signal is never lost.
+                    bus.persist(signal)
+                    bus.record(signal)
             except Exception:
                 # Never let signal emission crash the logger itself
                 pass

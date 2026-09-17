@@ -8,13 +8,14 @@ const IS_NODE = !isBrowser && typeof process !== 'undefined' && process.versions
 
 let dbInstance = null;
 
-// Mock DB for browser environment
-const mockDB = {
+// Null-object DB for environments without SQLite (browser / failed init):
+// never fabricates data — reads return empty, writes are no-ops.
+const noopDB = {
     prepare: () => ({
         run: () => ({ changes: 0 }),
         get: () => null,
         all: () => [],
-        bind: () => mockDB.prepare()
+        bind: () => noopDB.prepare()
     }),
     exec: () => {},
     close: () => {},
@@ -25,7 +26,7 @@ const mockDB = {
 function initDB() {
     if (isBrowser) {
         console.warn('[DB] SQLite not available in browser. Using IndexedDB via memoryManager instead.');
-        return mockDB;
+        return noopDB;
     }
     
     // Only runs in Node.js context (main process or CLI tools)
@@ -61,7 +62,7 @@ function initDB() {
         return db;
     } catch (err) {
         console.error('[DB] Failed to initialize SQLite:', err.message);
-        return mockDB;
+        return noopDB;
     }
 }
 

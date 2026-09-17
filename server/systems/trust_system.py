@@ -21,6 +21,9 @@ from server.infrastructure.postgres_manager import get_postgres
 from server.infrastructure.redis_manager import get_redis
 from server.infrastructure.observability import log_trust_update, log_safety_constraint_violation
 
+import logging
+logger = logging.getLogger("aariya.trust")
+
 
 class TrustTier(Enum):
     """Trust tier enumeration."""
@@ -63,8 +66,23 @@ class TrustSystem:
            + b * (1 - C_history)
            + c * continuity_score
            - d * boundary_violation
+
+    Long-Term Decay:
+        When the user is absent, trust exponentially decays toward baseline:
+        trust(t) = trust(t0) * (1 - decay_rate) ^ days_absent
+
+        Reinforcement on return:
+        - Low trust (< 0.4): warm but cautious greeting
+        - High trust (> 0.7): familiar, warm greeting
+        - Returns with small +0.02 reinforcement bonus
     """
-    
+
+    # ── Long-term trust decay constants (from spec) ─────────────────────────
+    DECAY_RATE_DAILY = 0.02          # 2% decay per day of absence
+    DECAY_GRACE_PERIOD_DAYS = 3.0    # No decay for first 3 days
+    RETURN_REINFORCEMENT = 0.02      # Small bonus for returning
+    TRUST_BASELINE = 0.5             # Decay drifts toward this, not zero
+
     # Trust tier boundaries
     TIER_BOUNDARIES = {
         TrustTier.DEFENSIVE: (0.0, 0.2),
@@ -141,10 +159,20 @@ class TrustSystem:
         self._micro_signals: list[MicroTrustSignal] = []
     
     def get_trust_score(self, user_id: str) -> float:
-        """Get current trust score from Redis or database."""
+        """Get current trust score, applying long-term absence decay.
+
+        Decay Formula (from spec):
+            trust(t) = trust(t0) * (1 - decay_rate) ^ max(0, days - grace)
+            where baseline drift is:
+            trust(t) = baseline + (trust(t0) - baseline) * (1 - decay_rate) ^ days
+
+        This ensures trust drifts TOWARD the baseline (0.5), not toward zero.
+        A user at 0.8 trust who leaves for 30 days lands at ~0.5 + (0.3 * 0.546) ≈ 0.66.
+        A user at 0.2 trust who leaves for 30 days lands at ~0.5 - (0.3 * 0.546) ≈ 0.34.
+        """
         # Try Redis first (fast)
         trust = self.redis.get_trust_score(user_id)
-        
+
         if trust is None:
             # Fallback to database
             result = self.db.execute_query(
@@ -152,11 +180,128 @@ class TrustSystem:
                 (user_id,)
             )
             trust = result[0]['trust_score'] if result else 0.5  # Default to neutral
-            
+
             # Cache in Redis
             self.redis.set_trust_score(user_id, trust)
-        
+
+        # ── Apply long-term absence decay ──────────────────────────────────
+        trust = self._apply_absence_decay(user_id, trust)
+
         return trust
+
+    def _apply_absence_decay(self, user_id: str, current_trust: float) -> float:
+        """Apply exponential decay based on days since last interaction.
+
+        Returns the decayed trust score (clamped to [0, 1]).
+        Also updates the last_interaction timestamp so decay doesn't re-apply
+        until the next gap.
+        """
+        last_ts = self._get_last_interaction(user_id)
+        now = time.time()
+
+        # First interaction ever — no decay, just record timestamp
+        if last_ts is None:
+            self._set_last_interaction(user_id, now)
+            return current_trust
+
+        hours_absent = (now - last_ts) / 3600.0
+        days_absent = hours_absent / 24.0
+
+        # No decay within grace period
+        if days_absent <= self.DECAY_GRACE_PERIOD_DAYS:
+            self._set_last_interaction(user_id, now)
+            return current_trust
+
+        # Compute decay: drift toward baseline
+        decay_days = days_absent - self.DECAY_GRACE_PERIOD_DAYS
+        decay_factor = (1.0 - self.DECAY_RATE_DAILY) ** decay_days
+
+        # Decay the distance from baseline, not the raw trust
+        distance = current_trust - self.TRUST_BASELINE
+        decayed_trust = self.TRUST_BASELINE + (distance * decay_factor)
+        decayed_trust = round(max(0.0, min(1.0, decayed_trust)), 4)
+
+        # Only persist if trust actually changed
+        if abs(decayed_trust - current_trust) > 0.001:
+            self.redis.set_trust_score(user_id, decayed_trust)
+            logger.info(
+                f"[TrustDecay] {user_id}: {current_trust:.3f} → {decayed_trust:.3f} "
+                f"({days_absent:.1f} days absent, decay_factor={decay_factor:.4f})"
+            )
+
+        # Update last interaction to now (user is back)
+        self._set_last_interaction(user_id, now)
+        return decayed_trust
+
+    def _get_last_interaction(self, user_id: str) -> Optional[float]:
+        """Get the timestamp of the user's last interaction (from Redis)."""
+        try:
+            val = self.redis.get(f"trust:last_interaction:{user_id}")
+            return float(val) if val is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _set_last_interaction(self, user_id: str, timestamp: float):
+        """Store the user's last interaction timestamp in Redis."""
+        self.redis.set(f"trust:last_interaction:{user_id}", str(timestamp))
+
+    def record_interaction(self, user_id: str) -> Dict[str, any]:
+        """Record that the user interacted — called on every brain turn.
+
+        Returns absence info so callers (brain, voice) can adapt their
+        greeting style:
+        - "It's been a while. Welcome back." (low trust, long absence)
+        - "I was wondering when you'd come back." (high trust, long absence)
+        - Normal reply (short or no absence)
+        """
+        now = time.time()
+
+        # CRITICAL: capture last_interaction BEFORE get_trust_score, because
+        # get_trust_score → _apply_absence_decay resets the timestamp to now.
+        last_ts = self._get_last_interaction(user_id)
+        days_absent = 0.0
+        if last_ts is not None:
+            days_absent = (now - last_ts) / 86400.0
+
+        # Apply decay (modifies trust based on absence)
+        current_trust = self.get_trust_score(user_id)
+        trust_after_decay_only = current_trust  # before reinforcement
+
+        # Apply return reinforcement (small bonus for coming back)
+        if days_absent > self.DECAY_GRACE_PERIOD_DAYS and current_trust < 0.85:
+            reinforced = min(1.0, current_trust + self.RETURN_REINFORCEMENT)
+            self.redis.set_trust_score(user_id, reinforced)
+            current_trust = reinforced
+
+        # Determine absence category (integer days to avoid float drift)
+        whole_days = int(days_absent)
+        absence_category = "none"
+        if whole_days >= 30:
+            absence_category = "extended"
+        elif whole_days >= 7:
+            absence_category = "long"
+        elif whole_days >= 3:
+            absence_category = "moderate"
+        elif whole_days >= 1:
+            absence_category = "brief"
+
+        # Greeting style based on trust × absence
+        greeting_style = "normal"
+        if absence_category in ("extended", "long"):
+            if current_trust < 0.4:
+                greeting_style = "cautious_welcome"
+            elif current_trust > 0.7:
+                greeting_style = "warm_familiar"
+            else:
+                greeting_style = "polite_welcome"
+
+        return {
+            "days_absent": round(days_absent, 1),
+            "absence_category": absence_category,
+            "greeting_style": greeting_style,
+            "trust_after_decay": round(trust_after_decay_only, 4),
+            "decay_applied": days_absent > self.DECAY_GRACE_PERIOD_DAYS,
+        }
     
     def add_micro_signal(
         self,

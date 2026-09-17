@@ -1,6 +1,6 @@
 export function resolveIntimacy(userSetting, memory) {
   // Hard safety check
-  if (memory.safety.dependencyRisk && memory.safety.dependencyRisk !== "low") {
+  if (memory.safety?.dependencyRisk && memory.safety.dependencyRisk !== "low") {
       return 0; // Neutral/Calm only
   }
   

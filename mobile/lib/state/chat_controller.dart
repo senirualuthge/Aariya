@@ -1,21 +1,20 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import '../models/message.dart';
 import '../services/websocket_service.dart';
 import '../state/brain_state_controller.dart';
-import '../core/audio_engine.dart';
 
 /// Central state controller for the conversation.
 ///
 /// Integrates:
 /// - Streaming text reconstruction (thinking → text.stream → state.update)
 /// - FIXV3 brain state (emotion valence/arousal, trust, energy)
-/// - TTS playback with energy simulation for the Avatar Orb
 /// - Interrupt handling (both sending and receiving)
 ///
-/// Shared as a singleton: every screen (Orb, Chat, voice overlay) must talk
-/// through [ChatController.instance] so a single TTS engine and single brain
-/// state drive the whole app — otherwise the same AI reply gets spoken twice.
+/// Text-only by design: the voice/TTS pipeline was removed (server and
+/// client). Replies are shown as text; no speech synthesis runs here.
+///
+/// Shared as a singleton: every screen (Orb, Chat) must talk through
+/// [ChatController.instance] so a single brain state drives the whole app.
 class ChatController extends ChangeNotifier {
   static final ChatController instance = ChatController._internal();
 
@@ -23,9 +22,7 @@ class ChatController extends ChangeNotifier {
   factory ChatController() => ChatController._internal();
 
   ChatController._internal() {
-    _initTts();
     _listenToWebSocket();
-    _listenToAudioEnergy();
   }
 
   // ── Message list ──────────────────────────────────────────────────────────
@@ -33,9 +30,7 @@ class ChatController extends ChangeNotifier {
   List<Message> get messages => List.unmodifiable(_messages);
 
   // ── Sub-systems ───────────────────────────────────────────────────────────
-  final FlutterTts _flutterTts = FlutterTts();
   final BrainStateController brain = BrainStateController();
-  final AudioEngine audioEngine = AudioEngine();
 
   // ── Streaming state ───────────────────────────────────────────────────────
   String _currentStreamText = '';
@@ -52,42 +47,6 @@ class ChatController extends ChangeNotifier {
   final ValueNotifier<String?> commandDenied = ValueNotifier<String?>(null);
 
   // ─────────────────────────────────────────────────────────────────────────
-
-  Future<void> _initTts() async {
-    // TTS is a best-effort enhancement — a missing/unsupported engine on the
-    // device must never crash the conversation flow.
-    try {
-      await _flutterTts.setLanguage("en-US");
-      await _flutterTts.setSpeechRate(0.48);
-      await _flutterTts.setVolume(1.0);
-      await _flutterTts.setPitch(1.1);
-    } catch (e) {
-      debugPrint('[TTS] init failed: $e');
-    }
-
-    _flutterTts.setStartHandler(() {
-      audioEngine.startPulsing();
-      brain.setSpeaking(true);
-    });
-
-    _flutterTts.setCompletionHandler(() {
-      audioEngine.stop();
-      brain.setSpeaking(false);
-      brain.setListening(true);
-      onTtsCompletion?.call();
-    });
-
-    _flutterTts.setCancelHandler(() {
-      audioEngine.stop();
-      brain.setSpeaking(false);
-    });
-  }
-
-  void _listenToAudioEnergy() {
-    audioEngine.energyStream.listen((energy) {
-      brain.pulseEnergy(energy);
-    });
-  }
 
   void _listenToWebSocket() {
     WebSocketService.instance.messagesStream.listen((data) {
@@ -120,15 +79,46 @@ class ChatController extends ChangeNotifier {
               (data['action'] as String? ?? 'command').replaceAll('_', ' ');
           break;
 
-        // ── Streaming audio chunk ─────────────────────────────────────────
+        // ── Streaming audio chunk ───────────────────────────────────────
+        // Voice/TTS pipeline was removed; audio frames no longer exist.
         case 'audio_chunk':
-          final chunkData = data['data'] as String? ?? '';
-          if (chunkData.isNotEmpty) audioEngine.playChunk(chunkData);
+        case 'audio.chunk':
+        case 'audio.done':
           break;
 
         // ── Response fully done ───────────────────────────────────────────
         case 'response_end':
           _finalizeStreamingMessage(data);
+          break;
+
+        // ── Avatar events (Gap 15) ──────────────────────────────────────
+        case 'avatar.emotion':
+          // Server-side blendshape weights received
+          final emotion = data['emotion'] as String? ?? 'neutral';
+          final intensity = (data['intensity'] as num?)?.toDouble() ?? 0.5;
+          brain.updateFromServer({
+            'emotion': emotion,
+            'valence': intensity,
+          });
+          break;
+
+        case 'avatar.idle':
+          // Gap 4: Idle behavior animation
+          break;
+
+        // ── Brain response with trust/contradiction metadata ────────────
+        case 'brain.response':
+          _handleBrainResponse(data);
+          break;
+
+        // ── Kill-switch / feature-flag sync from server ─────────────────
+        case 'killswitch.update':
+          brain.applyKillSwitchUpdate(data);
+          break;
+
+        // ── Voice pipeline events (barge-in, speech start/end) ──────────
+        case 'voice.event':
+          _handleVoiceEvent(data);
           break;
 
         // ── Legacy / fallback ─────────────────────────────────────────────
@@ -204,6 +194,47 @@ class ChatController extends ChangeNotifier {
     _finalizeWithText(text, data);
   }
 
+  void _handleBrainResponse(Map<String, dynamic> data) {
+    // Sync server trust to brain controller
+    final trust = data['trust'];
+    final language = data['language'] as String?;
+    if (trust is num) {
+      brain.updateFromServer({
+        'trust': trust.toDouble(),
+        'emotion': data['emotion'],
+        'response_text': data['text'],
+      });
+    }
+    // Store detected language (informational; no TTS switching anymore)
+    if (language != null && language.isNotEmpty) {
+      debugPrint('[ChatController] Server detected language: $language');
+    }
+    // Legacy path: finalize with text
+    final text = data['text'] as String? ?? '';
+    if (text.isNotEmpty) {
+      _finalizeWithText(text, data);
+    }
+  }
+
+  void _handleVoiceEvent(Map<String, dynamic> data) {
+    final event = data['event'] as String? ?? '';
+    switch (event) {
+      case 'barge_in':
+        sendInterrupt();
+        break;
+      case 'speech_start':
+        brain.setListening(true);
+        break;
+      case 'speech_end':
+        brain.setListening(false);
+        break;
+      case 'listening':  // Server signals ready for user input
+        brain.setSpeaking(false);
+        brain.setListening(true);
+        break;
+    }
+  }
+
   void _finalizeStreamingMessage(Map<String, dynamic> data) {
     final text = data['response_text'] as String? ?? _currentStreamText;
     _finalizeWithText(text, data);
@@ -229,11 +260,6 @@ class ChatController extends ChangeNotifier {
         timestamp: DateTime.now().millisecondsSinceEpoch,
         emotion: _extractEmotion(data),
       ));
-    }
-
-    if (text.isNotEmpty) {
-      brain.setSpeaking(true);
-      _flutterTts.speak(text);
     }
 
     notifyListeners();
@@ -263,16 +289,12 @@ class ChatController extends ChangeNotifier {
 
   /// Interrupt the AI mid-response.
   void sendInterrupt() {
-    _flutterTts.stop();
-    audioEngine.stop();
     WebSocketService.instance.sendInterrupt();
    // Optimistic local clear — server will confirm with 'interrupted'
     _handleInterrupted();
   }
 
   Future<void> stopSpeaking() async {
-    await _flutterTts.stop();
-    audioEngine.stop();
     brain.setSpeaking(false);
   }
 
@@ -283,8 +305,6 @@ class ChatController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _flutterTts.stop();
-    audioEngine.dispose();
     brain.dispose();
     commandDenied.dispose();
     super.dispose();

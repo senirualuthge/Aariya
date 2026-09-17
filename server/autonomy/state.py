@@ -161,8 +161,9 @@ class AutonomyStore:
     # ── Goals ────────────────────────────────────────────────────────────────
 
     def add_goal(self, description: str, goal_type: str, source: str,
-                 priority: float = 0.5, user_id: str = "user_default") -> str:
-        goal_id = _uid("goal")
+                 priority: float = 0.5, user_id: str = "user_default",
+                 goal_id: Optional[str] = None) -> str:
+        goal_id = goal_id or _uid("goal")
         conn = get_db_connection()
         try:
             conn.execute(
