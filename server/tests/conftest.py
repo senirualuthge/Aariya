@@ -103,9 +103,14 @@ def mock_chromadb(monkeypatch):
     or sequential test execution against the same PersistentClient paths."""
     try:
         import chromadb
+        _cached_client = None
         def mock_persistent_client(*args, **kwargs):
-            kwargs.pop('path', None)
-            return chromadb.EphemeralClient(*args, **kwargs)
+            nonlocal _cached_client
+            if _cached_client is None:
+                kwargs.pop('path', None)
+                # Ignore extra kwargs that might conflict between different instantiations
+                _cached_client = chromadb.EphemeralClient()
+            return _cached_client
         monkeypatch.setattr(chromadb, "PersistentClient", mock_persistent_client)
     except ImportError:
         pass
