@@ -94,3 +94,18 @@ def mock_security_safe(monkeypatch):
         return {"risk": {"risk_level": "SAFE"}, "issues": []}
 
     monkeypatch.setattr(SwarmSystem, "run_security_agents", _always_safe)
+
+
+@pytest.fixture(autouse=True)
+def mock_chromadb(monkeypatch):
+    """Force ChromaDB to use an EphemeralClient in memory instead of hitting disk.
+    This prevents SQLite lock issues and local_hnsw.py segfaults during concurrent
+    or sequential test execution against the same PersistentClient paths."""
+    try:
+        import chromadb
+        def mock_persistent_client(*args, **kwargs):
+            kwargs.pop('path', None)
+            return chromadb.EphemeralClient(*args, **kwargs)
+        monkeypatch.setattr(chromadb, "PersistentClient", mock_persistent_client)
+    except ImportError:
+        pass
