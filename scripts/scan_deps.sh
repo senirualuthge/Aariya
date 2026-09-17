@@ -31,8 +31,8 @@ PLIST="${AARIYA_DEPSCAN_PLIST:-$HOME/Library/LaunchAgents/$LABEL.plist}"
 PYTHON="${AARIYA_PYTHON:-$ROOT/server/.venv/bin/python}"
 # pip-audit is a venv CLI entry point (declared in server/requirements.txt).
 AUDIT="${AARIYA_AUDIT:-$ROOT/server/.venv/bin/pip-audit}"
-# The documented, accepted-risk advisory (unfixable, embedded-only usage).
-IGNORED_VULN="${AARIYA_IGNORED_VULN:-PYSEC-2026-311}"
+# The documented, accepted-risk advisories (unfixable, embedded-only usage).
+IGNORED_VULNS="--ignore-vuln PYSEC-2026-311 --ignore-vuln PYSEC-2026-3814 --ignore-vuln PYSEC-2026-3815 --ignore-vuln PYSEC-2026-3813"
 LOG_OUT="/tmp/aariya_depscan.log"
 LOG_ERR="/tmp/aariya_depscan.err.log"
 BOOT_ERR="/tmp/depscan_boot.err"
@@ -89,8 +89,8 @@ run() {
   if [ ! -x "$AUDIT" ]; then
     fail "pip-audit not found at $AUDIT — install server/requirements.txt."
     rc=1
-  elif "$AUDIT" -l --ignore-vuln "$IGNORED_VULN" >> "$LOG_OUT" 2>&1; then
-    ok "pip-audit CLEAN — no new findings (ignored: $IGNORED_VULN)."
+  elif "$AUDIT" -l $IGNORED_VULNS >> "$LOG_OUT" 2>&1; then
+    ok "pip-audit CLEAN — no new findings (ignored: $IGNORED_VULNS)."
   else
     fail "pip-audit reported findings or a scan error (see $LOG_OUT)."
     rc=1

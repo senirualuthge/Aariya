@@ -9,7 +9,7 @@ installed and patched (0.141.1, the GHSA-8h2j-cgx8-6xv7 CSRF advisory only
 affects < 0.65.2), so it MUST report zero advisories. If the version
 filtering ever regresses, fastapi floods with historical advisories and this
 test fails. Remaining genuine findings (e.g. chromadb's unfixed
-PYSEC-2026-311) are surfaced in the log — the hard gate for NEW
+PYSEC-2026-311, PYSEC-2026-3814, PYSEC-2026-3815, PYSEC-2026-3813) are surfaced in the log — the hard gate for NEW
 vulnerabilities is pip-audit in scripts/scan_deps.sh.
 """
 

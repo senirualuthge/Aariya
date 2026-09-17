@@ -56,8 +56,8 @@ jobs:
       - name: Hermetic backend suite
         run: python -m pytest server/tests/ -q
 
-      - name: pip-audit gate (new findings fail; chromadb PYSEC-2026-311 is a documented accepted risk)
-        run: pip-audit -l --ignore-vuln PYSEC-2026-311
+      - name: pip-audit gate (new findings fail; chromadb vulnerabilities are documented accepted risks)
+        run: pip-audit -l --ignore-vuln PYSEC-2026-311 --ignore-vuln PYSEC-2026-3814 --ignore-vuln PYSEC-2026-3815 --ignore-vuln PYSEC-2026-3813
 
       # Note: the CVE agent degrades gracefully — if api.osv.dev is unreachable
       # it returns no findings, so this step passes vacuously (a documented

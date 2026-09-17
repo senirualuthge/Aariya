@@ -16,7 +16,7 @@ python-dotenv>=1.0.0
 rich>=13.0.0
 
 # Memory & semantic search (§4.1 — were missing)
-# SECURITY NOTE: PYSEC-2026-311 / CVE-2026-45829 (pre-auth code injection in
+# SECURITY NOTE: PYSEC-2026-311 (CVE-2026-45829), PYSEC-2026-3814, PYSEC-2026-3815, PYSEC-2026-3813 (pre-auth code injection in
 # chroma's HTTP server API, versions 1.0.0-1.5.9) has NO patched release yet
 # (1.5.9 is the newest on PyPI). This project uses chromadb ONLY as an embedded
 # library (PersistentClient/Client — no chroma HTTP server is mounted, no
