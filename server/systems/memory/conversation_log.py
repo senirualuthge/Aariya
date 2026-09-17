@@ -14,6 +14,7 @@ Storage is SQLite (data/brain_v4.db) via server.db, so nothing here depends
 on ChromaDB / sentence-transformers / Postgres being available.
 """
 
+import sqlite3
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -147,21 +148,34 @@ class ConversationLog:
 
     def last_state(self) -> Optional[Dict[str, float]]:
         """Latest self-awareness snapshot (valence/arousal/trust/attachment)
-        persisted for this user, so a fresh BrainV2 resumes where she left off."""
+        persisted for this user, so a fresh BrainV2 resumes where she left off.
+
+        Returns None gracefully when the schema hasn't been initialised yet
+        (e.g. tests that construct BrainV2 without the isolated_db fixture, or
+        a first-run before init_db() has been called).
+        """
         conn = get_db_connection()
         try:
-            row = conn.execute(
-                """SELECT valence, arousal, trust, attachment FROM autonomy_snapshots
-                   WHERE user_id = ? ORDER BY id DESC LIMIT 1""",
-                (self.user_id,),
-            ).fetchone()
-            if not row:
-                # Fall back to the most recent conversation turn's state
+            try:
                 row = conn.execute(
-                    """SELECT valence, trust FROM conversation_messages
+                    """SELECT valence, arousal, trust, attachment FROM autonomy_snapshots
                        WHERE user_id = ? ORDER BY id DESC LIMIT 1""",
                     (self.user_id,),
                 ).fetchone()
+            except sqlite3.OperationalError:
+                # Table doesn't exist yet (schema not initialised) — treat as
+                # no prior state so BrainV2.__init__ starts from defaults.
+                return None
+            if not row:
+                # Fall back to the most recent conversation turn's state
+                try:
+                    row = conn.execute(
+                        """SELECT valence, trust FROM conversation_messages
+                           WHERE user_id = ? ORDER BY id DESC LIMIT 1""",
+                        (self.user_id,),
+                    ).fetchone()
+                except sqlite3.OperationalError:
+                    return None
                 if not row:
                     return None
                 return {"valence": float(row["valence"]), "trust": float(row["trust"]),
