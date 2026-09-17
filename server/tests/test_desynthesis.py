@@ -214,6 +214,12 @@ def test_alignment_passes_benign_action():
 
 # ══════════════════════════ NEURAL-SYMBOLIC ══════════════════════════════════
 
+import pytest
+
+@pytest.mark.skipif(
+    not __import__("server.systems.agent.neural_symbolic", fromlist=["_SKLEARN"])._SKLEARN,
+    reason="scikit-learn unavailable"
+)
 def test_hashed_embedding_consistency_orders_meaningfully():
     from server.systems.agent.neural_symbolic import neural_symbolic
     same_topic = neural_symbolic.consistency(
