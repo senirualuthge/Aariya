@@ -693,7 +693,7 @@ export default function SystemHealthTab() {
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
                     <Chip color={st === 'new' ? '#00f2ff' : st === 'removed' ? '#ef4444' : '#64748b'}>{st.toUpperCase()}</Chip>
                     <Chip color="#6bcbef">{f.kind || 'class'}</Chip>
-                    {(f.detection || []).slice(0, 2).map((d) => <Chip key={d} color="#94a3b8">{d}</Chip>)}
+                    {(Array.isArray(f.detection) ? f.detection : typeof f.detection === 'string' ? [f.detection] : []).slice(0, 2).map((d) => <Chip key={d} color="#94a3b8">{d}</Chip>)}
                   </div>
                   <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.file}>{f.file || '—'}</div>
                   <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>first seen {f.first_seen ? new Date(f.first_seen).toLocaleDateString() : '—'}</div>

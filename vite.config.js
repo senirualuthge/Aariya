@@ -19,6 +19,13 @@ export default defineConfig(({ mode }) => {
   envPrefix: ['VITE_', 'BUILD_WARN_'],
   build: {
     rollupOptions: {
+      // satellite.js ships WASM bundles (pthreads-release/index.js, base-release/index.js)
+      // that contain top-level `await` — Rollup cannot transform these in iife/browser mode.
+      // Mark the problematic WASM sub-entries as external so the build succeeds; they are
+      // only needed by the GEV panel which loads them lazily at runtime via dynamic import.
+      external: [
+        /satellite\.js\/wasm-build\//,
+      ],
       input: {
           main: resolve(__dirname, 'index.html'),
           gev: resolve(__dirname, 'src/gev/index.html')
