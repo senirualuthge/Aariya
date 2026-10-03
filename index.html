@@ -4,13 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aariya - AI Companion</title>
+    <meta name="description" content="Aariya — your intelligent AI companion with emotional presence." />
+    <title>Aariya — AI Companion</title>
+    <!-- Premium font stack -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <!-- Prevent maroon flash on analytics window by detecting route before CSS loads -->
     <script>
       (function() {
         var params = new URLSearchParams(window.location.search);
         if (params.get('route') === 'analytics' || window.location.hash.includes('analytics')) {
-          document.documentElement.style.backgroundColor = '#0a0e1a';
+          document.documentElement.style.backgroundColor = '#060812';
           document.documentElement.style.height = 'auto';
           document.documentElement.style.minHeight = '100vh';
         }

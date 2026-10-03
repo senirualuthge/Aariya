@@ -124,7 +124,12 @@ class FilesystemBackgroundService:
 
         scan_roots = roots if roots is not None else allowed_roots()
         # Cull roots to those that exist to avoid noise from cold dirs.
-        scan_roots = [r for r in scan_roots if os.path.isdir(r)][:4]
+        # EXCLUDE the home directory root and /Volumes to prevent ENFILE crashes and excessive resource use
+        home = os.path.expanduser("~")
+        scan_roots = [
+            r for r in scan_roots 
+            if os.path.isdir(r) and r != home and not r.startswith("/Volumes/")
+        ][:4]
         self.known_mounts = list(scan_roots)
 
         # Live watcher over the (small) real roots so new/changed docs are
@@ -156,15 +161,17 @@ class FilesystemBackgroundService:
 
         # Drive hotplug polling (AccessFIles §3): new removable mounts are
         # registered as roots and indexed within one poll interval.
-        poll_seconds = max(15, int(os.getenv("AARIYA_DRIVE_POLL_SECONDS", "120")))
-        self._drive_poll_stop.clear()
-        self._drive_poll_thread = threading.Thread(
-            target=self._drive_poll_loop,
-            args=(poll_seconds,),
-            daemon=True,
-            name="fs-drive-poll",
-        )
-        self._drive_poll_thread.start()
+        # Disabled by default to prevent scanning entire external drives.
+        if os.getenv("AARIYA_ALLOW_EXTERNAL_DRIVES", "0") == "1":
+            poll_seconds = max(15, int(os.getenv("AARIYA_DRIVE_POLL_SECONDS", "120")))
+            self._drive_poll_stop.clear()
+            self._drive_poll_thread = threading.Thread(
+                target=self._drive_poll_loop,
+                args=(poll_seconds,),
+                daemon=True,
+                name="fs-drive-poll",
+            )
+            self._drive_poll_thread.start()
 
     # ── Drive hotplug ────────────────────────────────────────────────────────
 

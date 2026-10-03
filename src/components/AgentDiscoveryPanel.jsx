@@ -270,7 +270,7 @@ function AgentCard({ agent, mobileTelemetry, onClick }) {
 
       {/* Detection badges */}
       <div style={styles.detectionRow}>
-        {(agent.detection || []).map((d) => {
+        {(Array.isArray(agent.detection) ? agent.detection : typeof agent.detection === 'string' ? [agent.detection] : []).map((d) => {
           const c = DETECTION_COLORS[d] || { bg: "#1a1a1a", border: "#444", text: "#888", label: d };
           return (
             <span
