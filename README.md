@@ -82,13 +82,14 @@ Set up the Python virtual environment and run database migrations:
 ```
 
 ### 4. Running the System
-You can run the full ecosystem (frontend UI + backend server) using the provided scripts:
+The GUI opens the desktop window only — the servers are started separately, in
+their own terminal, and stop with `Ctrl+C`:
 ```bash
-# macOS/Linux
-./run_gui.sh
+# Terminal 1 — brain (:8000) + UI (:5173)
+npm run dev
 
-# Windows
-.\run_gui.bat
+# Terminal 2 — desktop window
+npm run gui
 ```
 
 To run the CLI interface instead of the full GUI:
