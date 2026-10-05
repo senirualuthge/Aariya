@@ -26,7 +26,7 @@
  * GET /api/system/health so it never goes blind.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { subscribeMetrics } from '../systems/metricsClient';
 
 // ── Status palette ────────────────────────────────────────────────────────────
@@ -738,7 +738,7 @@ function GevHealthPanel({ apiBase }) {
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshTs, setLastRefreshTs] = useState(null);
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`${apiBase}/api/system/health`);
       if (!res.ok) return;
@@ -746,13 +746,13 @@ function GevHealthPanel({ apiBase }) {
       const gevCheck = (data.checks || []).find((c) => c.name === 'gev');
       if (gevCheck) setStatus(gevCheck.meta || {});
     } catch { /* offline */ }
-  };
+  }, [apiBase]);
 
   useEffect(() => {
     fetchStatus();
     const t = setInterval(fetchStatus, 6000);
     return () => clearInterval(t);
-  }, []);
+  }, [fetchStatus]);
 
   const doRefresh = async () => {
     if (refreshing) return;
