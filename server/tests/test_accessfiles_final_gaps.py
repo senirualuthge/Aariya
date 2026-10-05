@@ -381,3 +381,65 @@ def test_camera_probe_cached_and_safe(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", no_cv2)
     assert dr._probe_cameras() == []
+
+
+def _install_fake_cv2(monkeypatch, behavior):
+    """Replace sys.modules['cv2'] with a stub.
+
+    behavior: {index: (opens, has_frame)} — indices NOT in the dict fail to
+    open, like a machine with fewer cameras. Returns the list of indices the
+    stub was asked to open, for asserting the probe's early-stop behavior.
+    """
+    import sys
+    import types
+
+    attempted = []
+
+    class FakeCap:
+        def __init__(self, idx):
+            self._spec = behavior.get(idx, (False, False))
+            attempted.append(idx)
+
+        def isOpened(self):
+            return self._spec[0]
+
+        def read(self):
+            opens, has_frame = self._spec
+            return (True, "frame") if (opens and has_frame) else (False, None)
+
+        def release(self):
+            pass
+
+    fake = types.ModuleType("cv2")
+    fake.VideoCapture = FakeCap
+    monkeypatch.setitem(sys.modules, "cv2", fake)
+    return attempted
+
+
+def test_camera_probe_respects_camera_kill_switch(monkeypatch):
+    """CAMERA privacy switch OFF (§5) → the probe never opens the lens,
+    not even to count it, and honestly reports no cameras."""
+    from server.systems.embodiment import device_registry as dr
+    from server.systems.kill_switches import FeatureFlag, get_kill_switches
+
+    monkeypatch.setattr(dr, "_CAMERA_CACHE", None)
+    monkeypatch.setattr(dr, "_CAMERA_TS", 0.0)
+    ks = get_kill_switches()
+    monkeypatch.setitem(ks._flags, FeatureFlag.CAMERA.value, False)
+
+    attempted = _install_fake_cv2(monkeypatch, {0: (True, True)})
+    assert dr._probe_cameras() == []
+    assert attempted == []          # no device was even constructed
+
+
+def test_camera_probe_stops_at_first_missing_index(monkeypatch):
+    """Single-camera machine: probe opens index 0, finds it missing at 1,
+    and never pointlessly opens nonexistent higher indices."""
+    from server.systems.embodiment import device_registry as dr
+
+    monkeypatch.setattr(dr, "_CAMERA_CACHE", None)
+    monkeypatch.setattr(dr, "_CAMERA_TS", 0.0)
+
+    attempted = _install_fake_cv2(monkeypatch, {0: (True, True)})
+    assert dr._probe_cameras() == [0]
+    assert attempted == [0, 1]      # stopped at the first gap — no idx 2

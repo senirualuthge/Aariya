@@ -3,9 +3,15 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+// The GEV app root. The suite is discovered under `<repo>/src/gev/js`, and the
+// runner is invoked from the repo root, so every emitted path is repo-relative
+// and each `node --test` child inherits that cwd.
+export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+export const GEV_SOURCE_DIR = path.join('src', 'gev', 'js');
+
 export const ALLOCATION_TEST_FILES = Object.freeze([
-  'src/data/focusAllocations.test.mjs',
-  'src/overlays/worldOverlayAllocation.test.mjs',
+  'src/gev/js/data/focusAllocations.test.mjs',
+  'src/gev/js/overlays/worldOverlayAllocation.test.mjs',
 ]);
 
 /** Whether this runtime matches the one the allocation budgets were calibrated on. */
@@ -22,8 +28,8 @@ export function assertNode24AllocationRuntime(version = process.versions.node) {
 }
 
 /** Discover repository unit tests in stable path order. */
-export function discoverUnitTestFiles(root = process.cwd()) {
-  const sourceRoot = path.join(root, 'src');
+export function discoverUnitTestFiles(root = REPO_ROOT) {
+  const sourceRoot = path.join(root, GEV_SOURCE_DIR);
   const files = [];
   const visit = (directory) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -62,7 +68,7 @@ export function allocationTestArgs(file) {
 
 function runTests(args) {
   const result = spawnSync(process.execPath, args, {
-    cwd: process.cwd(),
+    cwd: REPO_ROOT,
     stdio: 'inherit',
     env: process.env,
   });
@@ -77,7 +83,7 @@ export function runUnitTests() {
 
   // The GC-bracketed budgets are calibrated on Node 24 and are meaningless on
   // other allocators. A contributor's suite must stay green on any supported
-  // engine (package.json permits >=24), so uncalibrated runtimes skip the
+  // engine (package.json permits >=20), so uncalibrated runtimes skip the
   // probes with a warning. Set GEV_REQUIRE_ALLOCATION_GATE=1 (pinned CI /
   // release batteries) to make an uncalibrated runtime a hard failure.
   if (!isCalibratedAllocationRuntime()) {

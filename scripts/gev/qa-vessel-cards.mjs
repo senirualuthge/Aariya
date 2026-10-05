@@ -29,7 +29,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import puppeteer from 'puppeteer';
+import { loadPuppeteer } from './browser.mjs';
 
 const argv = process.argv.slice(2);
 const getOpt = (name, dflt) => {
@@ -176,22 +176,28 @@ function syntheticVesselRows(portKey, port) {
   }));
 }
 
-const CHROME_EXECUTABLE_CANDIDATES = [
+/**
+ * Chrome candidates, most specific first.
+ *
+ * The puppeteer entry is resolved by the caller (not here) because the pinned
+ * Chrome-for-Testing path is only knowable once puppeteer is loaded, and this
+ * module's pure-logic exports are unit tested without puppeteer installed.
+ */
+const SYSTEM_CHROME_CANDIDATES = [
   process.env.PUPPETEER_EXECUTABLE_PATH,
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+].filter(Boolean);
+
+function findChromeExecutable(pinnedChromePath) {
   // Prefer puppeteer's version-pinned Chrome-for-Testing over the system
   // Chrome: /Applications auto-updates underneath the harnesses, and its
   // software-GL behavior shifts across majors (system Chrome 150 blew the
   // tile-gated drain budget under SwiftShader on 2026-07-30 — six
   // false-negative qa-cctv-v2 runs against a healthy build). A deterministic
   // pinned browser beats the newest one for regression harnesses.
-  (() => { try { return puppeteer.executablePath(); } catch { return null; } })(),
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-].filter(Boolean);
-
-function findChromeExecutable() {
-  for (const candidate of CHROME_EXECUTABLE_CANDIDATES) {
+  for (const candidate of [pinnedChromePath, ...SYSTEM_CHROME_CANDIDATES].filter(Boolean)) {
     try {
       if (fs.existsSync(candidate)) return candidate;
     } catch { /* fall through to Puppeteer's cache */ }
@@ -220,7 +226,10 @@ async function main() {
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  const chromeExecutable = findChromeExecutable();
+  const puppeteer = await loadPuppeteer();
+  const chromeExecutable = findChromeExecutable(
+    (() => { try { return puppeteer.executablePath(); } catch { return null; } })(),
+  );
   const browser = await puppeteer.launch({
     headless: HEADFUL ? false : 'new',
     ...(chromeExecutable ? { executablePath: chromeExecutable } : {}),

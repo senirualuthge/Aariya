@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { readDotenvValue } from '../scripts/read-dotenv-value.mjs';
+import { readDotenvValue } from '../../../scripts/gev/read-dotenv-value.mjs';
 
 test('dotenv reader preserves values without executing shell metacharacters', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'gev-dotenv-'));

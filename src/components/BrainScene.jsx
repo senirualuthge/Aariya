@@ -275,9 +275,11 @@ function AnomalyHeatmap({ anomalies }) {
 function ShockWaves({ anomalies }) {
     const refs = useRef([]);
     const count = (anomalies && Array.isArray(anomalies)) ? anomalies.length : 0;
-    if (count === 0) return null;
     const baseAngle = (i) => (i / Math.max(1, count)) * Math.PI * 2;
     const baseRadius = (i) => 3.2 + (i % 4) * 1.0;
+    // Hook first: an early return above useFrame would change hook order when
+    // the first anomaly arrives ("rendered more hooks than during the previous
+    // render"). The frame body is inert while refs are empty.
     useFrame(({ clock }) => {
         refs.current.forEach((mesh, i) => {
             if (!mesh) return;
@@ -287,6 +289,7 @@ function ShockWaves({ anomalies }) {
             mesh.material.opacity = Math.max(0, 0.6 - t * 0.25);
         });
     });
+    if (count === 0) return null;
     return (
         <group>
             {Array.from({ length: count }).map((_, i) => {
@@ -311,14 +314,15 @@ function ShockWaves({ anomalies }) {
 function TimelineDivergence({ prediction }) {
     const refs = useRef([]);
     const branches = prediction && Array.isArray(prediction) ? prediction.slice(0, 3) : [];
-    if (branches.length === 0) return null;
     const baseAngle = (i) => (i / Math.max(1, branches.length)) * Math.PI * 2;
+    // Hook before the empty guard — see ShockWaves.
     useFrame(({ clock }) => {
         refs.current.forEach((line, i) => {
             if (!line) return;
             line.material.opacity = 0.18 + (Math.sin(clock.elapsedTime * 1.2 + i * 1.5) + 1) * 0.1;
         });
     });
+    if (branches.length === 0) return null;
     return (
         <group>
             {branches.map((b, i) => {

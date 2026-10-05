@@ -15,11 +15,9 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SOURCE = path.join(ROOT, 'src', 'cameraVerbs.js');
-const TESTS = 'src/routeCinematics.test.mjs';
+import { GEV_ROOT as ROOT } from './paths.mjs';
+const SOURCE = path.join(ROOT, 'js', 'cameraVerbs.js');
+const TESTS = 'js/routeCinematics.test.mjs';
 
 /** @type {Array<{defect: string, from: string, to: string}>} */
 const MUTATIONS = [

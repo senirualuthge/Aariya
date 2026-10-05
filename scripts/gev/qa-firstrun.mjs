@@ -20,7 +20,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { GEV_ROOT as ROOT, QA_SHOTS_DIR } from './paths.mjs';
 import puppeteer from 'puppeteer';
 
 const args = process.argv.slice(2);
@@ -32,8 +32,7 @@ const APP_URL = getOpt('--url', 'http://localhost:4173').replace(/\/$/, '');
 const TEETH = args.includes('--teeth');
 const HEADFUL = args.includes('--headful');
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SHOT_DIR = path.join(ROOT, 'qa-shots', 'firstrun');
+const SHOT_DIR = path.join(QA_SHOTS_DIR, 'firstrun');
 
 const CHROME_CANDIDATES = [
   process.env.PUPPETEER_EXECUTABLE_PATH,

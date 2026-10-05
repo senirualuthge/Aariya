@@ -665,3 +665,47 @@ input[type="range"]::-moz-range-thumb {
 .gev-panel-wrapper {
   pointer-events: auto;
 }
+/* ── System-wide privacy switches (ToDo §5) ───────────────────────────────── */
+/* Positioned left of the AI Control Center button. The `.blocked` state is
+   what the user sees when a device is closed — deliberately loud (amber) so
+   a muted mic or closed camera is never mistaken for a broken sensor. */
+.privacy-switches {
+  position: absolute;
+  top: 28px;
+  right: 232px;
+  display: flex;
+  gap: 8px;
+  z-index: var(--z-modal);
+  pointer-events: auto;
+}
+
+.privacy-switch-btn {
+  background: rgba(10, 14, 28, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(20px);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.3s var(--ease-smooth);
+}
+
+.privacy-switch-btn:hover {
+  background: rgba(14, 20, 42, 0.9);
+  transform: scale(1.04);
+}
+
+.privacy-switch-btn.blocked {
+  border-color: rgba(251, 191, 36, 0.75);
+  color: #fbbf24;
+  background: rgba(43, 32, 6, 0.8);
+}

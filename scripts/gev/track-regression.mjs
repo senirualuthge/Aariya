@@ -1119,7 +1119,8 @@ async function main() {
       );
       // Leave Contacts as the vocabulary group expects to find it.
       await evalPage(async () => {
-        try { await window.__gevVoiceCommands.runner('set_context_mode', { mode: 'off' }); } catch {}
+        // Best-effort teardown: the group may not have installed the tool.
+        try { await window.__gevVoiceCommands.runner('set_context_mode', { mode: 'off' }); } catch { /* already off */ }
       });
 
       // ============================================================

@@ -24,6 +24,13 @@ interface EmotionResult {
   timestamp: number;
 }
 
+/** One face's 128-d embedding, as produced by face-api's recognition net. */
+export interface IdentityResult {
+  descriptor: number[];
+  confidence: number;
+  timestamp: number;
+}
+
 class FaceWorkerBridge {
   private worker: Worker | null = null;
   private videoElement: HTMLVideoElement | null = null;
@@ -47,6 +54,17 @@ class FaceWorkerBridge {
   
   // Callbacks
   private onEmotionCallback: ((emotion: EmotionVector, confidence: number) => void) | null = null;
+  private onIdentityCallback: ((identity: IdentityResult) => void) | null = null;
+  private onIdentityUnavailableCallback: ((reason: string) => void) | null = null;
+
+  // Identity state
+  private identityAvailable: boolean = false;
+  private lastDescriptor: Float32Array | null = null;
+  private lastIdentityAt: number = 0;
+
+  /** Minimum gap between forwarded descriptors: a face held in frame at 15 Hz
+   *  otherwise re-matches 15 times a second and inflates sighting counts. */
+  private static readonly IDENTITY_MIN_INTERVAL_MS = 1000;
   
   constructor() {
     console.log('[Face Worker Bridge] Initialized');
@@ -177,6 +195,21 @@ class FaceWorkerBridge {
         break;
       }
       
+      case 'IDENTITY': {
+        const result = message as IdentityResult;
+        this.updateIdentity(result);
+        break;
+      }
+
+      case 'IDENTITY_UNAVAILABLE': {
+        this.identityAvailable = false;
+        console.warn('[Face Worker Bridge] Identity unavailable:', message.error);
+        if (this.onIdentityUnavailableCallback) {
+          this.onIdentityUnavailableCallback(message.error);
+        }
+        break;
+      }
+
       case 'ERROR': {
         console.error('[Face Worker Bridge] Worker error:', message.error);
         break;
@@ -192,6 +225,39 @@ class FaceWorkerBridge {
     }
   }
   
+  /**
+   * Record an incoming descriptor.
+   *
+   * Throttled rather than passed straight through: identification is stateful
+   * (every match bumps a sighting counter), so forwarding every frame would
+   * inflate history and burn matching cycles on one stationary face.
+   */
+  private updateIdentity(result: IdentityResult): void {
+    this.identityAvailable = true;
+    const now = performance.now();
+    if (now - this.lastIdentityAt < FaceWorkerBridge.IDENTITY_MIN_INTERVAL_MS) {
+      return;
+    }
+    this.lastIdentityAt = now;
+    if (!result.descriptor || result.descriptor.length !== 128) {
+      return;
+    }
+    this.lastDescriptor = Float32Array.from(result.descriptor);
+    if (this.onIdentityCallback) {
+      this.onIdentityCallback({ descriptor: this.lastDescriptor, confidence: result.confidence, timestamp: result.timestamp });
+    }
+  }
+
+  /** True once the recognition weights have loaded and a face is in frame. */
+  isIdentityAvailable(): boolean {
+    return this.identityAvailable;
+  }
+
+  /** Most recent descriptor, or null if no face has been identified yet. */
+  getLastDescriptor(): Float32Array | null {
+    return this.lastDescriptor;
+  }
+
   /**
    * Update emotion state from worker result
    */
@@ -249,6 +315,25 @@ class FaceWorkerBridge {
   /**
    * Register callback for emotion updates
    */
+  /**
+   * Subscribe to person-identification results.
+   * Returns an unsubscribe function so callers can detach on unmount.
+   */
+  onIdentity(callback: (identity: IdentityResult) => void): () => void {
+    this.onIdentityCallback = callback;
+    return () => {
+      if (this.onIdentityCallback === callback) this.onIdentityCallback = null;
+    };
+  }
+
+  /** Called when the recognition weights could not be loaded. */
+  onIdentityUnavailable(callback: (reason: string) => void): () => void {
+    this.onIdentityUnavailableCallback = callback;
+    return () => {
+      if (this.onIdentityUnavailableCallback === callback) this.onIdentityUnavailableCallback = null;
+    };
+  }
+
   onEmotion(callback: (emotion: EmotionVector, confidence: number) => void): void {
     this.onEmotionCallback = callback;
   }

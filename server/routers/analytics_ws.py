@@ -19,6 +19,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from server.infrastructure.observability import logger
 from server.infrastructure.session_manager import manager
 from server.systems.agent.mobile_analytics_agent import get_mobile_analytics
+from server.systems.security.auth import verify_ws_token
 
 router = APIRouter()
 
@@ -82,6 +83,9 @@ def _get_brain_snapshot() -> dict:
 # ── WebSocket endpoint ─────────────────────────────────────────────────────────
 @router.websocket("/ws/mobile/analytics")
 async def analytics_ws(websocket: WebSocket) -> None:
+    if not await verify_ws_token(websocket):
+        return
+
     await websocket.accept()
     manager.analytics_clients.add(websocket)
     agent = get_mobile_analytics()

@@ -61,9 +61,14 @@ def verify_message_signature(message: str, signature: str) -> bool:
     """
     HMAC-SHA256 message integrity check.
     Used for high-trust channels (e.g., admin control messages).
+
+    Fails CLOSED once auth is required: with REQUIRE_WS_AUTH=1 a deployment must
+    also set WS_SECRET_TOKEN, otherwise no signature could ever validate and
+    every signed frame would be accepted unsigned. Soft mode (auth not required)
+    keeps the historical pass-through so local dev needs no secret.
     """
     if not SECRET_TOKEN:
-        return True   # bypass if no secret configured
+        return not REQUIRE_AUTH
 
     expected = hmac.new(
         SECRET_TOKEN.encode(),

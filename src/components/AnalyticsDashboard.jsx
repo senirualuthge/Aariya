@@ -2524,7 +2524,6 @@ function BuildTab() {
     setLoading(true);
     setError(false);
     try {
-      const host = apiHost();
       const res = await fetch(`${apiBase()}/api/build/summary`);
       if (mountedRef.current) {
         if (res.ok) {

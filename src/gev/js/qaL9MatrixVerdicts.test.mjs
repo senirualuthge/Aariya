@@ -12,7 +12,7 @@ import {
   readFloorVerdict, keyGuard, applyKnownConditions, requiredCreditFor, satisfiesEngines,
   isCalibratedAllocationRuntime, trafficFlowInconclusive,
   CREDIT_EXPECTATIONS, CREDIT_EXEMPT_LAYERS,
-} from '../scripts/qa-l9-matrix.mjs';
+} from '../../../scripts/gev/qa-l9-matrix.mjs';
 
 const run = (over = {}) => ({ code: 0, out: '', err: '', timedOut: false, ...over });
 

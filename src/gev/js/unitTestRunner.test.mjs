@@ -7,13 +7,13 @@ import {
   assertNode24AllocationRuntime,
   buildUnitTestPlan,
   isCalibratedAllocationRuntime,
-} from '../scripts/run-unit-tests.mjs';
+} from '../../../scripts/gev/run-unit-tests.mjs';
 
 test('unit runner serializes only GC-bracketed allocation microbenchmarks', () => {
   const ordinary = [
-    'src/data/manager.test.mjs',
-    'src/data/radio.test.mjs',
-    'src/unitTestRunner.test.mjs',
+    'src/gev/js/data/manager.test.mjs',
+    'src/gev/js/data/radio.test.mjs',
+    'src/gev/js/unitTestRunner.test.mjs',
   ];
   const plan = buildUnitTestPlan([
     ordinary[1],
@@ -32,7 +32,7 @@ test('unit runner serializes only GC-bracketed allocation microbenchmarks', () =
     ]);
   }
   assert.throws(
-    () => allocationTestArgs('src/data/radio.test.mjs'),
+    () => allocationTestArgs('src/gev/js/data/radio.test.mjs'),
     /Not an allocation microbenchmark/,
   );
 });
@@ -53,15 +53,20 @@ test('allocation runtime calibration is explicit and pinned to Node 24', () => {
 });
 
 test('npm test stays green on every supported engine, not only the calibrated one', () => {
-  // package.json wiring: `npm test` must invoke this runner, and the engines
+  // package.json wiring: `npm test` must reach this runner, and the engines
   // range it advertises must not be narrower than what the runner tolerates.
-  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(pkg.scripts.test, 'node scripts/run-unit-tests.mjs');
+  const pkg = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'));
+  assert.equal(pkg.scripts['test:gev'], 'node scripts/gev/run-unit-tests.mjs');
+  assert.match(
+    pkg.scripts.test,
+    /test:gev/,
+    'npm test must reach the GEV runner, not only the root unit tests',
+  );
   const enginesNode = String(pkg.engines?.node || '');
   assert.ok(enginesNode, 'engines.node must be declared');
   // The runner throws for uncalibrated runtimes ONLY behind the explicit
   // opt-in env; by default it skips, so a supported non-24 engine cannot fail.
-  const runner = readFileSync(new URL('../scripts/run-unit-tests.mjs', import.meta.url), 'utf8');
+  const runner = readFileSync(new URL('../../../scripts/gev/run-unit-tests.mjs', import.meta.url), 'utf8');
   assert.match(runner, /GEV_REQUIRE_ALLOCATION_GATE/);
   assert.match(runner, /SKIPPED .*allocation microbenchmarks/);
 });

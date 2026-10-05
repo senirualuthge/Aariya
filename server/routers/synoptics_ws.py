@@ -21,6 +21,8 @@ brain_v2; the WebSocket endpoint just fans frames out to subscribers.
 import asyncio
 import json
 import time
+
+from server.systems.security.auth import verify_ws_token
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -34,6 +36,9 @@ _subscribers: List[WebSocket] = []
 @router.websocket("/ws/synoptics")
 async def synoptics_websocket(ws: WebSocket):
     """Stream synoptics_update frames to a client (e.g. ghost/orbit overlay)."""
+    if not await verify_ws_token(ws):
+        return
+
     await ws.accept()
     _subscribers.append(ws)
     try:
