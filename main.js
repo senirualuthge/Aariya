@@ -9,36 +9,50 @@ import { readBuildSummary } from './build-summary.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// `npm run gui` opens the desktop window and NOTHING else. The brain (:8000) and
+// the UI (:5173) are owned exclusively by `npm run dev` (scripts/dev.mjs) — the
+// same launch pair `run_gui.sh` used to glue together. Starting a second uvicorn
+// from here used to fight the launcher's brain for :8000, and silently serving a
+// stale dist/ build over file:// when no UI server was up meant the window could
+// show a different app than `npm run dev` — with camera/mic dead, because a
+// file:// page is not the secure origin the dev server provides.
+const DEV_SERVER_URL = 'http://127.0.0.1:5173';
+const DEV_SERVER_ORIGIN = new URL(DEV_SERVER_URL).origin;
+
+// Capture devices the app is allowed to open. Without these grants every
+// getUserMedia call is denied before the OS prompt, which is what made the
+// camera/mic stay dark in the GUI.
+const MEDIA_PERMISSIONS = new Set(['microphone', 'camera', 'media']);
+
 let mainWindow;
 let analyticsWindow;
-let backendProcess = null;
 
-function startBackendServer() {
-    console.log('[Main] Starting Python backend server...');
-    const isWin = process.platform === 'win32';
-    const uvicornPath = isWin 
-        ? path.join(__dirname, 'venv', 'Scripts', 'uvicorn.exe') 
-        : path.join(__dirname, 'venv', 'bin', 'uvicorn');
-
-    backendProcess = spawn(uvicornPath, ['server.main:app', '--port', '8000', '--reload'], {
-        cwd: __dirname
-    });
-
-    backendProcess.stdout.on('data', (data) => console.log(`[Backend]: ${data}`.trim()));
-    backendProcess.stderr.on('data', (data) => console.error(`[Backend]: ${data}`.trim()));
-    
-    backendProcess.on('error', (err) => {
-        console.error('[Backend Failed]:', err);
-    });
+/**
+ * Grant mic/camera to the app's own origin only. A blanket grant would hand
+ * capture to any page the window is ever pointed at.
+ */
+function isOurOrigin(requestingUrl) {
+    try {
+        return new URL(requestingUrl || '').origin === DEV_SERVER_ORIGIN;
+    } catch {
+        return false;
+    }
 }
 
-async function waitForVite(url, retries = 15, delayMs = 500) {
+/**
+ * Block until the dev server answers on DEV_SERVER_URL.
+ * Returns false when it is not up (after a short grace period, so an
+ * `npm run dev` that is still booting is not reported as "not running").
+ */
+async function waitForDevServer(url, retries = 20, delayMs = 500) {
     for (let i = 0; i < retries; i++) {
         try {
             await fetch(url);
             return true;
         } catch {
-            console.log(`[Main] Vite not ready yet, retrying (${i + 1}/${retries})...`);
+            // Heartbeat only — a booting `npm run dev` can take a few seconds
+            // and one line every 2s is enough to show we're still waiting.
+            if (i > 0 && i % 4 === 0) console.log('[Main] Waiting for the UI server…');
             await new Promise(r => setTimeout(r, delayMs));
         }
     }
@@ -69,24 +83,11 @@ async function createWindow() {
         mainWindow = null;
     });
 
-    const isDev = !app.isPackaged;
-
-    if (isDev) {
-        const viteUrl = 'http://127.0.0.1:5173';
-        console.log('[Main] Dev mode: waiting for Vite dev server...');
-        const ready = await waitForVite(viteUrl);
-        if (ready) {
-            console.log('[Main] Vite ready — loading dev URL');
-            mainWindow.loadURL(viteUrl);
-        } else {
-            console.warn('[Main] Vite not found — falling back to dist/');
-            mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
-        }
-        // DevTools disabled — press Cmd+Option+I to open manually if needed
-    } else {
-        console.log('[Main] Production mode: loading from dist/');
-        mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
-    }
+    // The window ALWAYS loads the dev server — the same origin, bundle and
+    // feature behaviour as `npm run dev`. No dist/ fallback: a stale build over
+    // file:// is exactly the version mismatch this launcher used to create.
+    console.log(`[Main] Loading ${DEV_SERVER_URL}`);
+    mainWindow.loadURL(DEV_SERVER_URL);
 }
 
 // ── Build summary (chunk warnings) ─────────────────────────────────────────
@@ -191,35 +192,11 @@ ipcMain.on('open-analytics', () => {
         analyticsWindow.show();
     });
     
-    if (mainWindow) {
-        const currentUrl = mainWindow.webContents.getURL();
-        console.log('[IPC] Main window current URL:', currentUrl);
-        
-        // Handle dev server (any localhost or 127.0.0.1)
-        if (currentUrl.includes('localhost:') || currentUrl.includes('127.0.0.1:')) {
-            try {
-                const baseUrl = new URL(currentUrl).origin;
-                const target = `${baseUrl}/?route=analytics`;
-                console.log('[IPC] Loading dev analytics:', target);
-                analyticsWindow.loadURL(target);
-            } catch (e) {
-                console.error('[IPC] Failed to parse URL, falling back to dist:', e);
-                analyticsWindow.loadFile(path.join(__dirname, 'dist', 'index.html'), { query: { route: 'analytics' } });
-            }
-        } else {
-            const targetPath = path.join(__dirname, 'dist', 'index.html');
-            console.log('[IPC] Loading production analytics from:', targetPath);
-            analyticsWindow.loadFile(targetPath, { query: { route: 'analytics' } });
-        }
-    } else {
-        const isDev = !app.isPackaged;
-        console.log('[IPC] No main window, isDev:', isDev);
-        if (isDev) {
-            analyticsWindow.loadURL('http://127.0.0.1:5173/?route=analytics');
-        } else {
-            analyticsWindow.loadFile(path.join(__dirname, 'dist', 'index.html'), { query: { route: 'analytics' } });
-        }
-    }
+    // The analytics window is the same app on the same origin as the main
+    // window — never a separate dist/ copy, so both surfaces stay in sync.
+    const target = `${DEV_SERVER_URL}/?route=analytics`;
+    console.log('[IPC] Loading analytics:', target);
+    analyticsWindow.loadURL(target);
 
     analyticsWindow.on('closed', () => {
         analyticsWindow = null;
@@ -227,23 +204,28 @@ ipcMain.on('open-analytics', () => {
 });
 
 app.whenReady().then(async () => {
-    // Handle permissions automatically
+    // Auto-grant capture to our own origin so the mic/camera actually open.
+    // The check handler receives the requesting origin as its 3rd argument —
+    // returning true for every origin is what the old blanket handler did.
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-        const allowedPermissions = ['microphone', 'camera', 'media'];
-        if (allowedPermissions.includes(permission)) {
-            callback(true);
-        } else {
-            callback(false);
-        }
+        callback(MEDIA_PERMISSIONS.has(permission));
     });
 
-    session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
-        const allowedPermissions = ['microphone', 'camera', 'media'];
-        return allowedPermissions.includes(permission);
+    session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+        return MEDIA_PERMISSIONS.has(permission) && isOurOrigin(requestingOrigin);
     });
 
-    // Automatically start Python backend
-    startBackendServer();
+    // The window always loads the dev server (the same origin the app needs
+    // for getUserMedia), so refuse to open rather than fall back to dist/.
+    const ready = await waitForDevServer(DEV_SERVER_URL);
+    if (!ready) {
+        console.error(`\n[Main] No UI server at ${DEV_SERVER_URL}.`);
+        console.error('[Main] `npm run gui` only opens the desktop window — the servers come from `npm run dev`.');
+        console.error('[Main] Run this in another terminal, then start the GUI again:');
+        console.error('\n    npm run dev\n');
+        app.exit(1);
+        return;
+    }
 
     createWindow();
 });
@@ -254,12 +236,33 @@ app.on('window-all-closed', () => {
     }
 });
 
-app.on('will-quit', () => {
-    if (backendProcess) {
-        console.log('[Main] Terminating Python backend server...');
-        backendProcess.kill();
-    }
-});
+// Terminal closed / Ctrl+C in the launching terminal must not leave the window
+// running headless: quit explicitly instead of relying on the default handler.
+// Nothing else is spawned from here, so quitting the window ends the GUI.
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(sig, () => {
+        console.log(`[Main] ${sig} received — closing Aariya.`);
+        app.quit();
+    });
+}
+
+// `npm run gui` starts us through Electron's CLI wrapper, so a signal aimed at
+// the launcher (terminal closed, Ctrl+C, launcher killed) can leave the real
+// Electron process orphaned and still showing a window. Reparenting to launchd
+// (ppid → 1) is the observable proof the launcher is gone, and it catches the
+// cases we cannot intercept with a signal handler — so poll for it and quit.
+// POSIX only: on Windows the console-close event already arrives, and ppid is
+// not reliably reported.
+const launchParentPid = process.ppid;
+if (process.platform !== 'win32' && launchParentPid > 1) {
+    const parentWatch = setInterval(() => {
+        if (process.ppid !== launchParentPid) {
+            console.log('[Main] Launcher process is gone — closing Aariya.');
+            clearInterval(parentWatch);
+            app.quit();
+        }
+    }, 1000);
+}
 
 app.on('activate', () => {
     if (mainWindow === null) {

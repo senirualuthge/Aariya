@@ -14,9 +14,15 @@
  * Behaviour:
  *  - Ctrl+C (SIGINT), SIGTERM, terminal close (SIGHUP / stdin EOF) — and on
  *    Windows, closing the console window (CTRL_CLOSE_EVENT → SIGHUP) —
- *    stops BOTH servers and prints a shutdown message.
+ *    stops BOTH servers and prints a shutdown message. The terminal can then
+ *    be closed with nothing of ours left running: each server gets its own
+ *    process group, so shutdown signals the WHOLE tree (uvicorn's --reload
+ *    worker, vite's esbuild child) rather than just the direct child, escalates
+ *    to SIGKILL for anything that ignores SIGTERM, and finally verifies that
+ *    :8000 and :5173 are free before exiting.
  *  - If one server crashes, the other is stopped too, with a message.
- *  - Never leaves orphaned vite/uvicorn processes behind.
+ *  - Never leaves orphaned vite/uvicorn processes behind — including on the
+ *    direct process.exit() paths, which are covered by an 'exit' net.
  *  - While booting, prints which server is still starting
  *    (e.g. "Waiting for 🧠 Brain on :8000…"), then a green
  *    "✅ Both servers are ready!" once ports 8000 and 5173 answer.
@@ -36,7 +42,7 @@
  *    `bash scripts/backend.sh start`.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -134,6 +140,13 @@ const BUILD_TIMEOUT_MS = Number(process.env.BUILD_TIMEOUT_MS) || 300000;
 // deliberately isolated via manualChunks; keep in sync with
 // chunkSizeWarningLimit in vite.config.js.
 const CHUNK_WARN_KB = Number(process.env.BUILD_CHUNK_WARN_KB) || 1200;
+// Shutdown: SIGTERM the whole tree, then how long to wait before SIGKILL, and
+// the hard ceiling after which we stop waiting and kill whatever still holds
+// the dev ports. shutdown() always terminates this script — no path may leave
+// servers running after the terminal is gone.
+const SHUTDOWN_GRACE_MS = 2500;
+const SHUTDOWN_POLL_MS = 250;
+const SHUTDOWN_MAX_MS = 10000;
 
 let shuttingDown = false;
 
@@ -149,28 +162,90 @@ function banner() {
   console.log('  Close this terminal or press Ctrl+C to stop both.\n');
 }
 
-function stopChild(child, force) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
-  const signal = force ? 'SIGKILL' : 'SIGTERM';
-  try {
-    // Children stay in the terminal's process group (and console on Windows),
-    // so closing the window reaches them directly even if this script dies.
-    // uvicorn's --reload reloader forwards SIGTERM to its worker itself.
-    child.kill(signal);
-  } catch { /* already gone */ }
+// ── Process-tree termination ────────────────────────────────────────────────
+// A SIGTERM to the *direct* child is not enough to guarantee "nothing related
+// is left running":
+//   - uvicorn --reload spawns a worker GRANDchild (the reloader usually
+//     forwards the signal, but if the reloader is SIGKILLed the worker
+//     survives and keeps :8000 bound);
+//   - vite spawns an esbuild child;
+//   - a SIGKILLed/terminal-closed parent can leave any of them orphaned.
+// So each server is started in its OWN process group (detached, POSIX only —
+// on Windows `detached` opens a second console and would break stdio inherit)
+// and shutdown signals the negated pid, which reaches every descendant.
+// Windows has no process groups here, so taskkill /T does the same job.
+
+function isAlive(child) {
+  return !!child && child.exitCode === null && child.signalCode === null;
 }
 
-function shutdown(reason, exitCode = 0) {
+/**
+ * Signal a server's whole process tree. Returns true when the signal was sent.
+ * Sync-safe (used from the process 'exit' handler as a last-resort net).
+ */
+function killTree(child, signal) {
+  if (!isAlive(child) || !child.pid) return false;
+  const pid = child.pid;
+  try {
+    if (IS_WIN) {
+      // /T kills the process tree, /F skips the grace period.
+      spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
+    } else {
+      process.kill(-pid, signal); // negative pid → the whole process group
+    }
+    return true;
+  } catch {
+    // Group already gone (or never created). Try the single process so a
+    // half-detached server still gets a chance to die.
+    try { child.kill(signal); } catch { /* already gone */ }
+    return false;
+  }
+}
+
+/** Ports still held after the kill — proof that nothing of ours survived. */
+async function heldPorts() {
+  const held = [];
+  for (const server of servers) {
+    const pids = await pidsOnPort(server.port);
+    if (pids.length > 0) held.push(`:${server.port} (pid ${pids.join(', ')})`);
+  }
+  return held;
+}
+
+async function shutdown(reason, exitCode = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`\n${RESET}🛑 Stopping servers — ${reason}`);
-  for (const child of children) stopChild(child, false);
-  // Grace period, then force-kill stragglers.
-  setTimeout(() => {
-    for (const child of children) stopChild(child, true);
-    console.log('🛑 All servers stopped. Terminal is safe to close.');
-    process.exit(exitCode);
-  }, 2500);
+  for (const child of children) killTree(child, 'SIGTERM');
+
+  // Poll instead of a blind sleep: escalate as soon as something ignores
+  // SIGTERM, and never hang past SHUTDOWN_MAX_MS.
+  const startedAt = Date.now();
+  let escalated = false;
+  while (true) {
+    await sleep(SHUTDOWN_POLL_MS);
+    const alive = children.filter(isAlive);
+    if (alive.length === 0) break;
+    const elapsed = Date.now() - startedAt;
+    if (!escalated && elapsed >= SHUTDOWN_GRACE_MS) {
+      escalated = true;
+      console.log(`🛑 ${alive.length} process(es) did not exit on SIGTERM — force-killing.`);
+      for (const child of alive) killTree(child, 'SIGKILL');
+    }
+    if (elapsed >= SHUTDOWN_MAX_MS) {
+      console.error('🛑 Could not confirm the servers exited — killing the port holders.');
+      for (const server of servers) killPids(await pidsOnPort(server.port));
+      break;
+    }
+  }
+
+  const held = await heldPorts();
+  if (held.length > 0) {
+    console.error(`🛑 WARNING: something is still listening → ${held.join(', ')}`);
+  } else {
+    console.log('🛑 All servers stopped. Nothing is left running — safe to close the terminal.');
+  }
+  process.exit(exitCode);
 }
 
 function onExit(child, server) {
@@ -179,7 +254,8 @@ function onExit(child, server) {
     const why = signal ? `signal ${signal}` : `exit code ${code}`;
     console.log(`${server.color}${server.name}${RESET} stopped (${why}).`);
     // The sibling should not keep running alone — stop everything.
-    shutdown(`${server.name} terminated`, code ?? 1);
+    // A server that dies on its own is always a failure, even with code 0.
+    shutdown(`${server.name} terminated`, code && code !== 0 ? code : 1);
   };
 }
 
@@ -189,6 +265,8 @@ function startServer(server) {
     // Only force colors when the terminal can render them (legacy cmd.exe cannot).
     env: USE_COLORS ? { ...process.env, FORCE_COLOR: '1' } : process.env,
     stdio: ['ignore', 'inherit', 'inherit'], // keep output visible in terminal
+    // Own process group on POSIX so shutdown can signal the whole tree.
+    detached: !IS_WIN,
   });
   children.push(child);
   child.on('exit', onExit(child, server));
@@ -208,6 +286,7 @@ function runBuild() {
       cwd: ROOT,
       env: USE_COLORS ? { ...process.env, FORCE_COLOR: '1' } : process.env,
       stdio: ['ignore', 'inherit', 'inherit'],
+      detached: !IS_WIN, // same group semantics as startServer()
     });
     children.push(child);
     let timer;
@@ -534,5 +613,12 @@ async function main() {
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   process.on(sig, () => shutdown(sig === 'SIGINT' ? 'Ctrl+C pressed' : `${sig} received`));
 }
+
+// Last-resort net for the direct process.exit() paths (a failed --prod build,
+// an uncaught throw): SIGKILL every tree we started on the way out, so no
+// server can outlive this script. Synchronous — 'exit' allows nothing else.
+process.on('exit', () => {
+  for (const child of children) killTree(child, 'SIGKILL');
+});
 
 main();
