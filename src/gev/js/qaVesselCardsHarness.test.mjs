@@ -10,7 +10,7 @@ import {
   vesselCardManifestFilename,
   vesselCardProvenanceLines,
   vesselCardScreenshotFilename,
-} from '../scripts/qa-vessel-cards.mjs';
+} from '../../../scripts/gev/qa-vessel-cards.mjs';
 
 test('vessel-card QA keeps live AISStream as the default and synthetic opt-in', () => {
   assert.equal(DEFAULT_DATA_MODE, 'live');

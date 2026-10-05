@@ -22,18 +22,17 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { GEV_ROOT as ROOT, GEV_VITE_CONFIG } from './paths.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const TESTS = 'src/firstRunExperience.test.mjs';
+const TESTS = 'js/firstRunExperience.test.mjs';
 
 const FILES = {
-  module: path.join(ROOT, 'src', 'firstRunExperience.js'),
+  module: path.join(ROOT, 'js', 'firstRunExperience.js'),
   html: path.join(ROOT, 'index.html'),
   css: path.join(ROOT, 'style.css'),
-  vite: path.join(ROOT, 'vite.config.js'),
-  main: path.join(ROOT, 'src', 'main.js'),
-  ui: path.join(ROOT, 'src', 'ui.js'),
+  vite: GEV_VITE_CONFIG,
+  main: path.join(ROOT, 'js', 'main.js'),
+  ui: path.join(ROOT, 'js', 'ui.js'),
   docs: path.join(ROOT, 'docs', 'CURRENT-STATE.md'),
 };
 

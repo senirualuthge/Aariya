@@ -608,7 +608,7 @@ export function spaceWeatherProxy() {
       for (const f of (Array.isArray(data) ? data : []).slice(0, 20)) {
         flares.push({
           id: f.id || flares.length,
-          class: f预报_class || f.flare_class || f.class || 'A',
+          class: f.flare_class || f.class || 'A',
           magnitude: f.magnitude || f.peak_flux || 0,
           time: f.time_frame || f.forecast_time || '',
         });

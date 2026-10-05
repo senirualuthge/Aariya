@@ -3,6 +3,8 @@ Kill Switches & Feature Flags System
 Implements SOC-2 / EU AI Act §14 (Human Oversight) controls.
 
 Central control for:
+- Microphone capture (system-wide privacy switch)
+- Camera capture (system-wide privacy switch)
 - TTS enable/disable
 - Emotion cap on/off
 - Memory write on/off
@@ -52,6 +54,12 @@ class FeatureFlag(Enum):
     VISION = "vision"
     WEB_RESEARCH = "web_research"
     FILE_ACCESS = "file_access"
+    # System-wide privacy switches (ToDo §5). These are deliberately separate
+    # from VOICE_PIPELINE/VISION: those gate whole subsystems, these gate the
+    # capture devices themselves, so a user can keep the UI up with the lens
+    # and microphone physically closed.
+    MICROPHONE = "microphone"
+    CAMERA = "camera"
 
 
 # Default state for all flags
@@ -71,6 +79,8 @@ DEFAULT_FLAGS: Dict[str, bool] = {
     FeatureFlag.VISION.value: True,
     FeatureFlag.WEB_RESEARCH.value: True,
     FeatureFlag.FILE_ACCESS.value: True,
+    FeatureFlag.MICROPHONE.value: True,
+    FeatureFlag.CAMERA.value: True,
 }
 
 # Emotion intensity cap (0.0 - 1.0) — when EMOTION_CAP is active
@@ -273,3 +283,19 @@ def get_kill_switches() -> KillSwitchSystem:
     if _kill_switches is None:
         _kill_switches = KillSwitchSystem()
     return _kill_switches
+
+
+# ── Capture-device helpers ────────────────────────────────────────────────────
+# A feature being "on" never overrides an explicit hardware kill: these are
+# ANDed, so MICROPHONE=False closes the mic even while VOICE_PIPELINE is True.
+
+def microphone_allowed() -> bool:
+    """True only when BOTH the voice pipeline and the mic kill switch allow capture."""
+    ks = get_kill_switches()
+    return ks.is_enabled(FeatureFlag.MICROPHONE) and ks.is_enabled(FeatureFlag.VOICE_PIPELINE)
+
+
+def camera_allowed() -> bool:
+    """True only when BOTH vision and the camera kill switch allow capture."""
+    ks = get_kill_switches()
+    return ks.is_enabled(FeatureFlag.CAMERA) and ks.is_enabled(FeatureFlag.VISION)

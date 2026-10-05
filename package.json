@@ -34,10 +34,19 @@
     "fflate": ">=0.8.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.18.0",
     "@vitejs/plugin-react": "^4.0.0",
     "electron": "^40.0.0",
+    "eslint": "^9.18.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.16",
+    "globals": "^15.14.0",
     "vite": "^7.2.4",
-    "vite-plugin-cesium": "^1.2.23"
+    "vite-plugin-cesium": "^1.2.23",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
     "backend": "bash scripts/backend.sh",
@@ -46,18 +55,23 @@
     "backend:restart": "bash scripts/backend.sh restart",
     "backend:status": "bash scripts/backend.sh status",
     "health": "bash scripts/backend.sh health",
-    "dev:brain": "\"/Volumes/Volumn 1/Code Base/AI Girl/venv/bin/uvicorn\" server.main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:brain": "node scripts/dev-brain.mjs",
     "dev:ui": "node node_modules/vite/bin/vite.js --host 0.0.0.0 --port 5173 --strictPort",
     "dev": "node scripts/dev.mjs",
     "build": "node node_modules/vite/bin/vite.js build",
     "preview": "node node_modules/vite/bin/vite.js preview",
-    "gui": "./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
-    "start": "./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
+    "gui": "node node_modules/electron/cli.js .",
+    "start": "node node_modules/electron/cli.js .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "security:audit": "npm audit --json 2>&1 || true",
     "security:audit:fix": "npm audit fix",
-    "test": "node --test build-summary.test.js vault-context.test.js vault-search.test.js background-polls.test.js",
+    "test": "npm run test:unit && npm run test:gev",
+    "test:unit": "node --test build-summary.test.js vault-context.test.js vault-search.test.js background-polls.test.js",
+    "test:gev": "node scripts/gev/run-unit-tests.mjs",
     "test:backend": "bash run_backend_tests.sh",
     "test:backend:win": "run_backend_tests.bat",
-    "test:all": "npm test && npm run test:backend"
+    "test:all": "npm test && npm run test:backend",
+    "stress": "node scripts/stress-test.mjs"
   }
 }

@@ -102,6 +102,26 @@ jobs:
       - name: npm audit gate (production deps must be clean)
         run: npm audit --omit=dev
 
+      # Frontend correctness gates. These run in the same job because it has
+      # already paid the `npm ci` cost; a red here is unambiguously frontend.
+      #   lint:  flat-config ESLint. Unused bindings are warnings (pre-existing
+      #          ~4.4k backlog in the generated GEV data modules); anything that
+      #          would actually break at runtime — undefined identifiers,
+      #          conditional hooks — is an error and fails the job.
+      #   test:  npm test = test:unit (app + Electron tests) && test:gev
+      #          (src/gev/js/**/*.test.mjs). Both are hermetic — no browser and
+      #          no network. The two GEV allocation microbenchmarks calibrate to
+      #          Node 24 and self-skip on this job's Node 20 runner.
+      #   build: catches import/bundling regressions the unit tests can't see.
+      - name: Lint gate (eslint, flat config)
+        run: npm run lint
+
+      - name: Unit + GEV test suites
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
   # Mobile app gate — Flutter static analysis + test suite, isolated so pub
   # resolution/CI flakiness can't block (or fail attribution of) the other
   # jobs. Both gates are pure-Dart (no platform plugin builds needed):

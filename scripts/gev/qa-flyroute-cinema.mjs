@@ -11,17 +11,17 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
 import puppeteer from 'puppeteer';
 import sharp from 'sharp';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import { REPO_ROOT } from './paths.mjs';
 const getOpt = (flag, fallback) => {
   const i = process.argv.indexOf(flag);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 };
 const APP_URL = getOpt('--url', 'http://localhost:4247');
-const OUT_DIR = getOpt('--out', path.join(ROOT, 'qa-shots', 'flyroute'));
+const OUT_DIR = getOpt('--out', path.join(REPO_ROOT, 'qa-shots', 'flyroute'));
 const MIRROR_DIR = getOpt('--mirror', '');
 const SHOT_EVERY_MS = Number(getOpt('--shot-ms', '2000'));
 

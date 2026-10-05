@@ -18,6 +18,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from server.infrastructure.streaming import StreamSubscriber
 from server.realtime.redis_bus import recent_events
+from server.systems.security.auth import verify_ws_token
 
 logger = logging.getLogger("aariya.swarm_ws")
 router = APIRouter(prefix="/api/swarm", tags=["Swarm Events"])
@@ -89,6 +90,9 @@ async def swarm_websocket_endpoint(ws: WebSocket):
     AGENT_EVOLVED pulses — live from Redis when available, otherwise from
     the in-process ring buffer.
     """
+    if not await verify_ws_token(ws):
+        return
+
     await ws.accept()
     _clients.add(ws)
     logger.info("Swarm WS client connected (%d total)", len(_clients))

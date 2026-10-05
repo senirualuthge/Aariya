@@ -15,19 +15,17 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import { GEV_ROOT as ROOT } from './paths.mjs';
 const TESTS = [
-  'src/data/flights.test.mjs',
-  'src/data/groundFloor.test.mjs',
-  'src/data/meshFloorSampler.test.mjs',
-  'src/data/renderAltitude.test.mjs',
+  'js/data/flights.test.mjs',
+  'js/data/groundFloor.test.mjs',
+  'js/data/meshFloorSampler.test.mjs',
+  'js/data/renderAltitude.test.mjs',
 ];
 
-const FLIGHTS = 'src/data/flights.js';
-const FLOOR = 'src/data/groundFloor.js';
-const ALT = 'src/data/renderAltitude.js';
+const FLIGHTS = 'js/data/flights.js';
+const FLOOR = 'js/data/groundFloor.js';
+const ALT = 'js/data/renderAltitude.js';
 
 /** @type {Array<{defect: string, edits: Array<{file: string, from: string, to: string}>}>} */
 const MUTATIONS = [

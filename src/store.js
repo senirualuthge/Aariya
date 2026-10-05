@@ -158,6 +158,29 @@ const useStore = create((set) => ({
   setUserEmotion:  (e) => set({ userEmotion: e }),
   setUserMood:     (m) => set({ userMood: m }),
 
+  // ── Person identity (ToDo §4) ──────────────────────────────────────────────────
+  // knownPeople: enrolled profiles (descriptor omitted from UI state on purpose —
+  //   the panel only needs the human-readable fields). activePerson: whichever
+  //   person is currently on camera, or the pending stranger awaiting a name.
+  //   identityEnabled: false until the recognition weights load, so the panel can
+  //   explain itself instead of appearing broken.
+  knownPeople: [],
+  activePerson: null,
+  identityEnabled: false,
+  identityUnavailableReason: null,
+  personPanelOpen: false,
+  pendingEnrollment: null,
+  peopleContext: null,
+
+  setKnownPeople: (people) => set({ knownPeople: people || [] }),
+  setActivePerson: (person) => set({ activePerson: person }),
+  setIdentityEnabled: (v) => set({ identityEnabled: !!v }),
+  setIdentityUnavailable: (reason) =>
+    set({ identityUnavailableReason: reason || null, identityEnabled: false }),
+  setPersonPanelOpen: (v) => set({ personPanelOpen: !!v }),
+  setPendingEnrollment: (pending) => set({ pendingEnrollment: pending }),
+  setPeopleContext: (context) => set({ peopleContext: context }),
+
   // ── AI Emotions (Aariya's state) ────────────────────────────────────────────
   emotions: {
     happy:   0.5,

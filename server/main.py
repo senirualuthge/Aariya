@@ -45,10 +45,44 @@ from server.routers.gev_router import router as gev_router
 from server.infrastructure.agent_watcher import get_watcher
 from server.systems.security.mobile_authority import is_mobile_allowed, denied_frame
 from server.systems.security.dashboard_authority import execute_authority_command
+from server.systems.security.auth import verify_ws_token, verify_message_signature
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger("aariya.main")
+
+# Origins allowed to make credentialed requests to this API.
+_DEFAULT_CORS_ORIGINS = (
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "http://localhost:8000",
+    "http://localhost:8001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:4173",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8001",
+    "app://.",
+    "capacitor://localhost",
+    # Electron loads the bundled app over file:// in production builds.
+    "null",
+)
+
+
+def _cors_origins() -> List[str]:
+    """
+    Resolve the CORS allowlist from CORS_ORIGINS.
+
+    Comma-separated override for LAN/tailscale mobile clients and any hosted
+    front end. A bare "*" is honoured only when the operator explicitly asks
+    for it AND credentials are not in play — see the middleware below.
+    """
+    raw = os.getenv("CORS_ORIGINS", "")
+    if not raw.strip():
+        return list(_DEFAULT_CORS_ORIGINS)
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    return origins or list(_DEFAULT_CORS_ORIGINS)
 
 # Cap concurrent background gap-detection LLM calls (one in flight at a time)
 _gap_detect_lock = asyncio.Lock()
@@ -201,7 +235,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Aariya AI Brain - FIXV4", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # Explicit allowlist — see _cors_origins(). Credentials are still enabled
+    # (the desktop app authenticates with cookies), which is exactly why a
+    # wildcard origin is unsafe here.
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -267,6 +304,8 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
     the Unity client (which targets /ws/brain) and the React dashboard
     (which targets /ws/dashboard/stream) both work without change.
     """
+    if not await verify_ws_token(websocket):
+        return
     await websocket.accept()
     user_id = "user_default"
     brain = BrainV2(user_id)
@@ -470,6 +509,8 @@ async def security_stream_ws(websocket: WebSocket):
     Continuously runs the security swarm in the background (every 2s)
     so the dashboard receives live telemetry regardless of user chat input.
     """
+    if not await verify_ws_token(websocket):
+        return
     await websocket.accept()
     swarm = get_swarm_system()
     
@@ -490,7 +531,7 @@ async def security_stream_ws(websocket: WebSocket):
         logger.error(f"Security stream error: {e}")
         try:
             await websocket.close()
-        except:
+        except Exception:
             pass
 
 # BUG #7 FIX: add /ws/brain alias so Unity client connects correctly
@@ -511,6 +552,8 @@ async def websocket_mobile_chat(websocket: WebSocket):
                { type: 'text.stream', chunk }
                { type: 'state.update', state }
     """
+    if not await verify_ws_token(websocket):
+        return
     await websocket.accept()
     user_id = "user_default"
     brain = BrainV2(user_id)
@@ -626,6 +669,8 @@ async def websocket_mobile_chat(websocket: WebSocket):
 
 @app.websocket("/ws/mobile/control")
 async def websocket_mobile_control(websocket: WebSocket):
+    if not await verify_ws_token(websocket):
+        return
     await websocket.accept()
     session_id = str(uuid4())
     logger.info(f"Mobile Control connected: {session_id}")
@@ -700,6 +745,8 @@ async def websocket_mobile_control(websocket: WebSocket):
 
 @app.websocket("/ws/brain_metrics")
 async def websocket_brain_metrics(websocket: WebSocket):
+    if not await verify_ws_token(websocket):
+        return
     await websocket.accept()
     user_id = "user_default"
     session_manager.add_surface("dashboard", user_id, websocket)

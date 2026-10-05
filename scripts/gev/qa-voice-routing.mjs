@@ -31,12 +31,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, resolve } from 'node:url';
 import WebSocket from 'ws';
 import puppeteer from 'puppeteer';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = resolve(__dirname, '../..');  // repo root (this file lives in scripts/gev/)
 const CHROME_CANDIDATES = [
   process.env.PUPPETEER_EXECUTABLE_PATH,
   (() => { try { return puppeteer.executablePath(); } catch { return null; } })(),
@@ -292,7 +292,7 @@ function matchArgs(expected, actual) {
 
 async function runRoutingLayer() {
   console.log(`\nLAYER 1 — routing assertions (budget ${TURN_BUDGET} model turns)`);
-  const logDir = path.join(ROOT, '.gev-logs', 'qa-voice-routing');
+  const logDir = path.join(ROOT, 'qa-shots', '.gev-logs', 'qa-voice-routing');
   fs.mkdirSync(logDir, { recursive: true });
   const evidence = fs.createWriteStream(path.join(logDir, `run-${Date.now()}.jsonl`));
 

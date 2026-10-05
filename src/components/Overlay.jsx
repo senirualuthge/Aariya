@@ -4,6 +4,7 @@ import DraggablePanel from './DraggablePanel';
 import PresenceChip from './PresenceChip';
 import GEVPanel from './GEVPanel';
 import { apiBase } from '../utils/apiHost';
+import { isCaptureAllowed, setCaptureEnabled, onCaptureChange } from '../utils/privacySwitches';
 
 // ── Mood palette — aurora-tinted per emotion ─────────────────────────────────
 const moodColors = {
@@ -98,6 +99,45 @@ function ChatIcon() {
          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
+  );
+}
+
+
+// ── System-wide privacy switches (ToDo §5) ────────────────────────────────────
+// Two buttons that close the microphone and the camera for the WHOLE app —
+// not just the panel they sit in. State mirrors src/utils/privacySwitches.js,
+// which is the thing actually enforcing capture; this is the readout.
+function PrivacySwitches() {
+  const [capture, setCapture] = useState({
+    microphone: isCaptureAllowed('microphone'),
+    camera: isCaptureAllowed('camera'),
+  });
+
+  useEffect(() => onCaptureChange(setCapture), []);
+
+  const toggle = (kind) => setCaptureEnabled(kind, !capture[kind]);
+
+  return (
+    <div className="privacy-switches" role="group" aria-label="Privacy switches">
+      <button
+        type="button"
+        className={`privacy-switch-btn ${capture.microphone ? '' : 'blocked'}`}
+        onClick={() => toggle('microphone')}
+        aria-pressed={!capture.microphone}
+        title={capture.microphone ? 'Mute the microphone system-wide' : 'Microphone is muted system-wide'}
+      >
+        {capture.microphone ? '\u{1F3A4} Mic On' : '\u{1F507} Mic Off'}
+      </button>
+      <button
+        type="button"
+        className={`privacy-switch-btn ${capture.camera ? '' : 'blocked'}`}
+        onClick={() => toggle('camera')}
+        aria-pressed={!capture.camera}
+        title={capture.camera ? 'Close the camera system-wide' : 'Camera is closed system-wide'}
+      >
+        {capture.camera ? '\u{1F4F7} Cam On' : '\u{1F512} Cam Off'}
+      </button>
+    </div>
   );
 }
 
@@ -314,6 +354,9 @@ export default function Overlay() {
         <GearIcon />
         AI Control Center
       </button>
+
+      {/* ── SYSTEM-WIDE MIC / CAMERA KILL SWITCHES ───────────────────────── */}
+      <PrivacySwitches />
 
       {/* ── RIGHT PANELS — only when started ──────────────────────────────── */}
       <div style={{

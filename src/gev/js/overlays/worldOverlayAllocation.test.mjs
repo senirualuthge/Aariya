@@ -11,7 +11,7 @@ import { EARTHQUAKE_OVERLAY_COHORT_LIMIT } from '../data/earthquakes.js';
 import { ROCKET_MISSION_AMBIENT_OVERLAY_COHORT_LIMIT } from '../data/rocketLaunches.js';
 import { RADIO_OVERLAY_COHORT_LIMIT } from '../data/radio.js';
 import { CABLE_REFERENCE_LABEL_WINNER_CAP } from '../data/telegeographySubmarineCables.js';
-import { isCalibratedAllocationRuntime } from '../../scripts/run-unit-tests.mjs';
+import { isCalibratedAllocationRuntime } from '../../../../scripts/gev/run-unit-tests.mjs';
 
 /**
  * Phase-2 entry gate: a steady moving-source frame must not allocate in
