@@ -8,7 +8,28 @@
 *.crt
 
 # ── User data / runtime state ────────────────────────────────────────────────
-data/
+# ANCHORED to the repo root on purpose. An unanchored `data/` matches a
+# directory named `data` at ANY depth — which silently swallowed the entire
+# GEV data-layer source tree (src/gev/js/data/: 114 modules + ~100 test files).
+# Because gitignore only applies to UNTRACKED files, that tree was never
+# committed, so CI checked out a GEV app missing its own data layer:
+# scripts/gev/run-unit-tests.mjs died on "Missing allocation microbenchmarks",
+# `npm test` silently ran 44 of ~144 GEV suites, and any tracked module that
+# imports ../data/*.js could not resolve on a clean checkout.
+# Nested runtime-data dirs are listed explicitly instead — one rule per real
+# runtime dir. Do NOT reintroduce a bare `data/`: it is fail-silent (source
+# disappears, CI breaks) whereas an unlisted new dir fails open (shows up in
+# git status, reviewable). Re-verify with:
+#   git ls-files --others --ignored --exclude-standard | grep '/data/'
+/data/
+server/data/
+server/systems/data/
+# GEV dataset cache — fetched/derived at runtime, referenced by no source file.
+src/gev/js/data/local_data/
+# Downloaded design-corpus payload (the tracked siblings are scripts/*.py).
+.shared/ui-ux-pro-max/data/
+# Sub-project runtime state (users/, federated/, learning/ — read by no code).
+pulse-news/backend/data/
 *.db
 *.sqlite
 *.sqlite3
