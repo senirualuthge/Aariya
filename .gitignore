@@ -24,8 +24,6 @@
 /data/
 server/data/
 server/systems/data/
-# GEV dataset cache — fetched/derived at runtime, referenced by no source file.
-src/gev/js/data/local_data/
 # Downloaded design-corpus payload (the tracked siblings are scripts/*.py).
 .shared/ui-ux-pro-max/data/
 # Sub-project runtime state (users/, federated/, learning/ — read by no code).
