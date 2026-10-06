@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/message.dart';
 import '../services/websocket_service.dart';
-import '../state/brain_state_controller.dart';
+import 'brain_state_controller.dart';
 
 /// Central state controller for the conversation.
 ///

@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../state/chat_controller.dart';
-import '../../services/connection_monitor.dart';
-import '../../services/server_config.dart';
-import '../../services/websocket_service.dart';
-import '../widgets/companion_presence.dart';
-import '../widgets/voice_conversation_overlay.dart';
+import '../../../core/state/chat_controller.dart';
+import '../../../core/services/connection_monitor.dart';
+import '../../../core/services/server_config.dart';
+import '../../../core/services/websocket_service.dart';
+import '../../companion/presentation/companion_presence.dart';
+import '../../voice/presentation/voice_conversation_overlay.dart';
 import 'control_panel.dart';
-import 'server_settings_sheet.dart';
+import '../../settings/presentation/server_settings_sheet.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});

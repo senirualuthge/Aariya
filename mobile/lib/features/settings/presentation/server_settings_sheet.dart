@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/server_config.dart';
-import '../../services/websocket_service.dart';
+import '../../../core/services/server_config.dart';
+import '../../../core/services/websocket_service.dart';
 
 /// Bottom sheet to configure the backend address.
 ///

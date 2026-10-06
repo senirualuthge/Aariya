@@ -89,7 +89,9 @@ async def analytics_ws(websocket: WebSocket) -> None:
     await websocket.accept()
     manager.analytics_clients.add(websocket)
     agent = get_mobile_analytics()
-    agent.on_client_connected()
+    # Same per-install `client_id` as the phone's chat/control sockets, so the
+    # analytics channel is attributed to that device rather than counted alone.
+    client_key = agent.on_client_connected(websocket.query_params.get("client_id"))
     logger.info("Mobile Analytics client connected")
 
     try:
@@ -126,4 +128,4 @@ async def analytics_ws(websocket: WebSocket) -> None:
         logger.error(f"Mobile Analytics WebSocket error: {exc}")
     finally:
         manager.analytics_clients.discard(websocket)
-        agent.on_client_disconnected()
+        agent.on_client_disconnected(client_key)

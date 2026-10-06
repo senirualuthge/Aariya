@@ -561,10 +561,15 @@ async def websocket_mobile_chat(websocket: WebSocket):
     signal_bus.emit("session", {"endpoint": "mobile", "user_id": user_id}, "info")
 
     # Mobile gateway telemetry: this chat socket counts as a connected client.
+    # `client_id` is the phone's stable per-install id, shared with its control
+    # and analytics sockets, so all three channels collapse into ONE device.
+    _mobile_client_key = None
     try:
         from server.systems.agent.mobile_gateway_agent import get_mobile_gateway
         _mobile_gateway = get_mobile_gateway()
-        _mobile_gateway.on_client_connected()
+        _mobile_client_key = _mobile_gateway.on_client_connected(
+            websocket.query_params.get("client_id")
+        )
     except Exception:
         _mobile_gateway = None
 
@@ -654,12 +659,12 @@ async def websocket_mobile_chat(websocket: WebSocket):
     except WebSocketDisconnect:
         session_manager.remove_surface("mobile", user_id, websocket)
         if _mobile_gateway:
-            _mobile_gateway.on_client_disconnected()
+            _mobile_gateway.on_client_disconnected(_mobile_client_key)
         logger.info(f"Mobile chat disconnected for {user_id}")
     except Exception as e:
         session_manager.remove_surface("mobile", user_id, websocket)
         if _mobile_gateway:
-            _mobile_gateway.on_client_disconnected()
+            _mobile_gateway.on_client_disconnected(_mobile_client_key)
         logger.error(f"Mobile chat error: {e}")
         try:
             await websocket.close()
@@ -676,10 +681,15 @@ async def websocket_mobile_control(websocket: WebSocket):
     logger.info(f"Mobile Control connected: {session_id}")
 
     # Mobile gateway telemetry: control sockets count as connected clients.
+    # Sharing the phone's `client_id` with its chat socket keeps one phone
+    # counted as one device instead of one per channel.
+    _control_client_key = None
     try:
         from server.systems.agent.mobile_gateway_agent import get_mobile_gateway
         _control_gateway = get_mobile_gateway()
-        _control_gateway.on_client_connected()
+        _control_client_key = _control_gateway.on_client_connected(
+            websocket.query_params.get("client_id")
+        )
     except Exception:
         _control_gateway = None
 
@@ -739,7 +749,7 @@ async def websocket_mobile_control(websocket: WebSocket):
 
     except WebSocketDisconnect:
         if _control_gateway:
-            _control_gateway.on_client_disconnected()
+            _control_gateway.on_client_disconnected(_control_client_key)
         logger.info(f"Mobile Control disconnected: {session_id}")
 
 

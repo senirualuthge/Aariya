@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:aariya_mobile/services/websocket_service.dart';
-import 'package:aariya_mobile/state/chat_controller.dart';
-import 'package:aariya_mobile/ui/screens/chat_screen.dart';
+import 'package:aariya_mobile/core/services/websocket_service.dart';
+import 'package:aariya_mobile/core/state/chat_controller.dart';
+import 'package:aariya_mobile/features/chat/presentation/chat_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stream_channel/stream_channel.dart';

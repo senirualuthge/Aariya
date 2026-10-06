@@ -68,6 +68,14 @@ class NewsService {
     _subscription?.cancel();
     try {
       _channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
+      // web_socket_channel 3.x also completes the channel's `ready`
+      // future with a connect failure. The stream's onError below
+      // already logs/retries it, so observe `ready` and drop the
+      // duplicate — otherwise Dart reports an "Unhandled Exception"
+      // on every offline reconnect attempt.
+      _channel!.ready.catchError((_) {
+        // Stream onError already scheduled a reconnect.
+      });
       _subscription = _channel!.stream.listen(
         (raw) {
           _reconnectAttempt = 0;

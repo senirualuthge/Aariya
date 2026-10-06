@@ -105,8 +105,13 @@ jobs:
       - name: Install frontend deps (lockfile, legacy peer resolution)
         run: npm ci --legacy-peer-deps
 
-      - name: npm audit gate (production deps must be clean)
-        run: npm audit --omit=dev
+      - name: npm audit gate (production deps clean, documented exceptions allowed)
+        # scripts/audit_gate.mjs runs `npm audit --omit=dev --json` and fails on
+        # any finding not listed in its ALLOWED table. npm audit has no
+        # per-advisory ignore flag, so an unfixable transitive finding would
+        # otherwise block every push. Matched on package + advisory id, so a new
+        # advisory in an allow-listed package still fails the build.
+        run: node scripts/audit_gate.mjs
 
       # Frontend correctness gates. These run in the same job because it has
       # already paid the `npm ci` cost; a red here is unambiguously frontend.

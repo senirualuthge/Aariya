@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
-import '../ui/screens/chat_screen.dart';
-import '../ui/screens/analytics_screen.dart';
-import '../ui/screens/companion_screen.dart';
-import '../services/websocket_service.dart';
-import '../services/connection_monitor.dart';
+import '../features/chat/presentation/chat_screen.dart';
+import '../features/analytics/presentation/analytics_screen.dart';
+import '../features/companion/presentation/companion_screen.dart';
+import '../core/services/websocket_service.dart';
+import '../core/services/connection_monitor.dart';
 
 class App extends StatefulWidget {
   const App({super.key});

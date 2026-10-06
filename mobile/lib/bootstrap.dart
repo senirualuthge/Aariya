@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'app/app.dart';
-import 'services/device_metrics.dart';
-import 'services/server_config.dart';
-import 'services/websocket_service.dart';
+import 'core/services/device_metrics.dart';
+import 'core/services/server_config.dart';
+import 'core/services/websocket_service.dart';
 
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -1,5 +1,5 @@
-import 'package:aariya_mobile/services/websocket_service.dart';
-import 'package:aariya_mobile/ui/screens/companion_screen.dart';
+import 'package:aariya_mobile/core/services/websocket_service.dart';
+import 'package:aariya_mobile/features/companion/presentation/companion_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

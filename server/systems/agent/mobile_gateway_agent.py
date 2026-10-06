@@ -1,8 +1,9 @@
 """
 mobile_gateway_agent.py
 ───────────────────────
-MobileGatewayAgent — a swarm-registered agent that tracks all mobile client
-connections, command throughput, latency, and health in real-time.
+MobileGatewayAgent — a swarm-registered agent that tracks the connected
+mobile devices (every channel of one phone counts as a single device), command
+throughput, latency, and health in real-time.
 
 Auto-detected by AgentScanner via:
   • FOLDER strategy  — lives in server/systems/agent/
@@ -45,12 +46,94 @@ class BaseSwarmAgent:
     description: str = ""
 
 
+# ── Device registry ────────────────────────────────────────────────────────────
+
+_ANON_PREFIX = "anon:"
+
+
+class DeviceRegistry:
+    """Counts connected mobile DEVICES, not raw sockets.
+
+    One phone opens several channels to the backend — chat ``/ws/mobile``,
+    control ``/ws/mobile/control`` and analytics ``/ws/mobile/analytics`` — so
+    a plain connect/disconnect counter reported "2 devices connected" for a
+    single phone. Clients announce a stable per-install id via the
+    ``client_id`` query param, and every channel of one install shares it, so
+    the channels are refcounted under that id and the phone is counted once.
+    The device leaves only when its last channel closes.
+
+    A client that omits ``client_id`` (an older app build) cannot be grouped
+    honestly, so each of its sockets is tracked under its own synthetic key
+    and counts as one client — the truthful reading when identity is unknown.
+    """
+
+    def __init__(self, label: str) -> None:
+        self._label = label
+        self._channels: dict[str, int] = {}   # client key → open channels
+        self._anon_seq = 0
+
+    def connect(self, client_id: Optional[str] = None) -> str:
+        """Register one channel and return the key to pass to [disconnect]."""
+        key = self._key(client_id)
+        self._channels[key] = self._channels.get(key, 0) + 1
+        return key
+
+    def disconnect(self, key: Optional[str] = None) -> None:
+        """Release one channel. The device drops out when its last one goes.
+
+        [key] is the value returned by [connect]. When a legacy call site has
+        no key, the most recent un-identified socket is released so the count
+        stays truthful; an identified device is never guessed away, because
+        dropping a live phone would understate the real connection.
+        """
+        if key is not None:
+            self._release(key)
+            return
+        for candidate in reversed(list(self._channels)):
+            if candidate.startswith(_ANON_PREFIX):
+                self._release(candidate)
+                return
+        logger.warning(
+            f"[{self._label}] disconnect without a client key and no "
+            f"un-identified sockets to release — ignored"
+        )
+
+    @property
+    def devices(self) -> int:
+        """Distinct connected devices."""
+        return len(self._channels)
+
+    @property
+    def sockets(self) -> int:
+        """Total open channels across every device."""
+        return sum(self._channels.values())
+
+    def _key(self, client_id: Optional[str]) -> str:
+        if isinstance(client_id, str) and client_id.strip():
+            return client_id.strip()
+        self._anon_seq += 1
+        return f"{_ANON_PREFIX}{self._anon_seq}"
+
+    def _release(self, key: str) -> None:
+        remaining = self._channels.get(key)
+        if remaining is None:
+            logger.debug(
+                f"[{self._label}] disconnect for unknown client {key!r} — ignored"
+            )
+            return
+        if remaining <= 1:
+            del self._channels[key]
+        else:
+            self._channels[key] = remaining - 1
+
+
 # ── Telemetry model ────────────────────────────────────────────────────────────
 
 @dataclass
 class MobileTelemetry:
     """Live snapshot of mobile load tracked by MobileGatewayAgent."""
     connected_clients: int = 0
+    connected_channels: int = 0
     peak_clients: int = 0
     commands_processed: int = 0
     commands_per_second: float = 0.0
@@ -76,7 +159,8 @@ class MobileGatewayAgent(BaseSwarmAgent):
     Monitors and manages the mobile client connection pool.
 
     Responsibilities:
-      - Track active /ws/mobile/control connections
+      - Track connected mobile devices (all channels of one phone collapse
+        into a single client, see [DeviceRegistry])
       - Count command throughput and compute rolling CPS (commands-per-second)
       - Detect mobile client disconnections and emit log warnings
       - Expose live telemetry for the Agent Discovery Panel
@@ -88,6 +172,7 @@ class MobileGatewayAgent(BaseSwarmAgent):
 
     def __init__(self) -> None:
         self._telemetry = MobileTelemetry()
+        self._registry = DeviceRegistry("MobileGatewayAgent")
         self._start_time: float = time.time()
         self._tick_task: Optional[asyncio.Task] = None
         self._running = False
@@ -117,23 +202,30 @@ class MobileGatewayAgent(BaseSwarmAgent):
     # ── Event hooks (public telemetry feed for the mobile control channel; the
     # live /ws/mobile/control handler lives in server/main.py) ─────────────────
 
-    def on_client_connected(self) -> None:
-        self._telemetry.connected_clients += 1
-        if self._telemetry.connected_clients > self._telemetry.peak_clients:
-            self._telemetry.peak_clients = self._telemetry.connected_clients
+    def on_client_connected(self, client_id: Optional[str] = None) -> str:
+        """Count one channel for a device and return its disconnect key.
+
+        [client_id] is the per-install id the app sends on every channel, so
+        the phone's chat + control sockets collapse into a single device.
+        """
+        key = self._registry.connect(client_id)
+        self._sync_counts()
         self._telemetry.last_activity_ts = time.time()
         logger.info(
             f"[MobileGatewayAgent] Client connected "
-            f"(active={self._telemetry.connected_clients})"
+            f"(devices={self._telemetry.connected_clients}, "
+            f"channels={self._telemetry.connected_channels})"
         )
+        return key
 
-    def on_client_disconnected(self) -> None:
-        self._telemetry.connected_clients = max(
-            0, self._telemetry.connected_clients - 1
-        )
+    def on_client_disconnected(self, client_key: Optional[str] = None) -> None:
+        """Release one channel; the device is dropped when its last one goes."""
+        self._registry.disconnect(client_key)
+        self._sync_counts()
         logger.info(
             f"[MobileGatewayAgent] Client disconnected "
-            f"(active={self._telemetry.connected_clients})"
+            f"(devices={self._telemetry.connected_clients}, "
+            f"channels={self._telemetry.connected_channels})"
         )
 
     def on_command(self, action: str) -> None:
@@ -189,6 +281,13 @@ class MobileGatewayAgent(BaseSwarmAgent):
         return t
 
     # ── Internal ──────────────────────────────────────────────────────────────
+
+    def _sync_counts(self) -> None:
+        """Mirror the registry into telemetry, keeping the device peak."""
+        self._telemetry.connected_clients = self._registry.devices
+        self._telemetry.connected_channels = self._registry.sockets
+        if self._telemetry.connected_clients > self._telemetry.peak_clients:
+            self._telemetry.peak_clients = self._telemetry.connected_clients
 
     async def _tick_loop(self) -> None:
         """1-second heartbeat: update derived metrics and emit to metrics WS."""

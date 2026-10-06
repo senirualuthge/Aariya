@@ -11,13 +11,18 @@ import logging
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
-from server.systems.agent.mobile_gateway_agent import BaseSwarmAgent, register_agent
+from server.systems.agent.mobile_gateway_agent import (
+    BaseSwarmAgent,
+    DeviceRegistry,
+    register_agent,
+)
 
 logger = logging.getLogger("aariya.mobile_analytics_agent")
 
 @dataclass
 class AnalyticsTelemetry:
     connected_clients: int = 0
+    connected_channels: int = 0
     peak_clients: int = 0
     payloads_sent: int = 0
     payloads_per_second: float = 0.0
@@ -35,6 +40,7 @@ class MobileAnalyticsAgent(BaseSwarmAgent):
 
     def __init__(self) -> None:
         self._telemetry = AnalyticsTelemetry()
+        self._registry = DeviceRegistry("MobileAnalyticsAgent")
         self._start_time: float = time.time()
         self._tick_task: Optional[asyncio.Task] = None
         self._running = False
@@ -55,14 +61,20 @@ class MobileAnalyticsAgent(BaseSwarmAgent):
             self._tick_task.cancel()
         logger.info("[MobileAnalyticsAgent] Stopped")
 
-    def on_client_connected(self) -> None:
-        self._telemetry.connected_clients += 1
+    def on_client_connected(self, client_id: Optional[str] = None) -> str:
+        """Count one analytics channel for a device; returns the disconnect key."""
+        key = self._registry.connect(client_id)
+        self._telemetry.connected_clients = self._registry.devices
+        self._telemetry.connected_channels = self._registry.sockets
         if self._telemetry.connected_clients > self._telemetry.peak_clients:
             self._telemetry.peak_clients = self._telemetry.connected_clients
         self._telemetry.last_activity_ts = time.time()
+        return key
 
-    def on_client_disconnected(self) -> None:
-        self._telemetry.connected_clients = max(0, self._telemetry.connected_clients - 1)
+    def on_client_disconnected(self, client_key: Optional[str] = None) -> None:
+        self._registry.disconnect(client_key)
+        self._telemetry.connected_clients = self._registry.devices
+        self._telemetry.connected_channels = self._registry.sockets
 
     def on_payload_sent(self) -> None:
         now = time.time()

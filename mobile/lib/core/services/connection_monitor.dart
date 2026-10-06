@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../services/websocket_service.dart';
+import 'websocket_service.dart';
 
 /// Connection quality level exposed to the UI.
 enum ConnectionQuality { excellent, good, degraded, offline }

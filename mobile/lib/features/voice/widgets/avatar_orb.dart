@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../brain/client_brain.dart';
+import '../../../core/brain/client_brain.dart';
 
 /// The AI's emotional "face."
 /// Size, color, and glow are all driven live by [BrainStateController].

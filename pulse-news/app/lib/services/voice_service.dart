@@ -47,10 +47,12 @@ class VoiceService {
           _classifyCommand(result.recognizedWords);
         }
       },
-      listenFor: const Duration(seconds: 10),
-      pauseFor: const Duration(seconds: 3),
-      listenOptions: stt.SpeechListenOptions(partialResults: false),
-      localeId: 'en_US',
+      listenOptions: stt.SpeechListenOptions(
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 3),
+        partialResults: false,
+        localeId: 'en_US',
+      ),
     );
   }
 

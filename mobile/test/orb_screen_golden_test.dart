@@ -1,4 +1,4 @@
-import 'package:aariya_mobile/ui/widgets/voice_reactive_orb.dart';
+import 'package:aariya_mobile/features/voice/widgets/voice_reactive_orb.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
