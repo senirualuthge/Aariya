@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../../services/server_config.dart';
-import '../../state/brain_state_controller.dart';
-import '../screens/companion_screen.dart';
+import '../../../core/services/server_config.dart';
+import '../../../core/state/brain_state_controller.dart';
+import 'companion_screen.dart';
 
 // ── Palette (matches the app's dark theme) ───────────────────────────────────
 const _kSurface = Color(0xFF110F1E);

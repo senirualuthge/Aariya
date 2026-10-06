@@ -1,5 +1,5 @@
-import 'package:aariya_mobile/state/brain_state_controller.dart';
-import 'package:aariya_mobile/ui/widgets/companion_presence.dart';
+import 'package:aariya_mobile/core/state/brain_state_controller.dart';
+import 'package:aariya_mobile/features/companion/presentation/companion_presence.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,6 +1,6 @@
-import 'package:aariya_mobile/state/brain_state_controller.dart';
-import 'package:aariya_mobile/ui/widgets/animated_text_stream.dart';
-import 'package:aariya_mobile/ui/widgets/voice_reactive_orb.dart';
+import 'package:aariya_mobile/core/state/brain_state_controller.dart';
+import 'package:aariya_mobile/features/voice/widgets/animated_text_stream.dart';
+import 'package:aariya_mobile/features/voice/widgets/voice_reactive_orb.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

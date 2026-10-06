@@ -244,7 +244,7 @@ function AgentCard({ agent, mobileTelemetry, onClick }) {
         <div style={styles.telemetryStrip}>
           <div style={styles.telemetryItem}>
             <span style={styles.telemetryValue}>{mobileTelemetry.connected_clients}</span>
-            <span style={styles.telemetryLabel}>CLIENTS</span>
+            <span style={styles.telemetryLabel}>DEVICES</span>
           </div>
           {mobileTelemetry.commands_per_second !== undefined ? (
             <div style={styles.telemetryItem}>

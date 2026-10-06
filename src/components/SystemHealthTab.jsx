@@ -368,9 +368,11 @@ export default function SystemHealthTab() {
         />
         <KpiCard
           icon={mobileConnected ? '📱' : '📴'} label="Mobile App"
-          value={mobileConnected ? `${mobile.clients} connected` : 'OFFLINE'}
+          value={mobileConnected ? `${mobile.clients} device${mobile.clients === 1 ? '' : 's'}` : 'OFFLINE'}
           color={mobileConnected ? '#a78bfa' : '#64748b'}
-          sub={mobileConnected ? `peak ${mobile.peak_clients} · ${mobile.avg_latency_ms ?? '?'}ms avg latency` : 'appears when the app connects'}
+          sub={mobileConnected
+            ? `${mobile.connected_channels ?? mobile.clients} channel${(mobile.connected_channels ?? mobile.clients) === 1 ? '' : 's'} · peak ${mobile.peak_clients} · ${mobile.avg_latency_ms ?? '?'}ms avg latency`
+            : 'appears when the app connects'}
         />
         <KpiCard
           icon="⚡" label="Device FPS" value={dev.fps > 0 ? `${dev.fps}` : '—'}

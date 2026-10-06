@@ -93,9 +93,9 @@ class WebSocketService {
 
     try {
       final baseUri = _resolveBase(url);
-      _openChat('ws://${baseUri.host}:${baseUri.port}/ws/mobile');
-      _openControl('ws://${baseUri.host}:${baseUri.port}/ws/mobile/control');
-      _openAnalytics('ws://${baseUri.host}:${baseUri.port}/ws/mobile/analytics');
+      _openChat(_channelUrl(baseUri, '/ws/mobile'));
+      _openControl(_channelUrl(baseUri, '/ws/mobile/control'));
+      _openAnalytics(_channelUrl(baseUri, '/ws/mobile/analytics'));
     } catch (e) {
       debugPrint('[WS] connect failed: $e');
       isConnected.value = false;
@@ -137,9 +137,26 @@ class WebSocketService {
     return Uri.parse(ServerConfig.instance.wsBase);
   }
 
+  /// URL for one channel, tagged with the phone's stable [ServerConfig.clientId].
+  ///
+  /// All three channels carry the same id so the backend counts this phone as
+  /// ONE device — without it the backend can only see sockets, and a single
+  /// phone's chat + control pair showed up as "2 devices connected".
+  String _channelUrl(Uri baseUri, String path) {
+    final clientId = ServerConfig.instance.clientId;
+    return Uri(
+      scheme: 'ws',
+      host: baseUri.host,
+      port: baseUri.port,
+      path: path,
+      queryParameters: clientId.isEmpty ? null : {'client_id': clientId},
+    ).toString();
+  }
+
   void _openChat(String url) {
     final channel = WebSocketChannel.connect(Uri.parse(url));
     _chatChannel = channel;
+    _observeConnectFailure(channel);
     _subscribeChannel(channel, _messagesController, onError: () {
       isConnected.value = false;
       _scheduleReconnect();
@@ -174,6 +191,7 @@ class WebSocketService {
   void _openControl(String url) {
     final channel = WebSocketChannel.connect(Uri.parse(url));
     _controlChannel = channel;
+    _observeConnectFailure(channel);
     _subscribeChannel(channel, _messagesController, onError: () {
       _scheduleReconnect();
     }, onDone: () {
@@ -184,7 +202,21 @@ class WebSocketService {
   void _openAnalytics(String url) {
     final channel = WebSocketChannel.connect(Uri.parse(url));
     _analyticsChannel = channel;
+    _observeConnectFailure(channel);
     _subscribeChannel(channel, _analyticsController);
+  }
+
+  /// web_socket_channel 3.x surfaces a failed connect on TWO channels:
+  /// the channel stream (handled by [_subscribeChannel]'s onError, which
+  /// logs it and drives reconnect) AND the [WebSocketChannel.ready]
+  /// future. Nothing else awaits [WebSocketChannel.ready], so its error
+  /// would otherwise be reported as an "Unhandled Exception" on every
+  /// offline reconnect attempt. Observe and drop it — the failure is
+  /// already logged and retried via the stream.
+  void _observeConnectFailure(WebSocketChannel channel) {
+    channel.ready.catchError((_) {
+      // Stream onError already logged this and scheduled a reconnect.
+    });
   }
 
   void _subscribeChannel(

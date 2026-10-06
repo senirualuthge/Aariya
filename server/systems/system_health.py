@@ -524,6 +524,7 @@ def _collect_mobile() -> dict:
     out: dict[str, Any] = {
         "connected": False,
         "clients": 0,
+        "connected_channels": 0,
         "peak_clients": 0,
         "commands_processed": 0,
         "commands_per_second": 0.0,
@@ -541,6 +542,7 @@ def _collect_mobile() -> dict:
         g = get_mobile_gateway().snapshot()
         out["connected"] = bool(g.get("connected_clients", 0) > 0)
         out["clients"] = int(g.get("connected_clients", 0))
+        out["connected_channels"] = int(g.get("connected_channels", 0))
         out["peak_clients"] = int(g.get("peak_clients", 0))
         out["commands_processed"] = int(g.get("commands_processed", 0))
         out["commands_per_second"] = round(float(g.get("commands_per_second", 0.0)), 2)

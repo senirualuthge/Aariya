@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../state/brain_state_controller.dart';
+import '../../../core/state/brain_state_controller.dart';
 
 /// Rotating ring around the Avatar Orb.
 /// Arousal → speed + thickness + opacity. Calm = slow thin ring. Excited = fast thick vivid ring.

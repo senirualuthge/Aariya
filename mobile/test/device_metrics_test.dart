@@ -1,4 +1,4 @@
-import 'package:aariya_mobile/services/device_metrics.dart';
+import 'package:aariya_mobile/core/services/device_metrics.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 

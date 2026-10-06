@@ -66,7 +66,7 @@
     "security:audit": "npm audit --json 2>&1 || true",
     "security:audit:fix": "npm audit fix",
     "test": "npm run test:unit && npm run test:gev",
-    "test:unit": "node --test build-summary.test.js vault-context.test.js vault-search.test.js background-polls.test.js",
+    "test:unit": "node --test build-summary.test.js vault-context.test.js vault-search.test.js background-polls.test.js scripts/audit_gate.test.mjs",
     "test:gev": "node scripts/gev/run-unit-tests.mjs",
     "test:backend": "bash run_backend_tests.sh",
     "test:backend:win": "run_backend_tests.bat",
