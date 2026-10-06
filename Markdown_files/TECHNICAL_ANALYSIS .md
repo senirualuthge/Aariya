@@ -2370,7 +2370,7 @@ class AariyaMobile extends StatelessWidget {
 }
 ```
 
-<!-- FILE: mobile/lib/services/websocket_service.dart -->
+<!-- FILE: mobile/lib/core/services/websocket_service.dart -->
 ```dart
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -2393,7 +2393,7 @@ class WebSocketService {
 }
 ```
 
-<!-- FILE: mobile/lib/state/brain_state_controller.dart -->
+<!-- FILE: mobile/lib/core/state/brain_state_controller.dart -->
 ```dart
 import 'package:flutter/foundation.dart';
 
@@ -2409,7 +2409,7 @@ class BrainStateController with ChangeNotifier {
 }
 ```
 
-<!-- FILE: mobile/lib/ui/screens/control_center_screen.dart -->
+<!-- EXAMPLE (illustrative only — never a real file; app shell is mobile/lib/app/app.dart) -->
 ```dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
