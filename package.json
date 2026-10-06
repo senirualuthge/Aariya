@@ -46,7 +46,7 @@
     "ws": "^8.18.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.15.0"
   },
   "scripts": {
     "backend": "bash scripts/backend.sh",
