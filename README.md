@@ -2,10 +2,10 @@
   <h1>🧠 Aariya OS</h1>
   <p><b>A Dynamic Agent Civilization & Cognitive Identity Framework</b></p>
   
-  [![Build Status](https://github.com/Crazysenuuu/Aariya/actions/workflows/backend.yml/badge.svg)](https://github.com/Crazysenuuu/Aariya/actions)
+  [![Build Status](https://github.com/senirualuthge/Aariya/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/senirualuthge/Aariya/actions)
   [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
   [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-  [![React](https://img.shields.io/badge/React-18+-61DAFB.svg?logo=react)](https://reactjs.org/)
+  [![React](https://img.shields.io/badge/React-19+-61DAFB.svg?logo=react)](https://reactjs.org/)
 </div>
 
 <br />
