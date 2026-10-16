@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import useStore from '../store';
-import { runtime } from './RuntimeLoop';
+import { tripleLoopRuntime } from '../core/tripleLoopRuntime';
 import { EmotionGuardrail } from './emotionGuardrails';
 
 /**
@@ -53,8 +53,9 @@ export default function StabilityGuardrails() {
             }
         };
 
-        // RuntimeLoop.subscribe(priority, fn) — priority 10 runs first in the loop.
-        const unsubscribe = runtime.subscribe(10, checkGuardrails);
+        // Cognition-loop subscriber — priority 10 runs first (invariants before
+        // behaviour/animation consumers read the emotion vector).
+        const unsubscribe = tripleLoopRuntime.subscribeCognition(checkGuardrails, 10, 'StabilityGuardrails');
 
         return () => unsubscribe();
     }, []);

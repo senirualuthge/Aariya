@@ -90,12 +90,29 @@ Live‑path, self‑contained, no fabricated data, each with tests.
 
 ---
 
-## 4. Wave H — dormant runtime/performance layer (awaiting decision)
+## 4. Wave H — dormant runtime/performance layer (option (b) chosen — implemented)
 
 Options: (a) leave dormant and document; (b) initialize the runtime guarded
 (no second WS, no duplicate face worker) and mount `ThermalMonitor`, migrating
 `StabilityGuardrails`/`SocialIntentSystem` to `tripleLoopRuntime`; (c) retire the
 legacy `RuntimeLoop`/`RuntimeController` and delete the superseded modules.
+
+**Chosen: (b).** Implemented as a self-contained `PerformanceBootstrap` rather than
+via `initializePerformanceSystem()`:
+
+* `initializePerformanceSystem()` pulls in `performanceIntegration → wsClient`, which
+  `import '@msgpack/msgpack'` — an **undeclared** dependency (and `npm install` is
+  blocked by a pre-existing React 19 / framer-motion peer conflict). It would also open
+  a second WebSocket and start a second face worker. The bootstrap therefore wires only
+  boot-profiler → runtime-config → `tripleLoopRuntime` → `fpsController`/`thermalController`,
+  governed from real render-loop frame timing.
+* `ThermalMonitor` mounted (renders only while throttled / Ctrl+Shift+T).
+* `StabilityGuardrails` and `SocialIntentSystem` moved to `tripleLoopRuntime.subscribeCognition`
+  (priorities 10 / 30); `socialIntent` + `setSocialIntent` added to the store (SocialIntentSystem
+  would otherwise call an undefined setter); `NeuralEngine.resolveSocialIntent` arousal-source
+  bug fixed (`emotions.arousal` → `state.arousal`).
+* Option (c) NOT done — legacy `RuntimeLoop`/`RuntimeController` are now unreferenced but left
+  in place.
 
 ---
 
@@ -114,4 +131,13 @@ legacy `RuntimeLoop`/`RuntimeController` and delete the superseded modules.
   - Verify: `npm run test:unit` **74 passed**; full backend suite `pytest server/tests`
     **631 passed, 3 skipped** (+6 vs. the pre-Wave‑2 baseline); `npx eslint` clean;
     `npm run build` ✓.
-- Wave H remains open (decision required) — see §4.
+- 2026‑10‑16 — **Wave G committed** (`3881ffb`).
+- 2026‑10‑17 — **Wave H (b) implemented.**
+  - H1 new `src/systems/PerformanceBootstrap.jsx` (guarded, idempotent) mounted in `App.jsx`.
+  - H2 `ThermalMonitor` mounted.
+  - H3 `StabilityGuardrails` → `tripleLoopRuntime.subscribeCognition(…, 10, …)`.
+  - H4 `SocialIntentSystem` → cognition loop; store `socialIntent`/`setSocialIntent` added;
+    `resolveSocialIntent` arousal bug fixed; new `src/systems/ai/SocialIntent.test.mjs`.
+  - Verify: `npm run test:unit` **78 passed**; `npx eslint` clean; `npm run build` ✓
+    (new chunks `PerformanceBootstrap`/`StabilityGuardrails`/`SocialIntentSystem`/`ThermalMonitor`,
+    no `msgpack` in the bundle).

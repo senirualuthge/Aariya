@@ -1,6 +1,6 @@
 # AI Girl Repository Implementation Status (FIXV4 Update)
 
-> **Last Updated**: 2026-10-16
+> **Last Updated**: 2026-10-17
 > **Architecture Level**: FIXV4 (Advanced Swarm Intelligence)
 
 Based on the recent architectural transition, here is the current production-readiness state of the AI Girl platform.
@@ -55,6 +55,13 @@ The core cognitive pipeline has been upgraded to the FIXV4 standard. These compo
 * **Contradiction trust:** `ContradictionDetector.process_turn` now takes the **real** trust instead of the previous fabricated `1.0` ("Placeholder trust"), and `calculate_trust_decay` floors the applied delta so trust can't be pushed below zero. Covered by `server/tests/test_contradiction_trust.py`.
 * **Swarm capability audit:** `gap_detector.scan_for_gaps` now honours each agent's self-reported `capabilities` (list/set or comma/space string) and only falls back to name matching when none is declared — unknown capability names can't silence a real gap. Covered by new cases in `server/tests/test_gap_detector.py`.
 
+### 10. Runtime / Performance Layer — activated (2026-10-16)
+* The Phase-1 performance architecture is now **live**, started by `src/systems/PerformanceBootstrap.jsx` (mounted in `App.jsx` once the session starts). It runs the real boot profiler (`runBootProfiler`) → `createRuntimeConfig(tier)` → `tripleLoopRuntime.setConfig` + `thermalController.setConfig`, starts the user's saved FPS mode (`fpsController.start()`), and governs FPS + thermal from the **real render-loop frame timing** (`tripleLoopRuntime.subscribeRender`, priority −100). `thermalController` consumes the same measured frame timing — its CPU usage is derived from real frame-time variance, not a fabricated constant.
+* The bootstrap is deliberately **guarded**: it does *not* call `initializePerformanceSystem()` (which would also open the msgpack telemetry WebSocket and start a second face worker). The app already owns its JSON WebSocket (`brainClient`) and camera pipeline, so the bootstrap activates only the measurement/enforcement pieces — no second connection, no duplicate face detection. (Consequence: `initializePerformanceSystem.ts`/`performanceIntegration.ts`/`wsClient.ts` remain dormant, and `@msgpack/msgpack` is an undeclared dependency, so that path is intentionally not taken.)
+* **ThermalMonitor** is mounted (renders only while throttled or toggled with Ctrl+Shift+T) and now shows real measured state.
+* **SocialIntentSystem** is wired onto the cognition loop (priority 30) and the missing `socialIntent`/`setSocialIntent` store field was added; `StabilityGuardrails` now subscribes to `tripleLoopRuntime.subscribeCognition` (priority 10) instead of the legacy `RuntimeLoop`. A latent `NeuralEngine.resolveSocialIntent` bug (it read `emotions.arousal`, but arousal lives on the store root, making the TEASING branch unreachable) was fixed to read `state.arousal`. Covered by `src/systems/ai/SocialIntent.test.mjs`.
+* **Still dormant by choice:** the legacy `RuntimeLoop.js` / `RuntimeController.jsx` (now fully unreferenced), `TripleLoopAdapter.tsx`, `stateThrottle`, and the msgpack `wsClient`.
+
 ---
 
 ## 🟡 In-Progress / Partially Implemented
@@ -75,9 +82,9 @@ These systems are functional but require final "Investor-Grade" polishing:
 * Covered by `src/systems/userIdentity.test.mjs` and `server/tests/test_multi_user_isolation.py`.
 * **Remaining:** a real sign-in / account-switch UI — identity is device-local (persisted per install) today.
 
-### 3. Dormant Runtime / Performance Layer (2026-10-16)
-* The Phase-1 performance architecture is fully written but **never initialized**: `initializePerformanceSystem()` (`src/core/initializePerformanceSystem.ts`) has no callers, so `performanceSystem`, `bootProfiler`, `runtimeConfig`, `fpsController`, `thermalController`, `stateThrottle`, the msgpack `wsClient`, and `tripleLoopRuntime` are all dormant. `ThermalMonitor.tsx` is unmounted, and there are two competing loops (legacy `RuntimeLoop`/`RuntimeController` vs `tripleLoopRuntime`).
-* This is **deliberately not auto-wired**: starting it activates extra RAF/interval loops, an FPS/thermal governor, and (if configured) a second WebSocket + the face worker, all of which interact with the already-live avatar/camera pipeline. Wiring it is a scoped follow-up (see `plans/partials-implementation-plan-2.md` §4), not a silent change.
+### 3. ~~Dormant Runtime / Performance Layer~~ — ✅ Resolved (2026-10-16)
+* The Phase-1 performance layer is now initialized (guarded) by `PerformanceBootstrap`; `TripleLoopRuntime`, `fpsController`, `thermalController`, `ThermalMonitor` and `SocialIntentSystem` all run. See §10 for details.
+* **Deliberately still off:** the msgpack telemetry `wsClient` + second face worker (avoided by not calling `initializePerformanceSystem`), and the now-unreferenced legacy `RuntimeLoop` / `RuntimeController` (retiring them is optional cleanup, not required for correctness).
 * Also unwired: `SwarmSynergyBridge.execute_dispatch` (no callers; returns the dispatch request as a stub) — GEV triggers never reach the swarm.
 
 ---

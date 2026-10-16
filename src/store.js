@@ -253,11 +253,23 @@ const useStore = create((set) => ({
   },
   personalityAxes: {},
 
+  // Social intent — derived from the live emotion vector on the cognition loop
+  // by SocialIntentSystem (NeuralEngine.resolveSocialIntent). Defaults are the
+  // neutral LISTENING stance; StabilityGuardrails bounds the fields.
+  socialIntent: {
+    intent:     'LISTENING',
+    warmth:     0.5,
+    dominance:  0.0,
+    openness:   0.5,
+    engagement: 0.5,
+  },
+
   setPersonalityPreset: (preset) =>
     set({ personalityPreset: preset, currentPersonality: preset }),
   setAutoPersonality:   (auto) => set({ autoPersonality: auto }),
   setPersonality:       (p)    => set({ personality: p }),
   setPersonalityAxes:   (axes) => set({ personalityAxes: axes }),
+  setSocialIntent:      (intent) => set({ socialIntent: intent }),
 
   // ── Trust / Relationship ────────────────────────────────────────────────────
   trust:             0.5,

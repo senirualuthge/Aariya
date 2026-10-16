@@ -21,6 +21,10 @@ const BrainMonitor = lazy(() => import('./components/BrainMonitor'));
 const NewsPanel = lazy(() => import('./components/NewsPanel'));
 const AutonomyPanel = lazy(() => import('./components/AutonomyPanel'));
 const GovernancePanel = lazy(() => import('./components/GovernancePanel'));
+const ThermalMonitor = lazy(() => import('./components/ThermalMonitor'));
+const PerformanceBootstrap = lazy(() => import('./systems/PerformanceBootstrap'));
+const StabilityGuardrails = lazy(() => import('./systems/StabilityGuardrails'));
+const SocialIntentSystem = lazy(() => import('./systems/SocialIntentSystem'));
 
 // Minimal fallback while a lazy chunk streams in — keep the UI non-blocking.
 const PanelSuspense = ({ children }) => (
@@ -72,10 +76,14 @@ function App() {
         {/* Non-visual systems */}
         {started && (
           <>
+            <PerformanceBootstrap />
+            <StabilityGuardrails />
+            <SocialIntentSystem />
             <VoiceSystem />
             <EmotionSystem />
             <VisionSystem />
             <DialogueSystem />
+            <ThermalMonitor />
           </>
         )}
 

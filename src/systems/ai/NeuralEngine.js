@@ -20,7 +20,7 @@ export class NeuralEngine {
      * Main tick. Kept for DialogueSystem API compatibility.
      * @returns null (no per-tick side effects)
      */
-    update(inputs) {
+    update(_inputs) {
         if (!this.enabled) return null;
 
         const now = Date.now();
@@ -45,7 +45,9 @@ export class NeuralEngine {
         const sad = emotions.sad || 0;
         const angry = emotions.angry || 0;
         const happy = emotions.happy || 0;
-        const arousal = emotions.arousal || 0;
+        // Arousal lives on the store root (the emotion vector has no arousal
+        // axis); fall back to a per-emotion value if a caller supplies one.
+        const arousal = state.arousal ?? emotions.arousal ?? 0;
 
         // Rule selection (priority: sad > angry > playful > listen)
         let intent = 'LISTENING';

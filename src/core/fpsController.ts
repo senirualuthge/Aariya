@@ -143,7 +143,7 @@ class FPSController {
     if (document.hidden) return;
     
     this.recordFrameTime(deltaTime * 1000); // Convert to ms
-    this.detectThermals(gpuMs);
+    this.detectThermals(gpuMs, deltaTime);
     this.handleThermalPolicy();
     
     if (this.currentTarget === 120) {
@@ -196,11 +196,12 @@ class FPSController {
     }
   }
   
-  private detectThermals(gpuMs: number): void {
+  private detectThermals(gpuMs: number, deltaTime: number): void {
+    // Use the real measured frame delta rather than an assumed 16.7 ms.
     if (this.currentTarget === 120 && gpuMs > 12) {
-      this.thermalTimer += 0.016; // Approximate frame time
+      this.thermalTimer += deltaTime;
     } else {
-      this.thermalTimer = Math.max(0, this.thermalTimer - 0.016);
+      this.thermalTimer = Math.max(0, this.thermalTimer - deltaTime);
     }
     
     this.thermalThrottling = this.thermalTimer > 20; // 20s sustained
