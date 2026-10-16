@@ -49,6 +49,12 @@ The core cognitive pipeline has been upgraded to the FIXV4 standard. These compo
 * **Daemon Telemetry:** the autonomy daemon's `get_inner_world()` payload now includes a compact `predictor` health entry (status, checkpoint age in hours, training records/session-seed, corpus sizes, latest forecast) — broadcast with every `autonomy.state` and available via the inner-world endpoint. The dashboard's Predictor card falls back to this telemetry (tagged with an INNER-WORLD badge) whenever the dedicated status API is unreachable, so the card keeps showing model/forecast state even if `/api/emotion/predictor` is down.
 * **Instant Retrain Signal:** the `autonomy.model_trained` event now carries the same fresh telemetry; the dashboard's Predictor card listens on `ws/brain_metrics` and refetches the moment a retrain completes instead of waiting for its 15s poll.
 
+### 9. Advanced Memory & Emotion Stability (2026-10-16)
+* **Mid-Term Memory (frontend):** `src/systems/memory/AdvancedMemoryManager.js` now keeps a bounded (500-entry) MTM session log alongside the 20-entry STM window, extracts real topics from the interaction text (stop-word filtered term counts) and maintains a rolling emotion trend (valence mean + volatility) from the signals `aiEngine` already passes. `retrieveContext` ranks hits across the **whole session** and labels each one STM (recent) or MTM. No seeded data — an empty session yields an empty result. Covered by `src/systems/memory/AdvancedMemoryManager.test.mjs`.
+* **Emotion guardrails:** new `src/systems/emotionGuardrails.js` holds the clamp/NaN-rescue logic **and** the previously-missing feedback-loop protection (real oscillation detection: direction-change counting over a rolling window, with damping toward baseline). It runs on the live 10 Hz emotion heartbeat in `DialogueSystem` before `setAllEmotions`, and `StabilityGuardrails` was refactored onto the shared module (its latent `runtime.subscribe` argument-order bug fixed). Covered by `src/systems/emotionGuardrails.test.mjs`.
+* **Contradiction trust:** `ContradictionDetector.process_turn` now takes the **real** trust instead of the previous fabricated `1.0` ("Placeholder trust"), and `calculate_trust_decay` floors the applied delta so trust can't be pushed below zero. Covered by `server/tests/test_contradiction_trust.py`.
+* **Swarm capability audit:** `gap_detector.scan_for_gaps` now honours each agent's self-reported `capabilities` (list/set or comma/space string) and only falls back to name matching when none is declared — unknown capability names can't silence a real gap. Covered by new cases in `server/tests/test_gap_detector.py`.
+
 ---
 
 ## 🟡 In-Progress / Partially Implemented
@@ -68,6 +74,11 @@ These systems are functional but require final "Investor-Grade" polishing:
 * The autonomy daemon accepts an explicit `user_id`, then `AARIYA_USER_ID`, then the legacy fallback (`AutonomousDaemon`, `get_daemon`, `AutonomousManager`).
 * Covered by `src/systems/userIdentity.test.mjs` and `server/tests/test_multi_user_isolation.py`.
 * **Remaining:** a real sign-in / account-switch UI — identity is device-local (persisted per install) today.
+
+### 3. Dormant Runtime / Performance Layer (2026-10-16)
+* The Phase-1 performance architecture is fully written but **never initialized**: `initializePerformanceSystem()` (`src/core/initializePerformanceSystem.ts`) has no callers, so `performanceSystem`, `bootProfiler`, `runtimeConfig`, `fpsController`, `thermalController`, `stateThrottle`, the msgpack `wsClient`, and `tripleLoopRuntime` are all dormant. `ThermalMonitor.tsx` is unmounted, and there are two competing loops (legacy `RuntimeLoop`/`RuntimeController` vs `tripleLoopRuntime`).
+* This is **deliberately not auto-wired**: starting it activates extra RAF/interval loops, an FPS/thermal governor, and (if configured) a second WebSocket + the face worker, all of which interact with the already-live avatar/camera pipeline. Wiring it is a scoped follow-up (see `plans/partials-implementation-plan-2.md` §4), not a silent change.
+* Also unwired: `SwarmSynergyBridge.execute_dispatch` (no callers; returns the dispatch request as a stub) — GEV triggers never reach the swarm.
 
 ---
 

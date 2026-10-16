@@ -1,62 +1,60 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import useStore from '../store';
 import { runtime } from './RuntimeLoop';
+import { EmotionGuardrail } from './emotionGuardrails';
 
 /**
  * StabilityGuardrails
  * Implements "Invariant Checks" as suggested in analysis_recorrection_system.md.
- * Prevents "Dead Mannequin" or "Exploding Emotion" bugs by enforcing safe bounds.
+ * Prevents "Dead Mannequin" or "Exploding Emotion" bugs by enforcing safe bounds,
+ * and damps emotion oscillation (feedback-loop protection).
+ *
+ * The clamp + oscillation logic lives in `emotionGuardrails.js` so it is shared
+ * with the live emotion heartbeat (DialogueSystem) and unit-tested on its own.
  */
 export default function StabilityGuardrails() {
+    const guardrailRef = useRef(null);
+    if (guardrailRef.current === null) guardrailRef.current = new EmotionGuardrail();
+
     useEffect(() => {
-        const checkGuardrails = (_dt) => {
+        const guardrail = guardrailRef.current;
+
+        const checkGuardrails = () => {
             const state = useStore.getState();
             const { emotions, socialIntent } = state;
-            
-            let needsUpdate = false;
+
             const updates = {};
 
-            // 1. Emotion Invariants (Clamp 0-1, handle NaN)
-            const clampedEmotions = { ...emotions };
-            Object.keys(emotions).forEach(key => {
-                const val = emotions[key];
-                if (isNaN(val) || val === undefined) {
-                    clampedEmotions[key] = key === 'calm' ? 1.0 : 0.0;
-                    needsUpdate = true;
-                } else if (val < 0 || val > 1) {
-                    clampedEmotions[key] = Math.max(0, Math.min(1, val));
-                    needsUpdate = true;
-                }
-            });
-            if (needsUpdate) updates.emotions = clampedEmotions;
+            // 1 + 3. Emotion invariants: clamp to [0,1], rescue NaN, and damp
+            //        oscillation back toward baseline.
+            const guarded = guardrail.process(emotions || {});
+            if (guarded.changed) updates.emotions = guarded.emotions;
 
             // 2. Social Intent Invariants
             if (socialIntent) {
                 const si = { ...socialIntent };
+                let siChanged = false;
                 ['engagement', 'warmth', 'openness'].forEach(key => {
                     const val = si[key];
                     if (val < 0 || val > 1 || isNaN(val)) {
                         si[key] = Math.max(0, Math.min(1, isNaN(val) ? 0.5 : val));
-                        needsUpdate = true;
+                        siChanged = true;
                     }
                 });
                 if (si.dominance < -1 || si.dominance > 1 || isNaN(si.dominance)) {
                     si.dominance = Math.max(-1, Math.min(1, isNaN(si.dominance) ? 0 : si.dominance));
-                    needsUpdate = true;
+                    siChanged = true;
                 }
-                if (needsUpdate) updates.socialIntent = si;
+                if (siChanged) updates.socialIntent = si;
             }
 
-            // 3. Feedback Loop Protection
-            // TODO: Detect oscillating emotions if needed
-
-            if (needsUpdate) {
+            if (Object.keys(updates).length > 0) {
                 useStore.setState(updates);
             }
         };
 
-        // Priority 10 (First check in the loop)
-        const unsubscribe = runtime.subscribe(checkGuardrails, 10, 'StabilityGuardrails');
+        // RuntimeLoop.subscribe(priority, fn) — priority 10 runs first in the loop.
+        const unsubscribe = runtime.subscribe(10, checkGuardrails);
 
         return () => unsubscribe();
     }, []);

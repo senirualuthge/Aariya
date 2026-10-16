@@ -3,7 +3,8 @@ gap_detector.py
 ───────────────
 Detects missing critical swarm capabilities and spawns new agents to fill them.
 
-- scan_for_gaps(active_agents)  — name-based capability audit of the registry.
+- scan_for_gaps(active_agents)  — capability audit of the registry: uses each
+  agent's self-reported `capabilities` when present, else a name-based fallback.
 - trigger_spawner(missing_cap)  — generates a real agent module for the gap:
     1. Tries the LLM "auto-coder" (writes a bespoke Agent subclass).
     2. Falls back to a built-in per-capability template.
@@ -73,23 +74,54 @@ _spawned_at: Dict[str, float] = {}
 _spawn_lock = threading.Lock()
 
 
+def _declared_capabilities(agent: dict) -> set:
+    """Capabilities an agent self-reports via a `capabilities` field.
+
+    Accepts a list/tuple/set of names, or a comma/space separated string. Only
+    names that are known ``REQUIRED_CAPABILITIES`` count, so a stray or custom
+    field can never silence a real gap.
+    """
+    raw = agent.get("capabilities")
+    if raw is None:
+        return set()
+    if isinstance(raw, str):
+        tokens = re.split(r"[,\s]+", raw)
+    elif isinstance(raw, (list, tuple, set, frozenset)):
+        tokens = [str(t) for t in raw]
+    else:
+        return set()
+    return {t.strip().lower() for t in tokens if t} & REQUIRED_CAPABILITIES
+
+
+def _name_capabilities(name: str) -> set:
+    """Fallback capability inference from an agent's name."""
+    name = name.lower()
+    caps = set()
+    if 'dialogue' in name or 'chat' in name:
+        caps.add('dialogue')
+    if 'emotion' in name or 'sentiment' in name:
+        caps.add('emotion_engine')
+    if 'memory' in name or 'rag' in name:
+        caps.add('memory_retrieval')
+    if 'vision' in name or 'visual' in name or 'tracker' in name:
+        caps.add('visual_tracking')
+    return caps
+
+
 def scan_for_gaps(active_agents: list) -> list:
     """
     Checks if the swarm is missing critical components.
-    Agents are expected to self-report capabilities, but we can fall back to name matching.
+
+    An agent may self-report the capabilities it provides via a ``capabilities``
+    field; when it does not, we fall back to matching its name against the
+    capability keywords.
     """
     current_caps = set()
     for agent in active_agents:
-        # Simple name-based capability mapping for now
-        name = agent.get('name', '').lower()
-        if 'dialogue' in name or 'chat' in name:
-            current_caps.add('dialogue')
-        if 'emotion' in name or 'sentiment' in name:
-            current_caps.add('emotion_engine')
-        if 'memory' in name or 'rag' in name:
-            current_caps.add('memory_retrieval')
-        if 'vision' in name or 'visual' in name or 'tracker' in name:
-            current_caps.add('visual_tracking')
+        if not isinstance(agent, dict):
+            continue
+        current_caps |= _declared_capabilities(agent)
+        current_caps |= _name_capabilities(str(agent.get("name", "")))
 
     missing = REQUIRED_CAPABILITIES - current_caps
     if missing:

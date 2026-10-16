@@ -56,6 +56,29 @@ def test_scan_for_gaps():
     assert "visual_tracking" not in missing
 
 
+def test_scan_for_gaps_honours_self_reported_capabilities():
+    # Names that carry no capability keyword, but declare their capabilities.
+    agents = [
+        {"name": "Orion", "capabilities": ["dialogue"]},
+        {"name": "Vega", "capabilities": "emotion_engine, memory_retrieval"},
+        {"name": "Altair", "capabilities": {"visual_tracking"}},
+    ]
+    assert gap_detector.scan_for_gaps(agents) == []
+
+
+def test_scan_for_gaps_ignores_unknown_capability_names():
+    # A bogus/foreign capability must not mark a real gap as filled.
+    missing = gap_detector.scan_for_gaps([{"name": "Orion", "capabilities": ["quantum_analysis"]}])
+    assert set(missing) == gap_detector.REQUIRED_CAPABILITIES
+
+
+def test_scan_for_gaps_tolerates_non_dict_entries():
+    # A malformed registry entry must not crash the evolution tick.
+    missing = gap_detector.scan_for_gaps([None, "EmotionAgent", {"name": "VisionAgent"}])
+    assert "emotion_engine" in missing          # the bare string is ignored
+    assert "visual_tracking" not in missing     # the dict still name-matches
+
+
 # ── template mode ─────────────────────────────────────────────────────────────
 
 def test_trigger_spawner_writes_template_agent(spawn_dir, no_llm):

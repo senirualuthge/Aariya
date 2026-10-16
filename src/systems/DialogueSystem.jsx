@@ -12,6 +12,7 @@ import { neuralEngine } from './ai/NeuralEngine'; // NEW
 import { personalitySystem } from './ai/PersonalitySystem'; // NEW
 import { analytics } from './analytics/AnalyticsSystem'; // NEW
 import { detectUserMood, applyPersonalityNudge } from './userMoodDetector';
+import { EmotionGuardrail } from './emotionGuardrails';
 
 export default function DialogueSystem() {
     useAudioAnalyzer(); // Activate Microphone Analysis
@@ -140,6 +141,9 @@ export default function DialogueSystem() {
         let lastTime = Date.now();
         let activeSilenceDuration = 0;
 
+        // Clamps bounds + damps oscillation on the live emotion vector.
+        const guardrail = new EmotionGuardrail();
+
         const heartbeat = setInterval(() => {
             const now = Date.now();
             const dt = (now - lastTime) / 1000;
@@ -216,7 +220,15 @@ export default function DialogueSystem() {
                 }
                 
                 // 4. DECAY & STORE UPDATE
-                const nextEmotions = updateEmotions(emotions, envTargets, dt);
+                const decayed = updateEmotions(emotions, envTargets, dt);
+
+                // Stability guardrail: clamp bounds / rescue NaN and damp
+                // oscillation before the vector reaches the animation layer.
+                const guarded = guardrail.process(decayed);
+                const nextEmotions = guarded.emotions;
+                if (guarded.oscillationDetected) {
+                    console.debug('[Stability] emotion oscillation damped:', guarded.flips);
+                }
                 
                 // Sync detailed logs if debugging
                 if (neuralResult.safetyTriggered) {

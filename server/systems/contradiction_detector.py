@@ -187,6 +187,9 @@ class ContradictionDetector:
         
         Formula: trust(t+1) = trust(t) - λ * C_history(t)
         
+        The returned delta is floored so the applied trust can never drop below
+        zero (decaying "from" the current trust level).
+        
         Args:
             current_trust: Current trust score [0, 1]
             contradiction_history: Contradiction EMA [0, 1]
@@ -195,7 +198,8 @@ class ContradictionDetector:
             Trust delta (negative value)
         """
         decay = -self.lambda_decay * contradiction_history
-        return decay
+        floor = -max(0.0, min(1.0, current_trust))
+        return max(decay, floor)
     
     def calculate_uncertainty_modifier(
         self,
@@ -243,7 +247,8 @@ class ContradictionDetector:
         face_emotion: Dict[str, float],
         voice_emotion: Dict[str, float],
         text_sentiment: float,
-        confidences: Dict[str, float]
+        confidences: Dict[str, float],
+        trust: float = 1.0,
     ) -> Dict[str, Any]:
         """
         Process a complete turn and update contradiction metrics.
@@ -256,6 +261,8 @@ class ContradictionDetector:
             voice_emotion: {'valence': float, 'arousal': float}
             text_sentiment: Sentiment valence [-1, 1]
             confidences: {'face': float, 'voice': float, 'text': float}
+            trust: Current trust in [0, 1], used to compute trust-decay pressure.
+                   Defaults to 1.0 (full trust) when the caller has no estimate yet.
         
         Returns:
             Dictionary with contradiction metrics and effects
@@ -332,7 +339,7 @@ class ContradictionDetector:
             'contradiction_ema': contradiction_ema,
             'uncertainty_modifier': uncertainty_modifier,
             'suspicion_triggered': suspicion_triggered,
-            'trust_decay_pressure': self.calculate_trust_decay(1.0, contradiction_ema),  # Placeholder trust
+            'trust_decay_pressure': self.calculate_trust_decay(trust, contradiction_ema),
             'contradiction_type': 'direction' if direction_score > intensity_score else 'intensity'
         }
 
