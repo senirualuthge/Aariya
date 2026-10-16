@@ -304,7 +304,7 @@ export default function DialogueSystem() {
                 return [...prev, { role: 'bot', text: '', streaming: true }];
             });
 
-            const { text, memory } = await handleMessage("default_user", input, {
+            const { text, memory, suppressed } = await handleMessage("default_user", input, {
                 onChunk: (streamed) => {
                     setMessages(prev => {
                         const copy = [...prev];
@@ -313,6 +313,14 @@ export default function DialogueSystem() {
                     });
                 },
             });
+
+            if (suppressed) {
+                // Meeting Mode observed ambient speech that wasn't addressed to
+                // Aariya — drop the placeholder bubble and stay silent.
+                setMessages(prev => prev.filter((_, i) => i !== botMsgIndex));
+                setThinking(false);
+                return;
+            }
 
             // Sync Store & Calculate State
             let targetPersonality = currentPersonality;

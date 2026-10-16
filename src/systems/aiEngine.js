@@ -46,6 +46,11 @@ export async function handleMessage(userId, input, opts = {}) {
     //    so a not-yet-ready server cleanly drops to the local fallback.
     try {
         const brain = await brainClient.send(input, { onChunk });
+        if (brain && brain.suppressed) {
+            // Meeting Mode: ambient speech, not addressed to Aariya → stay silent
+            // (do NOT fall through to the local generator).
+            return { text: '', suppressed: true, reason: brain.reason };
+        }
         if (brain && brain.text) {
             return {
                 text: brain.text,

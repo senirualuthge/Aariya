@@ -394,3 +394,39 @@ expose `isThinkingVisible` selector.
 
 **Next:** Track C / D1–D2 (independent, parallelizable), then D3 and B.
 
+### 2026-10-16 — Track C (personality 3D trajectory) ✅ DONE
+- **C1** `server/routers/analytics.py`: `GET /api/analytics/personality/trajectory` + `_axis_means` / `_core_axis_means` / `_PERSONALITY_AXES`. Reads REAL `personality_snapshots_v2` rows, aggregates `axis.<trait>` into per-axis (cognitive/emotional/social) means; CORE baseline is derived from `PERSONALITY_PRESETS["balanced"]` (code constant, not invented). Honest empty list when there are no snapshots.
+- **C2** `src/components/AnalyticsDashboard.jsx`: `PersonalitySpace3DTab` gained a Live-Affect / Session-Trail mode toggle, module-level `projectPoint`, `PERSONALITY_AXIS_META`, `axisToCoord`, a session render loop (real trail + CORE baseline + drift vector + honest empty/error state), mode-aware HUD / "Acquired Drift" card / legend.
+- Tests: `server/tests/test_personality_trajectory.py` (4). eslint clean; `npm run build` ✓.
+
+### 2026-10-16 — Track D (pulse-news → BrainV2) ✅ DONE
+- **D1–D2** `server/systems/signal_bus.py`: bounded news feed (`NEWS_FEED_MAXLEN=50`, `record_news_alert()`, `recent_news_alerts(max_age_seconds, min_importance)`). `server/infrastructure/signal_bus.py`: `_mirror_to_admin` now records every `news.alert` onto that feed.
+- **Formal contract** `server/routers/signals.py`: new `api_signals_router` (prefix `/api/signals`) with `POST /ingest` and the `NewsAlert` model (headline required, importance clamped to [0,1]); `ExternalSignal` accepts an optional `source` dict. Mounted in `server/main.py`.
+- **D3** `server/autonomy/config.py`: `NEWS_COOLDOWN_SECONDS` / `NEWS_MIN_IMPORTANCE` / `NEWS_MAX_AGE_SECONDS`. `server/systems/proactive/engine.py`: new Priority-7 news trigger, gated by cooldown + importance + the user's learned `fav_topics` (a brand-new user with no profile only sees genuinely important alerts). Nothing is fabricated when the feed is empty.
+- **BrainV2** `_build_news_context()` + `[NEWS]` section injected after `[VISION]`; env `AARIYA_NEWS_CONTEXT_MIN_IMPORTANCE` / `AARIYA_NEWS_CONTEXT_MAX_AGE_SECONDS`, max 3 items.
+- **Producer** `pulse-news/backend/services/aigirl_bridge.py` updated to post the formal `news.alert` payload (`source` is now a dict, importance normalised to [0,1], topics from real `key_entities`).
+- Tests: `server/tests/test_news_ingest.py` (12).
+
+### 2026-10-16 — Track E (RL long-horizon reward) ✅ DONE
+- **E1** New durable table `rl_transitions` (`server/db.py` + `server/migrations/003_rl_transitions.sql`) and `server/systems/rl/store.py` (`RLTransitionStore`, lazy-table). `PPOPolicy.observe_outcome(..., meta={user_id, session_id, done})` persists every real transition; `RolloutBuffer` now carries `next_states` + `dones`.
+- **E2** `_n_step_returns()` (n-step TD with value bootstrap at the horizon; terminal stops the window) replaces the 1-step/Monte-Carlo return. `N_STEP` env-configurable (`AARIYA_RL_N_STEP`, default 4).
+- **E3** `PPOPolicy.maybe_retrain_from_corpus()` retrains from the REAL transition log when `AARIYA_RL_RETRAIN_MIN_TRANSITIONS` new rows accrued and `AARIYA_RL_RETRAIN_HOURS` elapsed since the checkpoint. Wired into the daemon as a non-blocking worker tick (`server/autonomy/daemon.py` `_rl_retrain_tick`, cadence `AARIYA_RL_RETRAIN_CHECK_SECONDS`).
+- **E4** `GET /api/rl/status` (`server/routers/rl.py`) — trained flag, transition count, last-train age, recent action distribution, all from the real checkpoint + store.
+- Tests: `server/tests/test_rl_longhorizon.py` (6).
+
+### 2026-10-16 — Track B (Meeting-Mode acoustic isolation) ✅ DONE
+- **B1** `server/systems/voice/vad.py`: real `webrtcvad` wrapper (`VoiceActivityDetector`, frame-exact buffering across chunks, `resample_int16`, `float_to_int16`, `speech_segments`). `MeetingMode.report_audio_frame(energy, vad_user, pcm_b64=None, sample_rate=16000)` uses the real VAD when PCM is present; the energy-variance heuristic remains the no-PCM fallback (`AARIYA_MEETING_VAD=0` disables the real path).
+- **B2** `server/systems/voice/diarization.py`: online `SpeakerDiarizer` clustering REAL acoustic features (ZCR, spectral centroid, rolloff, flatness) with an incremental nearest-centroid rule; silence returns `None` (never a fabricated id). Honestly documented as a lightweight feature clusterer, not a neural x-vector model.
+- **B3** `MeetingMode.should_respond(text, priority_level, speaker_id=None)` gates on the *primary* speaker's direct-address window: an ambient speaker talking *about* Aariya no longer triggers a reply. Wired into the WS turn handler (`server/main.py`) — suppressed turns emit `ambient.suppressed` and skip generation; `get_prompt_modifier()` is injected into BrainV2 as a `MEETING CONTEXT` section. Client handles the suppressed reply (`brainClient.js`, `aiEngine.js`, `DialogueSystem.jsx` — the placeholder bubble is dropped).
+- **B-frontend** `src/hooks/useAudioAnalyzer.js` now taps the real mic stream (second analyser) and publishes a 16 kHz/16-bit PCM snapshot; `src/systems/brainClient.js` forwards `audio_energy` / `vad_active` / `meeting_pcm_b64` / `meeting_sample_rate` with the chat turn. Protocol fields added to `MultimodalInput`.
+- Tests: `server/tests/test_meeting_mode_vad.py` (14).
+- **Deferred (documented, B4):** spatial pan / direction-of-arrival — there is no real multi-channel or SRP-PHAT source in this stack, so no fabricated position is produced.
+
+### 2026-10-16 — Verification (all tracks)
+- Backend: **625 passed, 3 skipped** (`venv/bin/python -m pytest server/tests`).
+- Frontend: **63 passed** (`npm run test:unit`); eslint clean; `npm run build` ✓ (11.5 s).
+- HTTP smoke: `/api/rl/status`, `/api/meeting/status`, `POST /api/signals/ingest` all 200.
+- **No mock/synthetic/hardcoded data** anywhere in the production paths; every surface reports an honest empty/untrained state.
+
+**Next:** none outstanding — all six partial tracks (A–F) are complete. Open follow-up: sign-in / account-switch UI (identity is device-local) and B4 spatial audio.
+

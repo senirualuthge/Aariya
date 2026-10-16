@@ -22,7 +22,7 @@ Track B additions (real VAD + diarization):
     so an ambient speaker talking about Aariya doesn't trigger a reply.
 """
 
-from typing import Dict, List, Optional
+from typing import List, Optional
 import base64
 import os
 import time

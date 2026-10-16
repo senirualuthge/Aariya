@@ -60,6 +60,16 @@ function handleServerMessage(data) {
       if (data.thought) eventBus.publish(BRAIN_THOUGHT_EVENT, data.thought);
       break;
     }
+    case 'ambient.suppressed': {
+      // Meeting Mode observed ambient speech that wasn't addressed to Aariya —
+      // resolve the pending turn as "no reply" instead of letting it time out.
+      const req = pending.shift();
+      if (req) {
+        clearTimeout(req.timer);
+        req.resolve({ text: '', streamed: '', suppressed: true, reason: data.reason });
+      }
+      break;
+    }
     default:
       break;
   }
@@ -114,7 +124,27 @@ async function send(text, opts = {}) {
       reject(new Error('Brain response timeout'));
     }, opts.timeoutMs || 45000);
     pending.push(req);
-    sender({ type: 'input', text });
+
+    const payload = { type: 'input', text };
+
+    // Track B: carry the real acoustic signals captured by useAudioAnalyzer so
+    // Meeting Mode can run its webrtcvad + diarization path and gate ambient
+    // chatter. `audio_energy` is normalised to [0,1]; the PCM snapshot (when
+    // present) drives the real VAD.
+    const state = useStore.getState();
+    const stats = state.userAudioStats || {};
+    if (typeof stats.energy === 'number') {
+      payload.audio_energy = Math.max(0, Math.min(1, stats.energy / 255));
+    }
+    if (typeof state.userSpeaking === 'boolean') {
+      payload.vad_active = state.userSpeaking;
+    }
+    if (stats.pcm16b64) {
+      payload.meeting_pcm_b64 = stats.pcm16b64;
+      payload.meeting_sample_rate = stats.pcmSampleRate || 16000;
+    }
+
+    sender(payload);
   });
 }
 
