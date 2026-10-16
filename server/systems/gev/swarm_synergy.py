@@ -26,8 +26,10 @@ Chain reactions:
 
 from __future__ import annotations
 
-import asyncio
+import copy
+import inspect
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -145,10 +147,17 @@ class SwarmSynergyBridge:
         self._dispatch_log: list[dict] = []
         self._max_log = 200
         self._dispatch_callbacks: list[Callable[[dict], Any]] = []
+        # agent_type -> real executor (sync or async). Empty until wired.
+        self._handlers: dict[str, Callable[[dict], Any]] = {}
+        self._execution_log: list[dict] = []
 
-        # Load preset rules
+        # Load preset rules. Each bridge gets its OWN copy: PRESET_RULES are
+        # class-level objects, so sharing them would leak cooldown state
+        # (`_last_dispatched_at`) between bridge instances.
         for rule in self.PRESET_RULES:
-            self._synergy_rules[rule.id] = rule
+            fresh = copy.deepcopy(rule)
+            fresh._last_dispatched_at = 0.0
+            self._synergy_rules[fresh.id] = fresh
 
         # Register with geofence engine
         self._engine.on_trigger(self._on_geofence_trigger)
@@ -181,10 +190,33 @@ class SwarmSynergyBridge:
     def on_dispatch(self, callback: Callable[[dict], Any]) -> None:
         """Register a callback for when agents are dispatched.
 
-        The callback receives a dispatch request dict. The orchestrator
-        should actually invoke the agents.
+        The callback receives a synergy event dict (``dispatch_requests`` etc.)
+        and is responsible for actually executing the requests, e.g. by
+        scheduling ``execute_dispatch`` on the running event loop.
         """
         self._dispatch_callbacks.append(callback)
+
+    def register_handler(self, agent_type: str, handler: Callable[[dict], Any]) -> None:
+        """Register the real executor for an ``agent_type``.
+
+        The handler receives a dispatch request dict and may be sync or async.
+        Until a handler is registered, ``execute_dispatch`` reports the request
+        as ``unsupported`` rather than pretending it ran.
+        """
+        self._handlers[agent_type] = handler
+
+    def register_default_handlers(self) -> list[str]:
+        """Register the handlers backed by real agents; return the result.
+
+        Only agent types with a genuine implementation in this stack are
+        registered — the rest stay ``unsupported``.
+        """
+        for agent_type, handler in build_default_handlers().items():
+            self.register_handler(agent_type, handler)
+        return sorted(self._handlers)
+
+    def has_handler(self, agent_type: str) -> bool:
+        return agent_type in self._handlers
 
     def dispatch_agent(self, agent_type: str, task: str, params: dict | None = None) -> dict:
         """Create and return a dispatch request (doesn't execute).
@@ -201,26 +233,66 @@ class SwarmSynergyBridge:
         return request
 
     async def execute_dispatch(self, dispatch_request: dict) -> dict:
-        """Execute a single agent dispatch.
+        """Execute a single agent dispatch through its registered handler.
 
-        This is called by the orchestrator when it receives a dispatch request.
-        Returns the result from the dispatched agent.
+        Returns an honest status:
+
+          * ``ok``          — the real handler ran (its result is attached)
+          * ``unsupported`` — no handler is registered for this ``agent_type``
+          * ``error``       — the handler raised
+
+        Callers must inspect ``status``; nothing is reported as executed that
+        did not actually run. Types with no real backing stay ``unsupported``.
         """
         agent_type = dispatch_request.get("agent_type", "")
-        task = dispatch_request.get("task", "")
-        params = dispatch_request.get("params", {})
+        handler = self._handlers.get(agent_type)
 
-        logger.info("[SwarmSynergy] Dispatching %s: %s", agent_type, task)
+        if handler is None:
+            record = {
+                "status": "unsupported",
+                "agent_type": agent_type,
+                "task": dispatch_request.get("task", ""),
+                "reason": "no handler registered for this agent type",
+            }
+            self._record_execution(record)
+            return record
 
-        # For now, return the dispatch request as a pending action
-        # The actual agent invocation happens through the brain/orchestrator
-        return {
-            "status": "dispatched",
-            "agent_type": agent_type,
-            "task": task,
-            "params": params,
-            "dispatched_at": time.time(),
-        }
+        logger.info(
+            "[SwarmSynergy] Dispatching %s: %s",
+            agent_type, dispatch_request.get("task", ""),
+        )
+
+        try:
+            result = handler(dispatch_request)
+            if inspect.isawaitable(result):
+                result = await result
+            record = {
+                "status": "ok",
+                "agent_type": agent_type,
+                "task": dispatch_request.get("task", ""),
+                "result": result,
+                "executed_at": time.time(),
+            }
+        except Exception as e:  # reported, not swallowed
+            logger.warning("[SwarmSynergy] Dispatch failed for %s: %s", agent_type, e)
+            record = {
+                "status": "error",
+                "agent_type": agent_type,
+                "task": dispatch_request.get("task", ""),
+                "error": str(e),
+            }
+
+        self._record_execution(record)
+        return record
+
+    def _record_execution(self, record: dict) -> None:
+        self._execution_log.append(record)
+        if len(self._execution_log) > self._max_log:
+            self._execution_log = self._execution_log[-self._max_log:]
+
+    def get_execution_log(self, limit: int = 50) -> list[dict]:
+        """Recent execution results (real handler outcomes)."""
+        return self._execution_log[-limit:]
 
     # ── Trigger handling ──────────────────────────────────────────────────────
 
@@ -244,11 +316,14 @@ class SwarmSynergyBridge:
             # Condition check (on the first triggered entity)
             if rule.trigger_condition:
                 entities = event.get("entities", [])
-                if entities:
-                    entity_data = entities[0].get("data", {})
-                    from server.systems.gev.geofencing import _check_attribute_condition
-                    if not _check_attribute_condition(entity_data, rule.trigger_condition):
-                        continue
+                if not entities:
+                    # No entity to evaluate the condition against — a
+                    # conditional rule must not fire on an empty event.
+                    continue
+                entity_data = entities[0].get("data", {})
+                from server.systems.gev.geofencing import _check_attribute_condition
+                if not _check_attribute_condition(entity_data, rule.trigger_condition):
+                    continue
 
             # Trigger matched — dispatch agents
             rule._last_dispatched_at = now
@@ -328,6 +403,8 @@ class SwarmSynergyBridge:
             "enabled_rules": enabled,
             "total_dispatches": len(self._dispatch_log),
             "rules_dispatched": dispatched,
+            "registered_handlers": sorted(self._handlers),
+            "total_executions": len(self._execution_log),
         }
 
     # ── Serialisation ─────────────────────────────────────────────────────────
@@ -368,6 +445,40 @@ class SwarmSynergyBridge:
             except Exception as e:
                 logger.warning("[SwarmSynergy] Failed to import rule: %s", e)
         return count
+
+
+# ── Real agent handlers ───────────────────────────────────────────────────────
+
+def build_default_handlers() -> dict[str, Callable[[dict], Any]]:
+    """Handlers for synergy agent types, backed by real agents.
+
+    Only ``web_search`` has a genuine implementation in this stack (the
+    multi-hop research agent). ``data_analysis`` / ``osint_enrich`` have no
+    real backing, so they are intentionally absent — callers get an honest
+    ``unsupported`` status instead of a fabricated result.
+    """
+
+    def _web_search(request: dict) -> Any:
+        # Imported lazily: heavy RAG/LLM stack, only needed when actually used.
+        from server.systems.agent.controller import get_research_agent
+
+        params = request.get("params", {}) or {}
+        query = params.get("query_template") or request.get("task", "")
+        return get_research_agent().run_research(query)
+
+    return {"web_search": _web_search}
+
+
+def synergy_dispatch_enabled() -> bool:
+    """Whether synergy dispatch should actually execute agents.
+
+    Off by default: enabling it makes real geofence triggers (major
+    earthquakes, emergency squawks, …) launch real research tasks with real
+    network/LLM cost. Set ``AARIYA_SWARM_SYNERGY_DISPATCH=1`` to opt in.
+    """
+    return os.getenv("AARIYA_SWARM_SYNERGY_DISPATCH", "0").lower() not in (
+        "0", "false", "no", "off", "",
+    )
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

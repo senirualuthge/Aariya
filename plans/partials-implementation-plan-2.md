@@ -47,8 +47,8 @@ The entire **Phase‑1 performance / runtime layer** exists but is never initial
   signature but never migrated off the old import.
 - `SocialIntentSystem` — unmounted; `socialIntent` is not even a store field, so it is orphaned.
 - Niche backend gap: `SwarmSynergyBridge.execute_dispatch` (`server/systems/gev/swarm_synergy.py:203`)
-  has **no callers** and returns the dispatch request as a stub; nothing subscribes
-  to `on_dispatch`, so GEV triggers never reach the swarm.
+  had **no callers** and returned the dispatch request as a stub — nothing subscribed
+  to `on_dispatch`, so GEV triggers never reached the swarm. **Resolved 2026‑10‑17** (see §6).
 
 > **Why this is a decision, not an automatic fix:** activating it starts extra
 > RAF/interval loops, an FPS/thermal governor, and (if configured) a second msgpack
@@ -63,6 +63,13 @@ The entire **Phase‑1 performance / runtime layer** exists but is never initial
   estimate — documented "swap later" heuristics, not broken gaps.
 - Legacy dead modules (`src/systems/EmotionSystem.jsx`, `PersonalitySystem.jsx`,
   `SessionTracker.js`, `MemorySystem.js`) — superseded/referenced only in a comment.
+- **Audio→emotion (`AudioFFTSystem.tsx` / `AudioEmotionSystem.jsx`)** — now correctly
+  identified as a *feature*, not a wiring fix: neither component is mounted, `audioEmotion`
+  is not a store field and has no consumer, and mounting `AudioFFTSystem` would open a
+  second microphone stream alongside `useAudioAnalyzer`. Making it real needs a
+  store field + a consumer + mic reuse — a scoped follow‑up, not a mechanical migration.
+  (Note: plan §2.2's claim that `AudioFFTSystem` was "never migrated off the old import"
+  is **stale** — it already uses `tripleLoopRuntime.subscribeSensor`.)
 
 ---
 
@@ -141,3 +148,30 @@ via `initializePerformanceSystem()`:
   - Verify: `npm run test:unit` **78 passed**; `npx eslint` clean; `npm run build` ✓
     (new chunks `PerformanceBootstrap`/`StabilityGuardrails`/`SocialIntentSystem`/`ThermalMonitor`,
     no `msgpack` in the bundle).
+
+---
+
+## 6. Wave I — GEV → swarm synergy dispatch (2026‑10‑17)
+
+Closes the last named backend gap (plan §2.2): GEV triggers never reached the swarm.
+
+- `SwarmSynergyBridge` gained a real handler registry (`register_handler` /
+  `register_default_handlers` / `has_handler`) and `execute_dispatch` is now honest —
+  it returns `ok` (real result) / `unsupported` (no handler) / `error` (handler raised)
+  instead of the previous fabricated `{"status": "dispatched"}` that ran nothing.
+  `get_execution_log()` + `get_stats()` expose real outcomes.
+- `build_default_handlers()` binds **only** `web_search` → the real multi-hop
+  research agent (`get_research_agent().run_research`). `data_analysis` / `osint_enrich`
+  have no real backing and stay `unsupported` (no invented data).
+- `GEVAgent` registers handlers + `on_dispatch` and schedules execution onto the
+  running loop (`_on_synergy_dispatch` → `_execute_dispatch_request`).
+- **Opt-in:** `AARIYA_SWARM_SYNERGY_DISPATCH=1` (default off) — real dispatch spends
+  real network/LLM budget on geofence triggers.
+- **Two latent bugs fixed:** preset `SynergyRule`s were shared class-level objects
+  (cooldown leaked across instances) → now deep-copied per bridge; and a conditional
+  rule fired with no entity to test its condition → now skipped.
+- Tests: `server/tests/test_swarm_synergy_dispatch.py` (22) — the bridge had none before.
+- Verify: backend **653 passed, 3 skipped** (+22).
+
+**Still open (deliberately, needs a product decision):** audio→emotion
+(`AudioFFTSystem.tsx`) — needs a store field, a consumer, and mic reuse (see §2.3).

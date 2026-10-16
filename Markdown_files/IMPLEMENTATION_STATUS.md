@@ -62,6 +62,14 @@ The core cognitive pipeline has been upgraded to the FIXV4 standard. These compo
 * **SocialIntentSystem** is wired onto the cognition loop (priority 30) and the missing `socialIntent`/`setSocialIntent` store field was added; `StabilityGuardrails` now subscribes to `tripleLoopRuntime.subscribeCognition` (priority 10) instead of the legacy `RuntimeLoop`. A latent `NeuralEngine.resolveSocialIntent` bug (it read `emotions.arousal`, but arousal lives on the store root, making the TEASING branch unreachable) was fixed to read `state.arousal`. Covered by `src/systems/ai/SocialIntent.test.mjs`.
 * **Still dormant by choice:** the legacy `RuntimeLoop.js` / `RuntimeController.jsx` (now fully unreferenced), `TripleLoopAdapter.tsx`, `stateThrottle`, and the msgpack `wsClient`.
 
+### 11. GEV → Swarm synergy dispatch (2026-10-17)
+* `SwarmSynergyBridge.execute_dispatch` used to return `{"status": "dispatched"}` while executing **nothing** — a fabricated success. It is now a real, registry-driven dispatcher: `register_handler(agent_type, handler)` binds a genuine executor (sync or async), and every call returns an honest status — `ok` (with the real result), `unsupported` (no handler registered), or `error` (handler raised). `get_execution_log()` / `get_stats()` expose the real outcomes.
+* `build_default_handlers()` binds only **`web_search`** → `get_research_agent().run_research(query)` (the real multi-hop agent). `data_analysis` / `osint_enrich` have no genuine implementation in this stack, so they stay honestly `unsupported` rather than returning invented data.
+* `GEVAgent` schedules execution of a fired synergy event onto the running loop (`_on_synergy_dispatch` → `_execute_dispatch_request`), so a geofence trigger (major earthquake, emergency squawk, …) now reaches the agent swarm.
+* **Opt-in by default:** real dispatch launches real research tasks with real network/LLM cost, so it only activates with `AARIYA_SWARM_SYNERGY_DISPATCH=1`. Off, the bridge still evaluates rules and records dispatch specs, but executes nothing.
+* Two latent bugs surfaced and fixed while testing: preset `SynergyRule`s were shared class-level objects (cooldown state leaked between bridge instances), and a *conditional* rule fired even when the event carried no entity to evaluate its condition against.
+* Covered by `server/tests/test_swarm_synergy_dispatch.py` (22) — the bridge previously had no tests at all.
+
 ---
 
 ## 🟡 In-Progress / Partially Implemented
@@ -84,8 +92,8 @@ These systems are functional but require final "Investor-Grade" polishing:
 
 ### 3. ~~Dormant Runtime / Performance Layer~~ — ✅ Resolved (2026-10-16)
 * The Phase-1 performance layer is now initialized (guarded) by `PerformanceBootstrap`; `TripleLoopRuntime`, `fpsController`, `thermalController`, `ThermalMonitor` and `SocialIntentSystem` all run. See §10 for details.
-* **Deliberately still off:** the msgpack telemetry `wsClient` + second face worker (avoided by not calling `initializePerformanceSystem`), and the now-unreferenced legacy `RuntimeLoop` / `RuntimeController` (retiring them is optional cleanup, not required for correctness).
-* Also unwired: `SwarmSynergyBridge.execute_dispatch` (no callers; returns the dispatch request as a stub) — GEV triggers never reach the swarm.
+* **Deliberately still off:** the msgpack telemetry `wsClient` + second face worker (avoided by not calling `initializePerformanceSystem`). The legacy `RuntimeLoop` / `RuntimeController` are now referenced only by two unmounted legacy components (`EmotionSystem.jsx`, `AudioEmotionSystem.jsx`), whose successor `AudioFFTSystem.tsx` is already migrated to `tripleLoopRuntime` but unmounted (it opens its own mic stream, which would duplicate `useAudioAnalyzer`) — retiring the trio is optional cleanup, not required for correctness.
+* **Swarm synergy dispatch** — ✅ Resolved (2026-10-17), see §11.
 
 ---
 

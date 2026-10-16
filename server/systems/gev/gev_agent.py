@@ -42,7 +42,10 @@ from server.systems.gev.gev_client import get_gev_client, compute_snapshot_diff
 from server.systems.world_model.world_state import get_world_state
 from server.systems.gev.geofencing import get_geofence_engine, GeofenceRule, TriggerType, CircleRegion, TriggerAction
 from server.systems.gev.gev_intelligence import GPSSpoofDetector, OSINTEnricher, SocialSentiment, TrajectoryForecaster
-from server.systems.gev.swarm_synergy import get_swarm_synergy_bridge
+from server.systems.gev.swarm_synergy import (
+    get_swarm_synergy_bridge,
+    synergy_dispatch_enabled,
+)
 from server.systems.gev.satellite_vision import get_satellite_vision, ImageryRequest
 from server.systems.gev.obsidian_integration import get_obsidian_integration
 from server.systems.rag.obsidian_indexer import get_obsidian_indexer
@@ -122,6 +125,15 @@ class GEVAgent(Agent):
         # Intelligence sub-systems
         self._geofence = get_geofence_engine()
         self._synergy = get_swarm_synergy_bridge()
+        # Synergy dispatch is opt-in: enabling it launches real research tasks
+        # with real network/LLM cost. Off unless AARIYA_SWARM_SYNERGY_DISPATCH=1.
+        if synergy_dispatch_enabled():
+            registered = self._synergy.register_default_handlers()
+            self._synergy.on_dispatch(self._on_synergy_dispatch)
+            logger.info(
+                "[GEVAgent] Swarm synergy dispatch enabled (handlers: %s)",
+                ", ".join(registered) or "none",
+            )
         self._gps_detector = GPSSpoofDetector()
         self._osint = OSINTEnricher()
         self._social = SocialSentiment()
@@ -201,6 +213,35 @@ class GEVAgent(Agent):
                 
         except Exception as e:
             logger.error(f"[GEVAgent] Failed to check for anomalies: {e}")
+
+    # ── Swarm synergy dispatch (opt-in) ───────────────────────────────────────
+
+    def _on_synergy_dispatch(self, event: dict) -> None:
+        """Schedule execution of a synergy event's dispatch requests.
+
+        Called synchronously by the bridge during geofence evaluation, so the
+        requests are scheduled onto the running loop instead of blocking it.
+        """
+        requests = event.get("dispatch_requests", [])
+        if not requests:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.warning("[GEVAgent] Synergy dispatch skipped: no running event loop")
+            return
+        for request in requests:
+            loop.create_task(self._execute_dispatch_request(request, event))
+
+    async def _execute_dispatch_request(self, request: dict, event: dict) -> dict:
+        """Execute one dispatch request through the real agent handler."""
+        result = await self._synergy.execute_dispatch(request)
+        if result.get("status") != "ok":
+            logger.warning(
+                "[GEVAgent] Synergy dispatch %s (%s) → %s",
+                event.get("synergy_rule"), request.get("agent_type"), result.get("status"),
+            )
+        return result
 
     async def refresh_diff(self) -> dict:
         """Fetch a fresh snapshot and write a diff-aware update to WorldState.
