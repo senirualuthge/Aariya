@@ -222,6 +222,25 @@ class MeetingMode:
         """Real diarized speakers (empty until PCM has been processed)."""
         return self._diarizer.speakers() if self._diarizer is not None else []
 
+    def get_reply_target(self) -> dict:
+        """
+        The REAL diarized speaker the current turn's reply is addressed to,
+        plus a stable left→right UI slot for it (B4).
+
+        `speaker_id` is the diarizer's id for the person who just spoke;
+        `slot` is that id's position in the **id-ordered** roster — a stable
+        seating slot, NOT an acoustic direction. This stack has no microphone
+        array, so no direction-of-arrival is invented. Every field is
+        None/0 when Meeting Mode is off or no PCM has been diarized.
+        """
+        if not self.active:
+            return {"speaker_id": None, "slot": None, "count": 0}
+
+        ids = sorted(int(s["id"]) for s in self.get_speakers())
+        sid = self.current_speaker_id
+        slot = ids.index(sid) if (sid is not None and sid in ids) else None
+        return {"speaker_id": sid, "slot": slot, "count": len(ids)}
+
     # ── Control ───────────────────────────────────────────────────────────────
 
     def toggle(self, state: Optional[bool] = None) -> bool:

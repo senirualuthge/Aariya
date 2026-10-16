@@ -19,6 +19,7 @@ import { subscribeMetrics, sendMetricsCommand } from '../systems/metricsClient';
 import { isBuildSummaryFresh, BUILD_WARN_MAX_AGE_HOURS } from '../utils/buildFreshness.js';
 import { apiBase, apiWsBase } from '../utils/apiHost';
 import { getUserId } from '../systems/userIdentity';
+import { panForSlot } from '../systems/spatialAudio';
 import { schedulePredictorPoll, startUptimeTicker } from '../utils/backgroundPolls';
 import CveScannerPanel from './security/CveScannerPanel';
 import { useSignalsStore } from '../admin/store/useSignalsStore';
@@ -1576,6 +1577,9 @@ function CompanionTab() {
 // ── Control Tab ───────────────────────────────────────────────────────────────
 function ControlTab({ personalityPreset, autoAdapt, onModeChange, onAutoAdapt, onMemoryWipe, onSessionReset, memoryWiped, isOnline, meetingMode, onToggleMeeting, onSetMeetingWindow, authStatus, onForceMode }) {
   const [windowDraft, setWindowDraft] = React.useState(meetingMode?.base_window || 30);
+  // B4: the diarized speaker the latest reply was addressed to (null = none).
+  const replyTarget = useStore((s) => s.replyTarget);
+  const replyPan = replyTarget ? panForSlot(replyTarget.slot, replyTarget.count) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -1733,6 +1737,28 @@ function ControlTab({ personalityPreset, autoAdapt, onModeChange, onAutoAdapt, o
             </div>
             <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1 }}>Name Triggers</div>
           </div>
+        </div>
+
+        {/* B4 — reply attribution: the diarized speaker the last reply was aimed
+            at, plus the stable stereo slot that would carry it. The pan is only
+            applied when real audio plays (see systems/spatialAudio.js) — the
+            browser TTS voice cannot be routed through WebAudio. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', marginBottom: 16, borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1 }}>Last reply addressed to</div>
+            <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: replyTarget ? '#ffd93d' : 'rgba(255,255,255,0.3)' }}>
+              {replyTarget ? `Speaker ${replyTarget.speakerId}` : '— (none diarized)'}
+            </div>
+          </div>
+          {replyTarget && (
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1 }}>Stereo slot</div>
+              <div style={{ fontSize: 12, fontFamily: 'monospace', color: '#00f2ff' }}>
+                {replyTarget.slot != null ? replyTarget.slot + '/' + replyTarget.count : '—'} · pan {replyPan >= 0 ? '+' : ''}{replyPan.toFixed(2)}
+              </div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>applied to real audio playback</div>
+            </div>
+          )}
         </div>
 
         {/* Base window slider */}

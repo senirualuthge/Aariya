@@ -35,6 +35,18 @@ function handleServerMessage(data) {
     case 'ai_response': {
       // Final complete reply — resolves the oldest pending request
       const req = pending.shift();
+      // B4: the backend labels which diarized speaker the reply is addressed to.
+      // Only act when the field is present so older servers don't clobber it.
+      if ('target_speaker_id' in data) {
+        const sid = data.target_speaker_id;
+        useStore.getState().setReplyTarget(
+          sid == null ? null : {
+            speakerId: sid,
+            slot: data.target_speaker_slot ?? null,
+            count: data.speaker_count ?? 0,
+          }
+        );
+      }
       if (req) {
         clearTimeout(req.timer);
         req.resolve({
@@ -42,6 +54,7 @@ function handleServerMessage(data) {
           streamed: req.streamed || data.text,
           expression: data.expression,
           thought: data.thought,
+          targetSpeakerId: data.target_speaker_id ?? null,
         });
       }
       // RAG pipeline telemetry rides on the same reply (meta.rag) — no need
@@ -64,6 +77,8 @@ function handleServerMessage(data) {
       // Meeting Mode observed ambient speech that wasn't addressed to Aariya —
       // resolve the pending turn as "no reply" instead of letting it time out.
       const req = pending.shift();
+      // No reply → nothing is addressed to anyone.
+      useStore.getState().setReplyTarget(null);
       if (req) {
         clearTimeout(req.timer);
         req.resolve({ text: '', streamed: '', suppressed: true, reason: data.reason });

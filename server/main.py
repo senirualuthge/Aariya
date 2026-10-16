@@ -382,6 +382,11 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
 
             output: MultimodalOutput = await brain.process(input_model, on_token=_stream_token)
 
+            # B4: label the reply with the REAL diarized speaker it is addressed
+            # to (None when Meeting Mode is off / nothing has been diarized) so
+            # the client can attribute — and spatially render — the reply.
+            target = meeting.get_reply_target()
+
             # Final complete reply — the chat surfaces consume this.
             await websocket.send_text(json.dumps({
                 "type": "ai_response",
@@ -390,6 +395,9 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
                 "gestures": output.gestures,
                 "thought": output.thought,
                 "meta": output.meta,
+                "target_speaker_id": target["speaker_id"],
+                "target_speaker_slot": target["slot"],
+                "speaker_count": target["count"],
                 "timestamp": time.time(),
             }))
 

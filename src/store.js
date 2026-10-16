@@ -310,6 +310,13 @@ const useStore = create((set) => ({
   setUserAudioStats: (s)  => set({ userAudioStats: s }),
   setAudioEmotion: (e)    => set({ audioEmotion: e }),
 
+  // ── Meeting Mode (B4) ───────────────────────────────────────────────────────
+  // The diarized speaker the latest reply was addressed to, as labelled by the
+  // backend: { speakerId, slot, count } or null. `slot` is a stable seating
+  // position (not an acoustic bearing) — see systems/spatialAudio.js.
+  replyTarget: null,
+  setReplyTarget: (t) => set({ replyTarget: t }),
+
   // ── Signals (analytics) ─────────────────────────────────────────────────────
   signals: [],
 
