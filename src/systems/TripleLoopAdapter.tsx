@@ -69,7 +69,8 @@ export function TripleLoopAdapter() {
       }
     }, 0, 'Face Detection Trigger');
     
-    // 2. Audio FFT (existing AudioEmotionSystem can stay as-is)
+    // 2. Audio FFT lives in useAudioAnalyzer (systems/audioEmotion.js), which
+    //    taps the *single* microphone stream — no second capture here.
     
     // === COGNITION LOOP SUBSCRIBERS (4-8 Hz) ===
     

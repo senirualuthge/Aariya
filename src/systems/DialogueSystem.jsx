@@ -245,7 +245,12 @@ export default function DialogueSystem() {
                         break;
                     }
                 }
-                if (changed) useStore.getState().setAllEmotions(nextEmotions);
+                if (changed) {
+                    useStore.getState().setAllEmotions(nextEmotions);
+                    // Notify other systems (Architecture Guide). Formerly published
+                    // by the retired legacy EmotionSystem.
+                    eventBus.publish('emotion:changed', nextEmotions);
+                }
             }
 
         }, 100); // 10Hz

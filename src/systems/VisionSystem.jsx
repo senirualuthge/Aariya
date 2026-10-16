@@ -52,12 +52,12 @@ export default function VisionSystem() {
                             useStore.getState().setFaceLastSeen(Date.now());
                         }
                     } else {
-                        // No faces detected
-                        const { faceDetected, setFaceDetected, setUserEmotion } = useStore.getState();
+                        // No faces detected. Only the presence flags change — we do
+                        // NOT invent a "bored" reading (no face-emotion model runs).
+                        const { faceDetected, setFaceDetected } = useStore.getState();
                         if (faceDetected) {
                             setFaceDetected(false);
                             useStore.getState().setFaceLastSeen(Date.now());
-                            setUserEmotion({ primary: 'bored', arousal: 0, valence: -0.1 });
                         }
                     }
                 } catch (err) {

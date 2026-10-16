@@ -300,10 +300,15 @@ const useStore = create((set) => ({
   userSpeaking:    false,
   userVolume:      0,
   userAudioStats:  { energy: 0, highFreqRatio: 0, isLoud: false },
+  // Affect estimated from the live microphone spectrum (see systems/audioEmotion.js).
+  // `confidence` is 0 while the mic is silent, so consumers can tell "no signal"
+  // from "neutral".
+  audioEmotion:    { primary: 'neutral', valence: 0, arousal: 0, confidence: 0 },
 
   setUserSpeaking: (v)    => set({ userSpeaking: v }),
   setUserVolume:   (v)    => set({ userVolume: v }),
   setUserAudioStats: (s)  => set({ userAudioStats: s }),
+  setAudioEmotion: (e)    => set({ audioEmotion: e }),
 
   // ── Signals (analytics) ─────────────────────────────────────────────────────
   signals: [],

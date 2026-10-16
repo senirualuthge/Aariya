@@ -1,5 +1,14 @@
 import { useEffect, useRef } from 'react';
 import useStore from '../store';
+import {
+    extractAudioFeatures,
+    variationFromHistory,
+    audioToEmotion,
+    dominantAffect,
+    fuseUserAffect,
+    FEATURE_WINDOW,
+    AFFECT_PUBLISH_MS,
+} from '../systems/audioEmotion';
 
 /**
  * useAudioAnalyzer.js
@@ -11,6 +20,12 @@ import useStore from '../store';
  * `pcm16b64` (+ `pcmSampleRate`). brainClient forwards it with the chat turn so
  * the backend can run webrtcvad + speaker diarization. The visual analysis
  * (volume/energy) is unchanged — a second analyser node taps the same stream.
+ *
+ * User affect: the same analyser also feeds systems/audioEmotion.js, which
+ * derives an honest valence/arousal estimate and publishes it on
+ * store.audioEmotion + store.userEmotion. This is the only real writer of
+ * `userEmotion`; the facial half is not wired (no face-emotion model runs), so
+ * the fused reading is audio-sourced.
  */
 
 const TARGET_SAMPLE_RATE = 16000;
@@ -54,7 +69,7 @@ function int16ToBase64(int16) {
 }
 
 export function useAudioAnalyzer() {
-    const { started, setUserVolume, setUserAudioStats, setUserSpeaking } = useStore();
+    const { started, setUserVolume, setUserAudioStats, setUserSpeaking, setAudioEmotion, setUserEmotion } = useStore();
     const audioContextRef = useRef(null);
     const analyserRef = useRef(null);
     const dataArrayRef = useRef(null);
@@ -69,6 +84,10 @@ export function useAudioAnalyzer() {
     const pcmLengthRef = useRef(0);
     const lastEncodeRef = useRef(0);
     const pcmInfoRef = useRef({ pcm16b64: null, pcmSampleRate: TARGET_SAMPLE_RATE });
+
+    // Affect estimation: rolling per-frame energy history + publish throttle.
+    const energyHistoryRef = useRef([]);
+    const lastAffectRef = useRef(0);
 
     useEffect(() => {
         if (!started) return;
@@ -166,6 +185,35 @@ export function useAudioAnalyzer() {
                         }
                     }
 
+                    // ── User affect (real spectrum → honest valence/arousal) ──
+                    const features = extractAudioFeatures(dataArrayRef.current);
+                    const history = energyHistoryRef.current;
+                    history.push(features.energy);
+                    if (history.length > FEATURE_WINDOW) history.shift();
+                    const tempo = variationFromHistory(history);
+
+                    const affectNow = performance.now();
+                    if (affectNow - lastAffectRef.current >= AFFECT_PUBLISH_MS) {
+                        lastAffectRef.current = affectNow;
+                        const { valence, arousal, confidence } = audioToEmotion({
+                            energy: features.energy,
+                            pitch: features.pitch,
+                            tempo,
+                        });
+                        const reading = {
+                            primary: dominantAffect(valence, arousal),
+                            valence,
+                            arousal,
+                            confidence,
+                        };
+                        setAudioEmotion(reading);
+                        // Fuse into the user-affect surface the UI already reads.
+                        // The facial source is not wired, so this is audio-sourced;
+                        // near-silence yields null and leaves the reading untouched.
+                        const fused = fuseUserAffect({ audio: reading });
+                        if (fused) setUserEmotion(fused);
+                    }
+
                     setUserVolume(volume);
                     setUserSpeaking(isSpeaking);
                     setUserAudioStats({
@@ -198,8 +246,10 @@ export function useAudioAnalyzer() {
             pcmChunksRef.current = [];
             pcmLengthRef.current = 0;
             pcmInfoRef.current = { pcm16b64: null, pcmSampleRate: TARGET_SAMPLE_RATE };
+            energyHistoryRef.current = [];
+            lastAffectRef.current = 0;
         };
-    }, [started, setUserVolume, setUserAudioStats, setUserSpeaking]);
+    }, [started, setUserVolume, setUserAudioStats, setUserSpeaking, setAudioEmotion, setUserEmotion]);
 
     return null; // Logic only hook
 }

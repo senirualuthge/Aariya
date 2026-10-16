@@ -2,9 +2,9 @@
 //
 // System-wide microphone / camera kill switches (ToDo §5).
 //
-// Both switches are enforced in ONE place instead of at each of the five
+// Both switches are enforced in ONE place instead of at each of the
 // getUserMedia call sites (OrbAvatar, useCamera, useAudioAnalyzer,
-// AudioEmotionSystem, gevRealtime). A single interceptor around
+// gevRealtime). A single interceptor around
 // navigator.mediaDevices.getUserMedia:
 //
 //   1. refuses a request whose device is switched off, so no new capture can
