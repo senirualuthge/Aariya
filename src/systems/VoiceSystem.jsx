@@ -3,6 +3,7 @@ import useStore from '../store';
 import { brainClient, BRAIN_THOUGHT_EVENT } from './brainClient';
 import { eventBus } from '../core/EventBus';
 import { apiBase, apiWsBase } from '../utils/apiHost';
+import { getUserId } from './userIdentity';
 
 /**
  * VoiceSystem — lives for the whole session.
@@ -81,7 +82,11 @@ function VoiceSystem() {
       })
       .catch(() => {/* server may still be booting — broadcasts will fill in */});
 
-    ws.current = new WebSocket(`${apiWsBase()}/ws/dashboard/stream`);
+    // Carry the active user id on the handshake so the backend binds this
+    // session to the real tenant instead of the hardcoded 'user_default'.
+    ws.current = new WebSocket(
+      `${apiWsBase()}/ws/dashboard/stream?user_id=${encodeURIComponent(getUserId())}`
+    );
 
     ws.current.onopen = () => {
       registerSender((msg) => {

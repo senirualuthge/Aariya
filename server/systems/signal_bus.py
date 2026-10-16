@@ -1,6 +1,7 @@
 import time
 import uuid
 import logging
+import collections
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger("Aariya.SignalBus")
@@ -83,3 +84,45 @@ async def emit_real_event(source: str, severity: str, title: str,
         logging.getLogger("Aariya.SignalBus").debug(
             "event log emission skipped: %s", exc
         )
+
+
+# ── News alerts (typed projection of the ingest stream) ───────────────────────
+# BrainV2 grounds its context in REAL world events that pulse-news ingested —
+# nothing is ever fabricated into this feed. Bounded ring, newest last.
+NEWS_FEED_MAXLEN = 50
+news_alerts: "collections.deque[Dict[str, Any]]" = collections.deque(maxlen=NEWS_FEED_MAXLEN)
+
+
+def record_news_alert(alert: Dict[str, Any]) -> Dict[str, Any]:
+    """Store one real news alert (validated at the ingest boundary).
+
+    Missing fields normalise to neutral values; the headline is required, so an
+    alert without one is returned but NOT stored — we never invent a story.
+    """
+    entry = {
+        "headline": str(alert.get("headline", "")).strip(),
+        "summary": str(alert.get("summary", "")).strip(),
+        "importance": float(alert.get("importance", 0.0) or 0.0),
+        "category": str(alert.get("category", "general") or "general"),
+        "topics": [str(t).strip() for t in (alert.get("topics") or []) if str(t).strip()],
+        "url": str(alert.get("url", "") or ""),
+        "ts": float(alert.get("ts") or time.time()),
+        "received_at": time.time(),
+    }
+    if entry["headline"]:
+        news_alerts.append(entry)
+    return entry
+
+
+def recent_news_alerts(max_age_seconds: float = 3600.0,
+                       min_importance: float = 0.0) -> list:
+    """Real alerts newer than `max_age_seconds` at/above `min_importance`,
+    newest first. Pure read — unknown values are not defaulted into existence."""
+    now = time.time()
+    fresh = [
+        a for a in news_alerts
+        if now - float(a.get("received_at", a.get("ts", 0.0))) <= max_age_seconds
+        and float(a.get("importance", 0.0)) >= min_importance
+    ]
+    fresh.sort(key=lambda a: float(a.get("ts", 0.0)), reverse=True)
+    return fresh

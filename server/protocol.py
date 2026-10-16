@@ -39,6 +39,13 @@ class MultimodalInput(BaseModel):
     image_b64: Optional[str] = None
     emotion_valence: Optional[float] = None
     emotion_arousal: Optional[float] = None
+    # Meeting Mode acoustic signals (Track B). `audio_energy` is the normalised
+    # [0,1] energy used by the speaker heuristic; `meeting_pcm_b64` is base64
+    # 16-bit mono PCM that drives the REAL webrtcvad + diarization path.
+    audio_energy: Optional[float] = None
+    vad_active: Optional[bool] = None
+    meeting_pcm_b64: Optional[str] = None
+    meeting_sample_rate: Optional[int] = None
     metadata: Dict[str, Any] = {}
 
 

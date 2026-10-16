@@ -108,6 +108,99 @@ async def get_personality_history(user_id: str = "user_default", limit: int = 10
         conn.close()
 
 
+# ── Personality trajectory (Core-identity vs Acquired-traits) ─────────────────
+# The three personality axes and their sub-traits (see server.systems.personality).
+_PERSONALITY_AXES = ("cognitive", "emotional", "social")
+
+
+def _axis_means(traits: dict) -> dict:
+    """Aggregate a flat `axis.trait` dict into per-axis means.
+
+    Only REAL, numeric traits present in the row are averaged — an axis with no
+    readings is omitted rather than defaulted, so the caller can tell honest
+    "no data" apart from a genuine zero.
+    """
+    buckets: dict = {axis: [] for axis in _PERSONALITY_AXES}
+    for key, value in (traits or {}).items():
+        if "." not in key:
+            continue
+        axis = key.split(".", 1)[0]
+        if axis in buckets and isinstance(value, (int, float)) and not isinstance(value, bool):
+            buckets[axis].append(float(value))
+    return {axis: sum(vals) / len(vals) for axis, vals in buckets.items() if vals}
+
+
+def _core_axis_means() -> dict:
+    """The immutable baseline origin — the system's default ('balanced') persona
+    aggregated to axis means.
+
+    This is a *constant by design* (the numeric baseline Aariya drifts away
+    from), and it is computed from the code's own canonical default vector
+    rather than invented here.
+    """
+    from server.systems.personality import PERSONALITY_PRESETS
+    return _axis_means(PERSONALITY_PRESETS["balanced"])
+
+
+@router.get("/personality/trajectory")
+async def get_personality_trajectory(user_id: str = "user_default", limit: int = 50):
+    """Per-session personality trajectory built from the REAL snapshot table the
+    live personality system writes (`personality_snapshots_v2`).
+
+    Returns the drifted ("acquired") traits over time, aggregated onto the three
+    personality axes, plus the immutable "core" baseline as the reference origin.
+    Points are chronological (oldest → newest) so the UI can draw a trail, and a
+    user with no snapshots gets an honest empty list — nothing is fabricated.
+    """
+    max_points = max(1, min(limit, 500))
+    conn = get_db_connection()
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS personality_snapshots_v2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                traits_json TEXT NOT NULL,
+                timestamp REAL NOT NULL
+            )
+        """)
+
+        # Newest `limit` rows, then reversed to chronological order so the trail
+        # reads oldest → newest (a plain ASC LIMIT would return the *oldest* N).
+        cur = conn.execute("""
+            SELECT timestamp, traits_json FROM (
+                SELECT timestamp, traits_json
+                FROM personality_snapshots_v2
+                WHERE user_id = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+            ) ORDER BY timestamp ASC
+        """, (user_id, max_points))
+
+        points = []
+        for ts, traits_json in cur.fetchall():
+            try:
+                traits = json.loads(traits_json) or {}
+            except (json.JSONDecodeError, TypeError):
+                traits = {}
+            if not isinstance(traits, dict):
+                traits = {}
+            point = {"ts": ts, "traits": traits}
+            point.update(_axis_means(traits))
+            points.append(point)
+
+        return {
+            "user_id": user_id,
+            "count": len(points),
+            "core": _core_axis_means(),
+            "points": points,
+            "timestamp": _now_iso(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
 @router.get("/memories")
 async def get_memories(user_id: str = "user_default", limit: int = 50):
     """Significant memories for the Timeline tab — real columns of the

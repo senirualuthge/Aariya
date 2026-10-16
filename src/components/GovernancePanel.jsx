@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import DraggablePanel from './DraggablePanel';
 import useStore from '../store';
 import { apiBase } from '../utils/apiHost';
+import { getUserId } from '../systems/userIdentity';
 
 // ── API helper ────────────────────────────────────────────────────────────────
 const API = `${apiBase()}/api/compliance`;
@@ -95,8 +96,8 @@ export default function GovernancePanel() {
   const refresh = useCallback(async () => {
     try {
       const [c, h] = await Promise.all([
-        api('/consent-status?user_id=user_default'),
-        api('/health?user_id=user_default').catch(() => null),
+        api('/consent-status?user_id=${getUserId()}'),
+        api('/health?user_id=${getUserId()}').catch(() => null),
       ]);
       setConsent(c);
       if (h) setHealth(h);
@@ -144,7 +145,7 @@ export default function GovernancePanel() {
 
   const exportPersonality = async () => {
     try {
-      const data = await api('/personality/export?user_id=user_default');
+      const data = await api('/personality/export?user_id=${getUserId()}');
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -205,7 +206,7 @@ export default function GovernancePanel() {
                   disabled={busy[c.key]}
                   onChange={(v) => run(c.key, () => api('/consent', {
                     method: 'POST',
-                    body: JSON.stringify({ user_id: 'user_default', consent: { [c.key]: v } }),
+                    body: JSON.stringify({ user_id: getUserId(), consent: { [c.key]: v } }),
                   }))}
                 />
               </div>
@@ -236,7 +237,7 @@ export default function GovernancePanel() {
                 const frozen = consent?.frozen ?? govFlags?.frozen ?? false;
                 run('freeze', () => api(frozen ? '/personality/unfreeze' : '/personality/freeze', {
                   method: 'POST',
-                  body: JSON.stringify({ user_id: 'user_default' }),
+                  body: JSON.stringify({ user_id: getUserId() }),
                 }));
               }}
               style={btnStyle(busy['freeze'])}
@@ -245,7 +246,7 @@ export default function GovernancePanel() {
             </button>
             <button disabled={busy['reset']} onClick={() => {
               if (window.confirm('Reset personality to defaults? Evolution history will be dropped.')) {
-                run('reset', () => api('/personality/reset', { method: 'POST', body: JSON.stringify({ user_id: 'user_default' }) }));
+                run('reset', () => api('/personality/reset', { method: 'POST', body: JSON.stringify({ user_id: getUserId() }) }));
               }
             }} style={btnStyle(busy['reset'])}>↺ Reset</button>
             <button disabled={busy['export']} onClick={exportPersonality} style={btnStyle(busy['export'])}>⬇ Export</button>
@@ -339,7 +340,7 @@ export default function GovernancePanel() {
                   key={r}
                   onClick={() => run('feedback', () => api('/feedback', {
                     method: 'POST',
-                    body: JSON.stringify({ user_id: 'user_default', rating: r, discomfort: r === 0.2 }),
+                    body: JSON.stringify({ user_id: getUserId(), rating: r, discomfort: r === 0.2 }),
                   }))}
                   style={{
                     flex: 1, padding: '0.35rem 0.2rem', borderRadius: 8, cursor: 'pointer',

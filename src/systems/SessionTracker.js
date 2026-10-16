@@ -1,7 +1,17 @@
 import { useEffect, useRef } from 'react';
 import useStore from '../store';
 import { getDB } from '../db/init';
-import { v4 as uuidv4 } from 'uuid';
+import { getUserId } from './userIdentity';
+
+// Session-id generator (crypto.randomUUID when available, else fallback).
+function newSessionId() {
+    try {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+    } catch { /* insecure context */ }
+    return `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export default function SessionTracker() {
     const sessionIdRef = useRef(null);
@@ -13,8 +23,8 @@ export default function SessionTracker() {
 
         const db = getDB();
         
-        // Get or create user
-        const userId = 'user_default'; // TODO: Multi-user support later
+        // Get or create user — resolved identity, not a hardcoded literal.
+        const userId = getUserId();
         const userExists = db.prepare('SELECT user_id FROM users WHERE user_id = ?').get(userId);
         
         if (!userExists) {
@@ -22,7 +32,7 @@ export default function SessionTracker() {
         }
 
         // Start new session
-        const sessionId = uuidv4();
+        const sessionId = newSessionId();
         sessionIdRef.current = sessionId;
         useStore.getState().setSessionId(sessionId); // Store in Zustand
         

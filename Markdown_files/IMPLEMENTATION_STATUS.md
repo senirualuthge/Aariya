@@ -1,6 +1,6 @@
 # AI Girl Repository Implementation Status (FIXV4 Update)
 
-> **Last Updated**: 2026-08-07
+> **Last Updated**: 2026-10-16
 > **Architecture Level**: FIXV4 (Advanced Swarm Intelligence)
 
 Based on the recent architectural transition, here is the current production-readiness state of the AI Girl platform.
@@ -54,8 +54,12 @@ These systems are functional but require final "Investor-Grade" polishing:
 ### 1. Multi-User Gating (Meeting Mode)
 * The Direct Address window + dynamic speaker-scaling is implemented, but multi-speaker VAD (Voice Activity Detection) to isolate the primary user from ambient participants is not yet wired in.
 
-### 2. Single-User Assumptions
-* Several paths still hardcode `user_default` (`src/systems/SessionTracker.js`, `server/autonomy/manager.py`) — true multi-user support remains a TODO.
+### 2. Multi-user identity — ✅ Resolved (2026-10-16)
+* A single identity provider (`src/systems/userIdentity.js`) is now the source of truth for the active user id; the frontend no longer hardcodes the `user_default` literal (`SessionTracker`, `PersonalitySystem`, `MemorySystem`, `GovernancePanel`, `AnalyticsDashboard`, `SessionHistoryCard`, `VoiceSystem`).
+* The cognitive-loop WS handshake carries `?user_id=<id>`; the backend binds each connection to it in `_run_cognitive_loop`, `/ws/mobile`, and `/ws/brain_metrics`, falling back to `user_default` only for legacy clients.
+* The autonomy daemon accepts an explicit `user_id`, then `AARIYA_USER_ID`, then the legacy fallback (`AutonomousDaemon`, `get_daemon`, `AutonomousManager`).
+* Covered by `src/systems/userIdentity.test.mjs` and `server/tests/test_multi_user_isolation.py`.
+* **Remaining:** a real sign-in / account-switch UI — identity is device-local (persisted per install) today.
 
 ---
 

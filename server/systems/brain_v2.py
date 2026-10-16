@@ -512,6 +512,11 @@ class BrainV2:
         swarm_result = await self.swarm.process_turn(swarm_state)
         vision_context: str = swarm_result.get("vision_context", "")
 
+        # Real world-news grounding (Track D): if pulse-news ingested anything
+        # important recently, inject it as a [NEWS] block. Empty when nothing
+        # fresh qualifies — no filler is invented.
+        news_context = self._build_news_context()
+
         # Agent society (AccessFIles §12): stash the specialists' consensus;
         # it is surfaced into synoptic after the synoptic rebuild (see below)
         # so the frontend can show which specialist leads this turn + agreement.
@@ -641,14 +646,24 @@ Example: {"intent": true, "layer": "flights", "lat": 51.5072, "lon": -0.1276}"""
         if getattr(self, '_return_greeting_hint', None):
             personality_directive += f"\n[Return greeting: {self._return_greeting_hint}]"
 
+        # Meeting Mode behavioural guidance (Track B): when active, keep replies
+        # concise and defer to the ambient flow. Empty string when inactive.
+        try:
+            from server.systems.meeting_mode import get_meeting_mode as _get_meeting_mode
+            meeting_context = _get_meeting_mode().get_prompt_modifier()
+        except Exception:
+            meeting_context = ""
+
         response_text = await self._generate_response(
             text=input_data.text,
             strategy=strategy,
             vision_context=vision_context,
+            news_context=news_context,
             personality_directive=personality_directive,
             thought=thought,
             memory_context=memory_context,
             history=history,
+            meeting_context=meeting_context,
             on_token=on_token,
         )
         if security_prefix:
@@ -1345,6 +1360,7 @@ Example: {"intent": true, "layer": "flights", "lat": 51.5072, "lon": -0.1276}"""
                          "arousal": self.self_awareness.arousal,
                          "trust": self.self_awareness.trust,
                          "continued": True},
+                        meta={"user_id": self.user_id},
                     )
                     self._ppo_policy.maybe_update()
                 self._rl_prev_state = {
@@ -1538,16 +1554,46 @@ Example: {"intent": true, "layer": "flights", "lat": 51.5072, "lon": -0.1276}"""
         return (f"Emotional state: {mood} (valence={v:.2f}, arousal={a:.2f}). "
                 f"Relationship: {trust} ({t:.2f}), {att_str} (attachment={att:.2f}).")
 
+    def _build_news_context(self) -> str:
+        """Assemble a [NEWS] block from REAL recent ingested alerts (pulse-news).
+
+        Returns "" when nothing important is fresh — no filler is invented.
+        """
+        try:
+            import os as _os
+            from server.systems.signal_bus import recent_news_alerts
+            min_importance = float(_os.getenv("AARIYA_NEWS_CONTEXT_MIN_IMPORTANCE", "0.6"))
+            max_age = float(_os.getenv("AARIYA_NEWS_CONTEXT_MAX_AGE_SECONDS", "3600"))
+            alerts = recent_news_alerts(max_age_seconds=max_age, min_importance=min_importance)
+            if not alerts:
+                return ""
+            lines = []
+            for a in alerts[:3]:
+                meta = a.get("category", "general")
+                topics = a.get("topics") or []
+                if topics:
+                    meta += " · " + ", ".join(topics)
+                line = f"- [{meta}] {a['headline']}"
+                if a.get("summary"):
+                    line += f" — {a['summary']}"
+                lines.append(line)
+            return "\n".join(lines)
+        except Exception as exc:
+            logger.debug(f"[BrainV2] news context skipped: {exc}")
+            return ""
+
     async def _generate_response(
         self,
         *,
         text: Optional[str],
         strategy: str,
         vision_context: str = "",
+        news_context: str = "",
         personality_directive: str = "",
         thought: str = "",
         memory_context: str = "",
         history: str = "",
+        meeting_context: str = "",
         on_token: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> str:
         """
@@ -1590,6 +1636,11 @@ Example: {"intent": true, "layer": "flights", "lat": 51.5072, "lon": -0.1276}"""
         ]
         if vision_context:
             sections.append(f"\nVISION (what Aariya sees):\n{vision_context}")
+        if news_context:
+            sections.append(
+                f"\nNEWS (real recent world events — if you mention any of these, "
+                f"ground it strictly in the facts given):\n{news_context}"
+            )
         if memory_context:
             sections.append(f"\nMEMORIES SHE REMEMBERS (relevant past moments):\n{memory_context}")
         if history:
@@ -1603,6 +1654,11 @@ Example: {"intent": true, "layer": "flights", "lat": 51.5072, "lon": -0.1276}"""
             "",
             f"PERSONALITY DIRECTIVE:\n{personality_directive}",
         ])
+        if meeting_context:
+            sections.append(
+                f"\nMEETING CONTEXT (behavioural guidance — tone/register only):\n"
+                f"{meeting_context}"
+            )
         if thought:
             sections.append(
                 f"\nINNER THOUGHT (Aariya's private reflection — let it subtly shape "

@@ -31,6 +31,14 @@ def _mirror_to_admin(stype: str, severity: str, source: str,
     from both loop and non-loop contexts."""
     try:
         from server.systems.signal_bus import emit_real_event
+        # news.alert traffic is also projected into the typed news feed that
+        # BrainV2 reads — a real, validated event, never synthesised here.
+        if stype == "news.alert":
+            try:
+                from server.systems.signal_bus import record_news_alert
+                record_news_alert(payload)
+            except Exception:  # pragma: no cover - defensive
+                logger.debug("[infra-signals] news feed record failed", exc_info=True)
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(emit_real_event(

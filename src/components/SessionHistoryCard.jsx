@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiBase } from '../utils/apiHost';
+import { getUserId } from '../systems/userIdentity';
 
 const REFRESH_MS = 30000;
 
@@ -29,8 +30,8 @@ export default function SessionHistoryCard() {
     async function load() {
       try {
         const [oRes, mRes] = await Promise.all([
-          fetch(`${apiBase()}/api/analytics/overview?limit=10`),
-          fetch(`${apiBase()}/api/analytics/memories?limit=6`),
+          fetch(`${apiBase()}/api/analytics/overview?limit=10&user_id=${encodeURIComponent(getUserId())}`),
+          fetch(`${apiBase()}/api/analytics/memories?limit=6&user_id=${encodeURIComponent(getUserId())}`),
         ]);
         if (!oRes.ok) throw new Error(`overview ${oRes.status}`);
         if (!mRes.ok) throw new Error(`memories ${mRes.status}`);
@@ -132,7 +133,7 @@ export default function SessionHistoryCard() {
 
           {Array.isArray(memories) && memories.length === 0 && sessions.length === 0 && (
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
-              No sessions or memories recorded yet for user_default.
+              No sessions or memories recorded yet for {getUserId()}.
             </div>
           )}
         </>

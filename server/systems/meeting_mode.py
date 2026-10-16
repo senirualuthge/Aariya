@@ -12,12 +12,26 @@ FIXV4 additions over the original stub:
   • get_ambient_speaker_count() → int heuristic
   • Dynamic direct_address_window scaling: more speakers → longer window
     so Aariya stays in "follow-up mode" longer before going ambient.
+
+Track B additions (real VAD + diarization):
+  • When a client sends 16-bit PCM, `report_audio_frame(..., pcm_b64=...)`
+    runs a real webrtcvad pass (server.systems.voice.vad) and clusters the
+    speech segments into speaker ids (server.systems.voice.diarization).
+  • The energy-variance heuristic above stays as the no-PCM fallback.
+  • `should_respond()` gates on the *primary* speaker's direct-address window
+    so an ambient speaker talking about Aariya doesn't trigger a reply.
 """
 
 from typing import Dict, List, Optional
+import base64
+import os
 import time
 import math
 import collections
+
+import numpy as np
+
+from server.systems.voice import vad as voice_vad
 
 
 # ── Speaker Tracker ────────────────────────────────────────────────────────────
@@ -105,26 +119,108 @@ class MeetingMode:
 
         self._speaker_tracker = SpeakerTracker()
 
+        # Real VAD + diarization (Track B). Built lazily on first PCM frame.
+        # AARIYA_MEETING_VAD=0 disables the real path (heuristic only).
+        self._vad_enabled = os.getenv("AARIYA_MEETING_VAD", "1").lower() not in (
+            "0", "false", "no", "off")
+        self._vad = None
+        self._diarizer = None
+        self.current_speaker_id: Optional[int] = None
+        self.primary_speaker_id: Optional[int] = None
+        self.last_speech_ratio: float = 0.0
+        self.vad_active: bool = False
+
     # ── Audio frame reporting (called by WebSocket handler) ────────────────────
 
-    def report_audio_frame(self, energy: float, vad_user: bool) -> None:
+    def report_audio_frame(self, energy: float, vad_user: bool,
+                           pcm_b64: Optional[str] = None,
+                           sample_rate: int = 16000) -> dict:
         """
-        Feed a normalised audio energy sample into the speaker tracker.
-        Called once per incoming WebSocket message from main.py.
+        Feed one audio frame.
+
+        With `pcm_b64` (base64 int16 mono) a REAL webrtcvad pass runs and the
+        speech segments are diarized into speaker ids; without it the energy
+        heuristic is used unchanged. Returns a small summary — nothing is
+        invented when there is no audio to judge.
         """
+        energy = float(energy or 0.0)
         self._speaker_tracker.report_frame(energy, vad_user)
-        # Dynamically scale address window based on speaker count
-        count = self._speaker_tracker.get_speaker_count()
+        self.vad_active = bool(vad_user)
+
+        result = {"used_vad": False, "speech_ratio": None, "speaker_id": None}
+
+        if pcm_b64 and self._vad_enabled and voice_vad.available:
+            try:
+                raw = base64.b64decode(pcm_b64)
+            except Exception:
+                raw = b""
+            if raw:
+                result = self._run_real_vad(raw, sample_rate)
+
+        # Address window scales with the best speaker estimate available.
+        count = self.get_ambient_speaker_count()
         self.direct_address_window = (
             self._base_window
             + max(0, count - 1) * self.WINDOW_SCALE_PER_SPEAKER
         )
+        return result
+
+    def _run_real_vad(self, raw: bytes, sample_rate: int) -> dict:
+        """Real webrtcvad pass + diarization over one PCM chunk."""
+        if self._vad is None:
+            rate = sample_rate if sample_rate in voice_vad.SUPPORTED_RATES else 16000
+            self._vad = voice_vad.VoiceActivityDetector(sample_rate=rate)
+        if self._diarizer is None:
+            from server.systems.voice.diarization import SpeakerDiarizer
+            self._diarizer = SpeakerDiarizer()
+
+        res = self._vad.process_int16(raw)
+        self.last_speech_ratio = res["speech_ratio"]
+        self.vad_active = res["speech_ratio"] > 0.0
+
+        # Group consecutive speech frames, then diarize each voiced span from
+        # its REAL samples (frame bytes, so chunk-boundary buffering is exact).
+        pending: List[np.ndarray] = []
+        last_sid: Optional[int] = None
+        for is_speech, frame in zip(res["frames"], res["frame_bytes"]):
+            if is_speech:
+                pending.append(np.frombuffer(frame, dtype=np.int16))
+            elif pending:
+                sid = self._diarize_span(np.concatenate(pending), self._vad.sample_rate)
+                last_sid = sid if sid is not None else last_sid
+                pending = []
+        if pending:
+            sid = self._diarize_span(np.concatenate(pending), self._vad.sample_rate)
+            last_sid = sid if sid is not None else last_sid
+
+        if last_sid is not None:
+            self.current_speaker_id = last_sid
+
+        return {
+            "used_vad": True,
+            "speech_ratio": res["speech_ratio"],
+            "speaker_id": last_sid,
+        }
+
+    def _diarize_span(self, samples: np.ndarray, sample_rate: int) -> Optional[int]:
+        if self._diarizer is None:
+            return None
+        return self._diarizer.assign(samples, sample_rate, now=time.time())
 
     # ── Speaker count accessor ─────────────────────────────────────────────────
 
     def get_ambient_speaker_count(self) -> int:
-        """Return current estimated speaker count (1 = user only)."""
+        """Speaker count: diarized when real audio has been seen, else the
+        energy-variance heuristic (never a fabricated number)."""
+        if self._diarizer is not None:
+            n = len(self._diarizer.speakers())
+            if n:
+                return n
         return self._speaker_tracker.get_speaker_count()
+
+    def get_speakers(self) -> List[dict]:
+        """Real diarized speakers (empty until PCM has been processed)."""
+        return self._diarizer.speakers() if self._diarizer is not None else []
 
     # ── Control ───────────────────────────────────────────────────────────────
 
@@ -152,15 +248,18 @@ class MeetingMode:
 
     # ── Core gate logic ───────────────────────────────────────────────────────
 
-    def should_respond(self, text: str, priority_level: int) -> bool:
+    def should_respond(self, text: str, priority_level: int,
+                       speaker_id: Optional[int] = None) -> bool:
         """
         Logic Gate:
         - If not active: always respond (normal behavior)
         - If active:
             - Respond if P0 (Emergency)
-            - Respond if direct address found (name mentioned)
-            - Respond if within direct address window (follow-up)
-            - Else: Suppress/Ambient only
+            - Respond if direct address found (name mentioned) — the addressing
+              speaker becomes the *primary* speaker
+            - Respond if within the primary speaker's follow-up window
+            - Else: Suppress/Ambient only (an ambient speaker talking *about*
+              Aariya does not trigger a reply)
         """
         if not self.active:
             return True
@@ -175,10 +274,20 @@ class MeetingMode:
         is_direct = any(name in text_lower for name in self.ai_names)
         if is_direct:
             self.last_direct_address = time.time()
+            if speaker_id is not None:
+                self.primary_speaker_id = speaker_id
             return True
 
-        # 2. Check for Follow-up window (dynamically scaled by speaker count)
-        if time.time() - self.last_direct_address < self.direct_address_window:
+        # 2. Follow-up window — only for the primary speaker. An ambient
+        #    speaker (or unknown) gets no free pass just because the window is
+        #    open for someone else.
+        now = time.time()
+        in_window = (now - self.last_direct_address) < self.direct_address_window
+        if in_window and (
+            self.primary_speaker_id is None
+            or speaker_id is None
+            or speaker_id == self.primary_speaker_id
+        ):
             return True
 
         return False
@@ -212,6 +321,13 @@ class MeetingMode:
                 round(time.time() - self.last_direct_address, 1)
                 if self.last_direct_address > 0 else None
             ),
+            "vad_available":          voice_vad.available,
+            "vad_enabled":            self._vad_enabled,
+            "vad_active":             self.vad_active,
+            "last_speech_ratio":      round(self.last_speech_ratio, 3),
+            "current_speaker_id":     self.current_speaker_id,
+            "primary_speaker_id":     self.primary_speaker_id,
+            "speakers":               self.get_speakers(),
         }
 
 

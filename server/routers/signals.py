@@ -9,10 +9,11 @@ POST /ingest/device   → upsert the device registry (`devices` table).
 
 import json
 import time
-from typing import List, Literal
+import uuid
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
 from server.db import get_db_connection
 from server.infrastructure.signal_bus import Signal, get_signal_bus, IngestBus
@@ -89,3 +90,69 @@ async def register_device(device: DeviceRegistration):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+
+# ── /api/signals/ingest — external alert contract (pulse-news + clients) ──────
+# This is the path external producers (e.g. pulse-news' aigirl_bridge) actually
+# POST to. It accepts a superset of the internal Signal model, validates a
+# `news.alert` payload, and feeds the same IngestBus so alerts are persisted and
+# mirrored onto the admin bus AND the typed news feed. Back-compat: older
+# `system`-type payloads are still accepted unchanged.
+
+api_signals_router = APIRouter(prefix="/api/signals", tags=["signals"])
+
+
+class IngestSource(BaseModel):
+    system: str = "external"
+    file: str = ""
+    function: str = ""
+
+
+class NewsAlert(BaseModel):
+    """Formal `news.alert` payload. `importance` is normalised to [0, 1]."""
+    headline: str
+    summary: str = ""
+    importance: float = Field(default=0.0, ge=0.0, le=1.0)
+    category: str = "general"
+    topics: List[str] = Field(default_factory=list)
+    url: str = ""
+    ts: float = Field(default_factory=time.time)
+
+
+class ExternalSignal(BaseModel):
+    """Superset of the internal Signal accepted at /api/signals/ingest."""
+    type: str = "system"
+    severity: str = "info"
+    source: IngestSource | str = "external"
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    confidence: float = 0.0
+    context: Dict[str, Any] = Field(default_factory=dict)
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    timestamp: float = Field(default_factory=time.time)
+
+
+@api_signals_router.post("/ingest")
+async def ingest_external_signal(sig: ExternalSignal,
+                                 bus: IngestBus = Depends(get_signal_bus)):
+    """Ingest an external signal. A malformed `news.alert` fails 422; a valid one
+    is normalised and persisted (and reaches the news feed via the mirror)."""
+    src = sig.source.system if isinstance(sig.source, IngestSource) else str(sig.source)
+
+    if sig.type == "news.alert":
+        try:
+            alert = NewsAlert(**sig.payload)
+        except ValidationError as ve:
+            raise HTTPException(status_code=422, detail=ve.errors())
+        if not alert.headline.strip():
+            raise HTTPException(
+                status_code=422,
+                detail=[{"loc": ["payload", "headline"], "msg": "headline must be non-empty"}],
+            )
+        sig.payload = alert.model_dump()
+
+    internal = Signal(
+        id=sig.id, type=sig.type, severity=sig.severity,
+        source=src, payload=sig.payload, timestamp=sig.timestamp,
+    )
+    await bus.emit(internal)
+    return {"ok": True, "id": internal.id, "type": internal.type}

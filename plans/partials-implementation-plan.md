@@ -372,3 +372,25 @@ expose `isThinkingVisible` selector.
 ---
 
 *Plan generated from a code + doc audit on 2026-10-16. Superseded items (multi-hop search, RAG viz, security agents, mute/camera, person identity) are listed as out-of-scope in §0.*
+
+---
+
+## 8. Progress log
+
+### 2026-10-16 — Track A (multi-user identity) ✅ DONE
+- **A1** `src/systems/userIdentity.js` added (localStorage-backed id provider, memory fallback, `getUserId`/`setUserId`/`subscribeUserId`/`useUserId`). Replaced every `user_default` literal in `src/` (SessionTracker, PersonalitySystem, MemorySystem, GovernancePanel, AnalyticsDashboard, SessionHistoryCard); WS handshake now sends `?user_id=` (VoiceSystem). Also removed a broken `uuid` import (package not installed) from SessionTracker.
+- **A2** Backend binds the handshake tenant: `_run_cognitive_loop`, `/ws/mobile`, `/ws/brain_metrics` read `?user_id=` with `user_default` as a fallback only. `AutonomyDaemon`/`get_daemon` accept `user_id` (then `AARIYA_USER_ID`); `AutonomousManager` uses its configured id in `tick()`.
+- **A3** `Markdown_files/IMPLEMENTATION_STATUS.md` updated — "Single-User Assumptions" moved out of 🟡.
+- **A4** Tests: `src/systems/userIdentity.test.mjs` (5) + `server/tests/test_multi_user_isolation.py` (6). All green; `test:unit` 58 pass; focused backend set 42 pass; eslint clean (2 pre-existing warnings).
+- **Left open (documented):** sign-in / account-switch UI — identity is device-local for now.
+
+### 2026-10-16 — Track F (latency masking) ✅ DONE
+- **F1** `src/store.js`: added a min-hold thinking state machine. `thinking` stays the raw logical flag; new `thinkingVisible` is the display flag — once shown it stays on for `THINKING_MIN_VISIBLE_MS` (450ms) so a fast reply can't strobe the indicator. Exported `THINKING_MIN_VISIBLE_MS` + `_resetThinkingForTests`.
+- **F2** UI now renders `thinkingVisible` instead of the raw flag: `Overlay.jsx` (status panel "Thinking…"), `BrainMonitor.jsx`, `AnalyticsDashboard.jsx` (status chip + NeuralMonitor/Overview panels). Child prop names unchanged — fed the display flag from the call sites.
+- Also made `src/store.js`'s `./utils/apiHost` import explicit (`.js`) so the store is importable headless by `node --test`.
+- **F3** `src/store.thinking.test.mjs` (5 tests): immediate show, min-hold floor, immediate hide after a long think, no clock re-arm, fresh-think cancels a pending hide.
+- Verified: `npm run test:unit` → **63 pass**; eslint clean; `npm run build` ✓.
+- **No mock/synthetic/hardcoded data:** the hold is derived from real `Date.now()` timestamps and the real store flag.
+
+**Next:** Track C / D1–D2 (independent, parallelizable), then D3 and B.
+

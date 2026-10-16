@@ -20,7 +20,7 @@ const ProgressBar = ({ label, value, color, min = 0, max = 100 }) => {
 };
 
 export default function BrainMonitor() {
-    const { thinking } = useStore();
+    const { thinkingVisible } = useStore();
     const [health, setHealth] = useState(null);
     const [conn, setConn] = useState(false);
 
@@ -93,8 +93,8 @@ export default function BrainMonitor() {
                 <div style={{ background: '#10b981', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '10px' }}>
                     ● REAL TELEMETRY
                 </div>
-                <div style={{ background: thinking ? '#fff' : 'rgba(255,255,255,0.1)', color: thinking ? '#000' : '#ccc', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '10px' }}>
-                    {thinking ? '⚡ AI INFERENCE: THINKING' : '💤 AI INFERENCE: IDLE'}
+                <div style={{ background: thinkingVisible ? '#fff' : 'rgba(255,255,255,0.1)', color: thinkingVisible ? '#000' : '#ccc', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '10px' }}>
+                    {thinkingVisible ? '⚡ AI INFERENCE: THINKING' : '💤 AI INFERENCE: IDLE'}
                 </div>
                 <div style={{ background: online ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', color: online ? '#10b981' : '#ef4444', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>
                     {online ? 'SERVER ONLINE' : 'OFFLINE'}

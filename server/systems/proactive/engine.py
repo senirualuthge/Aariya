@@ -9,6 +9,7 @@ Triggers (checked in priority order):
 4. Insight ready       — background research finished something worth sharing
 5. Opportunity         — an autonomous plan is waiting for approval
 6. Curiosity           — internal entropy is low (boredom) and goals exist
+7. Fresh world news    — a REAL ingested news alert matches the user's interests
 
 When triggered, it queues a proactive message / plan prompt that the
 autonomy daemon can deliver without waiting for user input.
@@ -33,6 +34,9 @@ COOLDOWN_SECONDS            = config.PROACTIVE_COOLDOWN_SECONDS  # min time betw
 INSIGHT_COOLDOWN_SECONDS    = config.INSIGHT_COOLDOWN_SECONDS    # 5 min between insight shares
 OPPORTUNITY_COOLDOWN_SECONDS = config.OPPORTUNITY_COOLDOWN_SECONDS  # 15 min between plan nudges
 CURIOSITY_COOLDOWN_SECONDS  = config.CURIOSITY_COOLDOWN_SECONDS  # 30 min between curiosity explorations
+NEWS_COOLDOWN_SECONDS       = config.NEWS_COOLDOWN_SECONDS       # 60 min between news check-ins
+NEWS_MIN_IMPORTANCE         = config.NEWS_MIN_IMPORTANCE         # 0..1 alert importance gate
+NEWS_MAX_AGE_SECONDS        = config.NEWS_MAX_AGE_SECONDS        # freshness window for alerts
 
 
 class ProactiveAIEngine:
@@ -137,13 +141,73 @@ class ProactiveAIEngine:
             return self._fire("curiosity", trust, now, "low",
                 "You've been quiet — share a small thought or observation to spark something new.")
 
-        # Priority 7: Long silence
+        # Priority 7: Fresh world news matching the user's interests (Track D).
+        # Only REAL alerts ingested from pulse-news are candidates; nothing is
+        # fabricated when the feed is empty.
+        news = self._news_trigger(now)
+        if news:
+            return self._fire("news", trust, now, "low",
+                f"A real {news.get('category', 'general')} news event just broke: "
+                f"'{news.get('headline')}'. Bring it up naturally and ask what they think.",
+                payload={"headline": news.get("headline"),
+                         "category": news.get("category"),
+                         "url": news.get("url"),
+                         "topics": news.get("topics"),
+                         "importance": news.get("importance")})
+
+        # Priority 8: Long silence
         silence = now - self._last_user_message
         if silence > SILENCE_TRIGGER_SECONDS and trust > 0.3:
             return self._fire("silence", trust, now, "low",
                 self._silence_hint(silence, trust))
 
         return None
+
+    # ── News trigger ───────────────────────────────────────────────────────────
+
+    def _news_trigger(self, now: float) -> Optional[dict]:
+        """Return a real recent news alert worth raising, or None.
+
+        Gated by (a) its own cooldown, (b) a fresh importance threshold, and
+        (c) the user's learned favourite topics — when an interest profile
+        exists, only matching news surfaces; a brand-new user with no profile
+        gets only genuinely important alerts.
+        """
+        if now - self._last_fire_by_type.get("news", 0) <= NEWS_COOLDOWN_SECONDS:
+            return None
+
+        try:
+            from server.systems.signal_bus import recent_news_alerts
+        except Exception:
+            return None
+
+        alerts = recent_news_alerts(
+            max_age_seconds=NEWS_MAX_AGE_SECONDS,
+            min_importance=NEWS_MIN_IMPORTANCE,
+        )
+        if not alerts:
+            return None
+
+        fav_keys = self._favorite_topics()
+        for alert in alerts:
+            candidates = [str(t).lower() for t in (alert.get("topics") or []) if str(t).strip()]
+            cat = str(alert.get("category", "")).lower()
+            if cat:
+                candidates.append(cat)
+            if not fav_keys:
+                return alert   # no interest profile yet → surface important news
+            if any(t and (t in k or k in t) for t in candidates for k in fav_keys):
+                return alert
+        return None
+
+    def _favorite_topics(self) -> set:
+        """The user's learned favourite topics (lower-cased), best-effort."""
+        try:
+            from server.systems.user_profile_system import get_user_profile_system
+            profile = get_user_profile_system().get_profile(self.user_id)
+            return {str(k).lower() for k in (profile.fav_topics or {})}
+        except Exception:
+            return set()
 
     # ── Suggestion templates ───────────────────────────────────────────────────
 

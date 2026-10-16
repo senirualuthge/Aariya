@@ -18,6 +18,7 @@ import { BRAIN_RAG_EVENT } from '../systems/brainClient';
 import { subscribeMetrics, sendMetricsCommand } from '../systems/metricsClient';
 import { isBuildSummaryFresh, BUILD_WARN_MAX_AGE_HOURS } from '../utils/buildFreshness.js';
 import { apiBase, apiWsBase } from '../utils/apiHost';
+import { getUserId } from '../systems/userIdentity';
 import { schedulePredictorPoll, startUptimeTicker } from '../utils/backgroundPolls';
 import CveScannerPanel from './security/CveScannerPanel';
 import { useSignalsStore } from '../admin/store/useSignalsStore';
@@ -342,7 +343,7 @@ export default function AnalyticsDashboard({ isPopup = false }) {
     synoptic, planetary, valence, arousal,
     signals: legacySignals, addSignal: addLegacySignal,
     setPersonalityPreset, clearSignals,
-    thinking, speaking, listening, faceDetected,
+    thinkingVisible, speaking, listening, faceDetected,
   } = useStore();
 
   const { addSignal, signals: adminSignals, acknowledge, resolve } = useSignalsStore();
@@ -593,7 +594,7 @@ export default function AnalyticsDashboard({ isPopup = false }) {
 
         {/* Status chips */}
         <StatusChip label="BRAIN" active={isOnline} color="#00f2ff" />
-        <StatusChip label="THINKING" active={thinking} color="#ffd93d" pulse />
+        <StatusChip label="THINKING" active={thinkingVisible} color="#ffd93d" pulse />
         <StatusChip label="SPEAKING" active={speaking} color="#ff8fa3" pulse />
         <StatusChip label="LISTENING" active={listening} color="#34d399" pulse />
         <StatusChip label="FACE" active={faceDetected} color="#a78bfa" />
@@ -664,7 +665,7 @@ export default function AnalyticsDashboard({ isPopup = false }) {
             emotions={emotions}
             userEmotion={userEmotion}
             userAudioStats={userAudioStats}
-            thinking={thinking}
+            thinking={thinkingVisible}
             personalityPreset={personalityPreset}
           />
         </aside>
@@ -680,7 +681,7 @@ export default function AnalyticsDashboard({ isPopup = false }) {
               emotions={emotions}
               personalityPreset={personalityPreset}
               isOnline={isOnline}
-              thinking={thinking}
+              thinking={thinkingVisible}
               speaking={speaking}
               listening={listening}
               predictorEnabled={isAnalyticsRoute}
@@ -1366,7 +1367,7 @@ function CompanionTab() {
 
   const refreshHealth = async () => {
     try {
-      const res = await fetch(`${apiBase()}/api/compliance/health?user_id=user_default`);
+      const res = await fetch(`${apiBase()}/api/compliance/health?user_id=${getUserId()}`);
       if (res.ok) setHealthOverride(await res.json());
     } catch { /* next synoptic frame will catch up */ }
   };
@@ -1376,7 +1377,7 @@ function CompanionTab() {
     try {
       const res = await fetch(`${apiBase()}/api/compliance/feedback`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: 'user_default', rating, discomfort }),
+        body: JSON.stringify({ user_id: getUserId(), rating, discomfort }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -1394,7 +1395,7 @@ function CompanionTab() {
     try {
       const res = await fetch(`${apiBase()}/api/compliance/feedback`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: 'user_default', action: 'clear' }),
+        body: JSON.stringify({ user_id: getUserId(), action: 'clear' }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -2138,12 +2139,72 @@ function EventLogTab({ log, onClear, isOnline, focus }) {
 // X = Valence (-1 → +1), Y = Arousal (0 → 1), Z = Trust (0 → 1)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Shared 3D projector (yaw + pitch, perspective). Used by both the live affect
+// view and the session-trajectory view so they occupy the same visual space.
+function projectPoint(x, y, z, angle, cx, cy) {
+  const sinA = Math.sin(angle), cosA = Math.cos(angle);
+  const rx = x * cosA - z * sinA;
+  const rz = x * sinA + z * cosA;
+  const tilt = 0.35;
+  const sinT = Math.sin(tilt), cosT = Math.cos(tilt);
+  const ry = y * cosT - rz * sinT;
+  const rz2 = y * sinT + rz * cosT;
+  const fov = 400, distance = 450, scale = 220;
+  const denominator = fov + rz2 * scale + distance;
+  const depth = denominator > 0 ? fov / denominator : 0;
+  return {
+    sx: cx + rx * depth * scale,
+    sy: cy - ry * depth * scale,
+    depth,
+    opacity: Math.max(0, Math.min(1, depth * 1.5)),
+  };
+}
+
+// Personality axes used by the trajectory view. Each axis mean lives in [0,1];
+// we centre it on the origin so a point sits near the middle when the trait is
+// "average" (.5) — the same range the live affect view uses.
+const PERSONALITY_AXIS_META = [
+  { key: 'cognitive', label: 'Cognitive', color: '#ef4444' },
+  { key: 'emotional', label: 'Emotional', color: '#ffd93d' },
+  { key: 'social',    label: 'Social',    color: '#6bcbef' },
+];
+
+function axisToCoord(value) {
+  return (value - 0.5) * 3;
+}
+
 function PersonalitySpace3DTab({ trust, userEmotion, personality, personalityPreset }) {
   const canvasRef = useRef(null);
   const animRef   = useRef(null);
   const trailRef  = useRef([]);
   const angleRef  = useRef(0);
   const particlesRef = useRef([]);
+
+  // ── View mode: 'live' (affect vector) vs 'sessions' (personality trajectory)
+  const [mode, setMode] = useState('live');
+  const modeRef = useRef('live');
+  const [trajectory, setTrajectory] = useState(null);   // { core, points, count }
+  const [trajError, setTrajError] = useState(null);
+  const trajRef = useRef(null);
+
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { trajRef.current = trajectory; }, [trajectory]);
+
+  // Fetch the REAL trajectory from the backend when the user opens that view.
+  // Nothing is synthesised: an empty response renders an honest empty state.
+  useEffect(() => {
+    if (mode !== 'sessions') return;
+    let alive = true;
+    setTrajError(null);
+    fetch(`${apiBase()}/api/analytics/personality/trajectory?limit=120&user_id=${encodeURIComponent(getUserId())}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`trajectory ${r.status}`);
+        return r.json();
+      })
+      .then((data) => { if (alive) setTrajectory(data); })
+      .catch((e) => { if (alive) { setTrajectory(null); setTrajError(e.message); } });
+    return () => { alive = false; };
+  }, [mode]);
 
   const val = userEmotion?.valence ?? 0;
   const aro = userEmotion?.arousal ?? 0;
@@ -2167,36 +2228,12 @@ function PersonalitySpace3DTab({ trust, userEmotion, personality, personalityPre
   }, [val, aro, tru]);
 
   useEffect(() => {
+    if (modeRef.current !== 'live') return;   // sessions view drives its own loop
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    // Advanced 3D projection with Yaw and Pitch (tilt)
-    function project(x, y, z, angle, cx, cy) {
-      // Yaw rotation
-      const sinA = Math.sin(angle), cosA = Math.cos(angle);
-      const rx = x * cosA - z * sinA;
-      const rz = x * sinA + z * cosA;
-      
-      // Pitch rotation (tilt slightly down)
-      const tilt = 0.35;
-      const sinT = Math.sin(tilt), cosT = Math.cos(tilt);
-      const ry = y * cosT - rz * sinT;
-      const rz2 = y * sinT + rz * cosT;
-      
-      const fov = 400;
-      const distance = 450;
-      const scale = 220;
-      
-      const denominator = fov + rz2 * scale + distance;
-      const depth = denominator > 0 ? fov / denominator : 0;
-      return { 
-        sx: cx + rx * depth * scale, 
-        sy: cy - ry * depth * scale, 
-        depth,
-        opacity: Math.max(0, Math.min(1, depth * 1.5))
-      };
-    }
+    const project = projectPoint;
 
     function draw() {
       const W = canvas.width, H = canvas.height;
@@ -2369,12 +2406,150 @@ function PersonalitySpace3DTab({ trust, userEmotion, personality, personalityPre
 
     animRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animRef.current);
-  }, [val, aro, tru, modeInfo]);
+  }, [val, aro, tru, modeInfo, mode]);
+
+  // Session-trajectory view — plots the REAL snapshot trail (oldest → newest)
+  // against the immutable Core baseline. Honest empty state when a user has no
+  // snapshots yet; nothing is synthesised to fill the canvas.
+  useEffect(() => {
+    if (mode !== 'sessions') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const project = projectPoint;
+    let raf;
+
+    function draw() {
+      const W = canvas.width, H = canvas.height;
+      const cx = W / 2, cy = H / 2 + 30;
+      const angle = angleRef.current;
+
+      ctx.fillStyle = '#030305';
+      ctx.fillRect(0, 0, W, H);
+      const bgGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, W / 1.5);
+      bgGlow.addColorStop(0, 'rgba(120, 100, 200, 0.05)');
+      bgGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = bgGlow;
+      ctx.fillRect(0, 0, W, H);
+
+      // Axes (personality dimensions, not affect)
+      [
+        { from: [-1.5,0,0], to: [1.5,0,0], color: PERSONALITY_AXIS_META[0].color, label: 'Cognitive', lPos: [1.7,0,0] },
+        { from: [0,-1.5,0], to: [0,1.5,0], color: PERSONALITY_AXIS_META[1].color, label: 'Emotional', lPos: [0,1.7,0] },
+        { from: [0,0,-1.5], to: [0,0,1.5], color: PERSONALITY_AXIS_META[2].color, label: 'Social',    lPos: [0,0,1.7] },
+      ].forEach(({ from, to, color, label, lPos }) => {
+        const p1 = project(...from, angle, cx, cy);
+        const p2 = project(...to, angle, cx, cy);
+        ctx.beginPath(); ctx.moveTo(p1.sx, p1.sy); ctx.lineTo(p2.sx, p2.sy);
+        ctx.strokeStyle = color + '66'; ctx.lineWidth = 1; ctx.stroke();
+        const lp = project(...lPos, angle, cx, cy);
+        if (lp.depth > 0.3) {
+          ctx.fillStyle = color; ctx.font = '700 11px Inter,sans-serif';
+          ctx.textAlign = 'center'; ctx.fillText(label, lp.sx, lp.sy);
+        }
+      });
+
+      const data = trajRef.current;
+      const core = data?.core;
+      const toXYZ = (o) => [axisToCoord(o.cognitive), axisToCoord(o.emotional), axisToCoord(o.social)];
+      const drawable = (Array.isArray(data?.points) ? data.points : []).filter(
+        (p) => typeof p.cognitive === 'number' && typeof p.emotional === 'number' && typeof p.social === 'number'
+      );
+      const hasCore = core && typeof core.cognitive === 'number'
+        && typeof core.emotional === 'number' && typeof core.social === 'number';
+
+      if (hasCore) {
+        const cp = project(...toXYZ(core), angle, cx, cy);
+        ctx.beginPath(); ctx.arc(cp.sx, cp.sy, 7 * cp.depth, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff8fa3'; ctx.shadowColor = '#ff8fa3'; ctx.shadowBlur = 12;
+        ctx.fill(); ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255,143,163,0.9)'; ctx.font = '700 10px Inter,sans-serif';
+        ctx.textAlign = 'center'; ctx.fillText('CORE', cp.sx, cp.sy - 12 * cp.depth - 6);
+      }
+
+      if (drawable.length > 0) {
+        ctx.beginPath();
+        drawable.forEach((pt, i) => {
+          const tp = project(...toXYZ(pt), angle, cx, cy);
+          if (i === 0) ctx.moveTo(tp.sx, tp.sy); else ctx.lineTo(tp.sx, tp.sy);
+        });
+        ctx.strokeStyle = 'rgba(0, 242, 255, 0.5)';
+        ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.stroke();
+
+        drawable.forEach((pt, i) => {
+          const a = 0.15 + (i / drawable.length) * 0.85;
+          const tp = project(...toXYZ(pt), angle, cx, cy);
+          ctx.beginPath(); ctx.arc(tp.sx, tp.sy, Math.max(1.5, 3.5 * tp.depth), 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(0,242,255,${a})`; ctx.fill();
+        });
+
+        if (hasCore) {
+          const a = project(...toXYZ(core), angle, cx, cy);
+          const latest = project(...toXYZ(drawable[drawable.length - 1]), angle, cx, cy);
+          ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(latest.sx, latest.sy);
+          ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+          ctx.setLineDash([4, 5]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+
+          const glow = ctx.createRadialGradient(latest.sx, latest.sy, 0, latest.sx, latest.sy, 34 * latest.depth);
+          glow.addColorStop(0, 'rgba(0,242,255,0.6)');
+          glow.addColorStop(1, 'rgba(0,242,255,0)');
+          ctx.beginPath(); ctx.arc(latest.sx, latest.sy, 34 * latest.depth, 0, Math.PI * 2);
+          ctx.fillStyle = glow; ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.font = '800 11px Inter,sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText('LATEST', latest.sx, latest.sy - 12 * latest.depth - 8);
+        }
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '600 13px Inter,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+          trajError ? `Trajectory unavailable (${trajError})` : 'No personality snapshots recorded yet.',
+          cx, cy
+        );
+      }
+
+      angleRef.current -= 0.002;
+      raf = requestAnimationFrame(draw);
+    }
+
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [mode, trajectory, trajError]);
+
+  const latestPoint = mode === 'sessions' && Array.isArray(trajectory?.points) && trajectory.points.length
+    ? trajectory.points[trajectory.points.length - 1]
+    : null;
+  const hudAxes = mode === 'sessions'
+    ? [
+        { label: 'COGNITIVE', value: latestPoint?.cognitive, color: PERSONALITY_AXIS_META[0].color },
+        { label: 'EMOTIONAL', value: latestPoint?.emotional, color: PERSONALITY_AXIS_META[1].color },
+        { label: 'SOCIAL',    value: latestPoint?.social,    color: PERSONALITY_AXIS_META[2].color },
+      ]
+    : [
+        { label: 'VALENCE', value: val, color: '#ef4444' },
+        { label: 'AROUSAL', value: aro, color: '#ffd93d' },
+        { label: 'TRUST',   value: tru, color: '#6bcbef' },
+      ];
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:20, height:'100%' }}>
-      <SectionHeader title="3D Personality Space"
-        sub="Live high-dimensional affect vector projecting Valence, Arousal, and Trust" />
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', gap:16, flexWrap:'wrap' }}>
+        <SectionHeader title="3D Personality Space"
+          sub={mode === 'live'
+            ? 'Live high-dimensional affect vector projecting Valence, Arousal, and Trust'
+            : 'Session-by-session trajectory of acquired traits against the immutable core'} />
+        <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+          {[{ id:'live', label:'Live Affect' }, { id:'sessions', label:'Session Trail' }].map(m => (
+            <button key={m.id} onClick={() => setMode(m.id)} style={{
+              background: mode === m.id ? 'rgba(167,139,250,0.25)' : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${mode === m.id ? '#a78bfa' : 'rgba(255,255,255,0.12)'}`,
+              color: mode === m.id ? '#fff' : 'rgba(255,255,255,0.6)',
+              borderRadius: 20, padding: '6px 14px', fontSize: 11, fontWeight: 700,
+              letterSpacing: 0.5, cursor: 'pointer'
+            }}>{m.label}</button>
+          ))}
+        </div>
+      </div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:24, flex:1, minHeight:0 }}>
         
         {/* PREMIUM CANVAS WRAPPER */}
@@ -2400,15 +2575,11 @@ function PersonalitySpace3DTab({ trust, userEmotion, personality, personalityPre
             display: 'flex', flexDirection: 'column', gap: 12,
             boxShadow: '0 4px 24px rgba(0,0,0,0.2)'
           }}>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', letterSpacing: 1.5, fontWeight: 600 }}>TENSOR STATE</div>
-            {[
-              { label: 'VALENCE', value: val, color: '#ef4444' },
-              { label: 'AROUSAL', value: aro, color: '#ffd93d' },
-              { label: 'TRUST',   value: tru, color: '#6bcbef' }
-            ].map(ax => (
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', letterSpacing: 1.5, fontWeight: 600 }}>{mode === 'sessions' ? 'LATEST SNAPSHOT' : 'TENSOR STATE'}</div>
+            {hudAxes.map(ax => (
               <div key={ax.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
                 <span style={{ color: ax.color, fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>{ax.label}</span>
-                <span style={{ color: '#fff', fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}>{Number(ax.value).toFixed(3)}</span>
+                <span style={{ color: '#fff', fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}>{ax.value == null ? '—' : Number(ax.value).toFixed(3)}</span>
               </div>
             ))}
           </div>
@@ -2429,30 +2600,54 @@ function PersonalitySpace3DTab({ trust, userEmotion, personality, personalityPre
           </div>
           
           <div style={{ position:'absolute', bottom:16, right:20, fontSize:9, color:'rgba(255,255,255,0.25)', letterSpacing:2 }}>
-            AUTO-METRIC PROJECTION · NEURAL SPACE V4
+            {mode === 'sessions'
+              ? (trajectory ? `${trajectory.count} SESSIONS · CORE-ANCHORED` : 'LOADING SESSIONS…')
+              : 'AUTO-METRIC PROJECTION · NEURAL SPACE V4'}
           </div>
         </div>
 
         {/* RIGHT METRICS PANEL */}
         <div style={{ display:'flex', flexDirection:'column', gap:16, paddingRight: 4 }}>
           <Card>
-            <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:1.5, textTransform:'uppercase', marginBottom:16, fontWeight:600 }}>Current Imprint</div>
+            <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:1.5, textTransform:'uppercase', marginBottom:16, fontWeight:600 }}>{mode === 'sessions' ? 'Acquired Drift' : 'Current Imprint'}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <Bar label="Valence (Pleasure)" value={val} color="#ef4444" min={-1} max={1} />
-              <Bar label="Arousal (Energy)"   value={aro} color="#ffd93d" />
-              <Bar label="Trust (Bond)"       value={tru} color="#6bcbef" />
+              {mode === 'sessions' ? (
+                PERSONALITY_AXIS_META.map(ax => {
+                  const now = latestPoint?.[ax.key];
+                  const core = trajectory?.core?.[ax.key];
+                  const delta = (typeof now === 'number' && typeof core === 'number') ? now - core : null;
+                  return (
+                    <div key={ax.key} style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 600 }}>{ax.label}</span>
+                      <span style={{ color: delta == null ? 'rgba(255,255,255,0.4)' : delta >= 0 ? '#34d399' : '#f87171', fontSize: 12, fontFamily:'JetBrains Mono, monospace' }}>
+                        {delta == null ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(3)}`}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <>
+                  <Bar label="Valence (Pleasure)" value={val} color="#ef4444" min={-1} max={1} />
+                  <Bar label="Arousal (Energy)"   value={aro} color="#ffd93d" />
+                  <Bar label="Trust (Bond)"       value={tru} color="#6bcbef" />
+                </>
+              )}
             </div>
           </Card>
 
           <Card>
             <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:1.5, textTransform:'uppercase', marginBottom:16, fontWeight:600 }}>Vector Legend</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {[
+              {(mode === 'sessions' ? [
+                { dot:'#ff8fa3', label:'Core Baseline', desc:'Immutable origin (system defaults)' },
+                { dot:'#00f2ff', label:'Session Trail', desc:'Acquired traits, oldest → newest' },
+                { dot:'#ffffff', label:'Drift Vector',  desc:'Core → latest acquired position' },
+              ] : [
                 { dot:'#ff8fa3', label:'Core Identity',   desc:'Rigid personality anchor' },
                 { dot:'#a78bfa', label:'Mutable Surface', desc:'Adaptive conversational orbit' },
                 { dot:modeInfo.color, label:'Neural Spark',  desc:'Active emotional coordinate' },
                 { dot:'#00f2ff', label:'Affect Trail',    desc:'Historical reaction pathway' },
-              ].map(({ dot, label, desc }) => (
+              ]).map(({ dot, label, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'center', gap:12 }}>
                   <div style={{ width:12, height:12, borderRadius:'50%', background:dot, boxShadow:`0 0 8px ${dot}`, flexShrink:0 }} />
                   <div>

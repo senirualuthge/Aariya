@@ -144,7 +144,7 @@ function PrivacySwitches() {
 export default function Overlay() {
   const {
     started, listening, speaking, chatHistory, submitText,
-    voicePitch, setVoicePitch, voiceRate, setVoiceRate, thinking, faceDetected, emotions, userEmotion,
+    voicePitch, setVoicePitch, voiceRate, setVoiceRate, thinkingVisible, faceDetected, emotions, userEmotion,
     showChatPanel, showMoodPanel, showUserMoodPanel, showStatusPanel, showVoiceLabPanel,
     toggleChatPanel, toggleMoodPanel, toggleUserMoodPanel, toggleStatusPanel, toggleVoiceLabPanel,
     showBrainMonitor, toggleBrainMonitor,
@@ -526,7 +526,7 @@ export default function Overlay() {
                   {speaking ? 'Speaking…' : 'Silent'}
                 </span>
               </div>
-              {thinking && (
+              {thinkingVisible && (
                 <div style={{ display: 'flex', alignItems: 'center', fontSize: '0.82rem',
                                animation: 'fadeIn 0.3s ease' }}>
                   <StatusDot active={true} color="#818cf8" />

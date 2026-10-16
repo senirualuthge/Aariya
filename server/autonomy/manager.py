@@ -14,13 +14,15 @@ from typing import Optional
 
 
 class AutonomousManager:
-    def __init__(self, callback):
+    def __init__(self, callback, user_id: Optional[str] = None):
         """
         Args:
             callback: async callable(user_id: str, message: str) → sends
                       the proactive message over the WebSocket connection.
+            user_id:  tenant this manager drives (defaults to 'user_default').
         """
         self.callback   = callback
+        self.user_id    = user_id or "user_default"
         self.loop       = AutonomousLoop(self)
         self.is_running = False
         # Latest brain state — updated by main.py after each cognitive turn
@@ -36,7 +38,7 @@ class AutonomousManager:
     async def tick(self) -> None:
         """Drive the proactive evaluation loop if running."""
         if self.is_running:
-            await self.loop.tick_user("user_default")
+            await self.loop.tick_user(self.user_id)
 
     async def send_proactive_message(self, user_id: str, message: str) -> None:
         """Deliver a proactive message through the registered callback."""

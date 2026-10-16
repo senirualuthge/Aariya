@@ -39,7 +39,8 @@ from server.routers.events_router import router as events_router
 from server.routers.filesystem_router import router as filesystem_router
 from server.routers.tools_router import router as tools_router
 from server.routers.analytics import router as analytics_router
-from server.routers.signals import router as ingest_router
+from server.routers.signals import router as ingest_router, api_signals_router
+from server.routers.rl import router as rl_router
 from server.routers.swarm_ws import router as swarm_ws_router
 from server.routers.gev_router import router as gev_router
 from server.infrastructure.agent_watcher import get_watcher
@@ -278,6 +279,8 @@ app.include_router(filesystem_router)      # Provides /api/fs/* + /api/sandbox/r
 app.include_router(tools_router)           # Provides /api/tools/* + /api/knowledge/*
 app.include_router(analytics_router)       # Provides /api/analytics/overview|personality|memories (real schema)
 app.include_router(ingest_router)          # Provides /ingest/signal|signals|device (external telemetry)
+app.include_router(api_signals_router)     # Provides /api/signals/ingest (pulse-news news.alert contract)
+app.include_router(rl_router)              # Provides /api/rl/status (PPO policy status)
 app.include_router(swarm_ws_router)        # Provides /api/swarm/ws (AGENT_UPDATE / AGENT_EVOLVED pulses)
 app.include_router(gev_router)             # Provides /api/gev/* (geospatial intelligence + /api/gev/stream WS)
 
@@ -307,7 +310,10 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
     if not await verify_ws_token(websocket):
         return
     await websocket.accept()
-    user_id = "user_default"
+    # Resolve the tenant from the handshake (set by the frontend's userIdentity
+    # provider). Falls back to 'user_default' only when a legacy client connects
+    # without the query param — the fallback is not the primary path.
+    user_id = websocket.query_params.get("user_id") or "user_default"
     brain = BrainV2(user_id)
 
     session_manager.add_surface("main", user_id, websocket)
@@ -334,13 +340,37 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
 
             input_model = MultimodalInput(**raw_input)
 
-            # Feed audio energy to Meeting Mode speaker tracker
+            # Feed the real audio frame to Meeting Mode. When the client ships
+            # 16-bit PCM (meeting_pcm_b64) the REAL webrtcvad + diarization path
+            # runs; otherwise the energy heuristic is used (nothing fabricated).
+            meeting = get_meeting_mode()
             audio_energy = raw_input.get("audio_energy", 0.0)
             vad_active   = raw_input.get("vad_active", False)
-            get_meeting_mode().report_audio_frame(audio_energy, vad_active)
+            meeting.report_audio_frame(
+                audio_energy,
+                vad_active,
+                pcm_b64=raw_input.get("meeting_pcm_b64"),
+                sample_rate=int(raw_input.get("meeting_sample_rate") or 16000),
+            )
 
             # User spoke → reset proactive silence timers in the daemon
             daemon.on_user_message(user_id)
+
+            # Meeting Mode gate (Track B): in a shared space only the primary
+            # speaker's direct address (or their follow-up window) earns a reply;
+            # ambient chatter is observed, never answered.
+            if not meeting.should_respond(
+                input_model.text or "",
+                priority_level=1,
+                speaker_id=meeting.current_speaker_id,
+            ):
+                await websocket.send_text(json.dumps({
+                    "type": "ambient.suppressed",
+                    "reason": "meeting_mode",
+                    "speaker_id": meeting.current_speaker_id,
+                    "timestamp": time.time(),
+                }))
+                continue
 
             # Stream tokens as they're generated so she "speaks" in real time.
             async def _stream_token(token: str) -> None:
@@ -555,7 +585,9 @@ async def websocket_mobile_chat(websocket: WebSocket):
     if not await verify_ws_token(websocket):
         return
     await websocket.accept()
-    user_id = "user_default"
+    # Multi-user: the phone supplies ?user_id=<id>; fall back to 'user_default'
+    # only for legacy clients that omit it.
+    user_id = websocket.query_params.get("user_id") or "user_default"
     brain = BrainV2(user_id)
     session_manager.add_surface("mobile", user_id, websocket)
     signal_bus.emit("session", {"endpoint": "mobile", "user_id": user_id}, "info")
@@ -758,7 +790,8 @@ async def websocket_brain_metrics(websocket: WebSocket):
     if not await verify_ws_token(websocket):
         return
     await websocket.accept()
-    user_id = "user_default"
+    # Dashboard metrics link — carry the tenant from the handshake when present.
+    user_id = websocket.query_params.get("user_id") or "user_default"
     session_manager.add_surface("dashboard", user_id, websocket)
     logger.info(f"Dashboard metrics link established for {user_id}")
     

@@ -15,12 +15,15 @@ State vector (5 dims):
 """
 
 import os
+import json
+import time
 import torch
 import torch.nn.functional as F
 from typing import Dict
 
 from .model import PPOModel, encode_state, select_action
 from .reward import compute_reward
+from .store import get_transition_store
 
 # ── Action space ───────────────────────────────────────────────────────────────
 ACTION_STYLE_MAP = {
@@ -33,11 +36,64 @@ ACTION_STYLE_MAP = {
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "ppo_checkpoint.pt")
 
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, "").strip() or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, "").strip() or default)
+    except (TypeError, ValueError):
+        return default
+
+
 # ── Hyperparameters ────────────────────────────────────────────────────────────
 GAMMA       = 0.99   # Discount factor
 CLIP_RATIO  = 0.2    # PPO clip threshold
 LR          = 3e-4
 TRAIN_EVERY = 16     # Update model every N turns
+N_STEP      = _env_int("AARIYA_RL_N_STEP", 4)   # n-step return horizon
+
+# Corpus retraining (Track E): retrain on the durable transition log when this
+# many NEW transitions have accrued and at least RL_RETRAIN_HOURS have elapsed
+# since the last checkpoint. Real transitions only.
+RL_RETRAIN_MIN_NEW = _env_int("AARIYA_RL_RETRAIN_MIN_TRANSITIONS", 200)
+RL_RETRAIN_HOURS   = _env_float("AARIYA_RL_RETRAIN_HOURS", 24.0)
+_CORPUS_LIMIT      = 2000
+
+
+def _n_step_returns(rewards, values, dones, n_step: int = N_STEP,
+                    gamma: float = GAMMA) -> torch.Tensor:
+    """n-step TD returns with a value bootstrap at the horizon.
+
+    A terminal step inside the window stops it (no bootstrap); running off the
+    end of the buffer falls back to a partial, un-bootstrapped return. `values[i]`
+    must be V(s_i). Uses real stored values only — no fabricated targets.
+    """
+    T = len(rewards)
+    returns = [0.0] * T
+    for t in range(T):
+        G = 0.0
+        horizon = -1
+        for k in range(n_step):
+            i = t + k
+            if i >= T:
+                break
+            G += (gamma ** k) * rewards[i]
+            horizon = k + 1
+            if dones[i]:
+                horizon = -1   # terminal inside the window → no bootstrap
+                break
+        if horizon >= 0:
+            h = t + horizon
+            if h < T:
+                G += (gamma ** horizon) * values[h]
+        returns[t] = G
+    return torch.tensor(returns, dtype=torch.float32)
 
 
 class RolloutBuffer:
@@ -48,21 +104,22 @@ class RolloutBuffer:
         self.log_probs:   list[float]        = []
         self.rewards:     list[float]        = []
         self.values:      list[float]        = []
+        self.next_states: list[torch.Tensor] = []
+        self.dones:       list[bool]         = []
 
-    def push(self, state, action, log_prob, reward, value):
+    def push(self, state, action, log_prob, reward, value,
+             next_state=None, done: bool = False):
         self.states.append(state)
         self.actions.append(action)
         self.log_probs.append(log_prob)
         self.rewards.append(reward)
         self.values.append(value)
+        self.next_states.append(next_state if next_state is not None else state)
+        self.dones.append(bool(done))
 
-    def compute_returns(self):
-        """Compute discounted returns for the collected rollout."""
-        G, returns = 0.0, []
-        for r in reversed(self.rewards):
-            G = r + GAMMA * G
-            returns.insert(0, G)
-        return torch.tensor(returns, dtype=torch.float32)
+    def compute_returns(self, n_step: int = N_STEP, gamma: float = GAMMA):
+        """n-step discounted returns for the collected rollout."""
+        return _n_step_returns(self.rewards, self.values, self.dones, n_step, gamma)
 
     def clear(self):
         self.__init__()
@@ -110,25 +167,50 @@ class PPOPolicy:
 
         return ACTION_STYLE_MAP[action]  # type: ignore[index]
 
-    def observe_outcome(self, prev_context: Dict, curr_context: Dict) -> float:
+    def observe_outcome(self, prev_context: Dict, curr_context: Dict,
+                        meta: Dict | None = None) -> float:
         """
-        Record the result of the last turn. 
+        Record the result of the last turn.
         Should be called AFTER the user has responded.
-        
+
+        `meta` may carry `user_id`, `session_id`, and `done` (terminal turn)
+        so the durable transition log is attributed and long-horizon returns
+        can respect episode boundaries.
+
         Returns the computed reward scalar.
         """
         if self._last_state is None:
             return 0.0
 
         reward = compute_reward(prev_context, curr_context)
+        next_state = encode_state(curr_context)
+        done = bool((meta or {}).get("done", False))
 
         self.buffer.push(
-            state    = self._last_state,
-            action   = self._last_action,
-            log_prob = self._last_log_prob,
-            reward   = reward,
-            value    = self._last_value,
+            state      = self._last_state,
+            action     = self._last_action,
+            log_prob   = self._last_log_prob,
+            reward     = reward,
+            value      = self._last_value,
+            next_state = next_state,
+            done       = done,
         )
+
+        # Persist the real transition (durable long-horizon corpus). A failure
+        # here must never break the conversation turn.
+        try:
+            get_transition_store().record(
+                state      = self._last_state.tolist(),
+                action     = self._last_action,
+                reward     = reward,
+                next_state = next_state.tolist(),
+                done       = done,
+                user_id    = (meta or {}).get("user_id", "user_default"),
+                session_id = (meta or {}).get("session_id"),
+            )
+        except Exception as e:
+            print(f"[PPO] transition persist failed: {e}")
+
         self._turn_count += 1
         return reward
 
@@ -160,14 +242,10 @@ class PPOPolicy:
 
     # ── Training internals ─────────────────────────────────────────────────────
 
-    def _ppo_update(self):
-        states    = torch.stack(self.buffer.states)
-        actions   = torch.tensor(self.buffer.actions, dtype=torch.long)
-        old_lps   = torch.tensor(self.buffer.log_probs, dtype=torch.float32)
-        returns   = self.buffer.compute_returns()
-
-        # Normalise returns
-        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+    def _run_ppo(self, states, actions, old_lps, returns):
+        """One PPO optimisation pass over prepared tensors."""
+        if returns.numel() > 1:
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
 
         for _ in range(4):  # PPO epochs
             logits, values = self.model(states)
@@ -193,6 +271,109 @@ class PPOPolicy:
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
             self.optimizer.step()
+
+    def _ppo_update(self):
+        states    = torch.stack(self.buffer.states)
+        actions   = torch.tensor(self.buffer.actions, dtype=torch.long)
+        old_lps   = torch.tensor(self.buffer.log_probs, dtype=torch.float32)
+        returns   = self.buffer.compute_returns()
+        self._run_ppo(states, actions, old_lps, returns)
+
+    # ── Long-horizon corpus retraining (Track E) ───────────────────────────────
+
+    def _last_train_ts(self) -> float:
+        """mtime of the last checkpoint (0.0 when none exists yet)."""
+        try:
+            return os.path.getmtime(MODEL_PATH) if os.path.exists(MODEL_PATH) else 0.0
+        except OSError:
+            return 0.0
+
+    def _train_from_rows(self, rows) -> int:
+        """One PPO update over a REAL transition corpus.
+
+        Old log-probs/values are re-evaluated under the current model (a valid
+        on-policy snapshot at the start of the update); returns use the stored
+        real rewards + terminal flags. Returns the number of rows used.
+        """
+        states, actions, rewards, dones = [], [], [], []
+        for r in rows:
+            try:
+                states.append(json.loads(r["state_json"]))
+            except (json.JSONDecodeError, TypeError, KeyError):
+                continue
+            actions.append(int(r["action"]))
+            rewards.append(float(r["reward"]))
+            dones.append(bool(r["done"]))
+        if len(states) < 2:
+            return 0
+
+        s_t = torch.tensor(states, dtype=torch.float32)
+        a_t = torch.tensor(actions, dtype=torch.long)
+        with torch.no_grad():
+            logits, values = self.model(s_t)
+            old_lps = torch.distributions.Categorical(logits=logits).log_prob(a_t)
+        returns = _n_step_returns(rewards, values.squeeze(-1).tolist(), dones, N_STEP, GAMMA)
+        self._run_ppo(s_t, a_t, old_lps, returns)
+        return len(states)
+
+    def maybe_retrain_from_corpus(self, min_new_transitions=None,
+                                  min_interval_seconds=None) -> bool:
+        """Retrain from the durable transition log when enough NEW rows accrued.
+
+        Returns True iff an update ran (and the checkpoint was written). Never
+        fabricates data: a fresh DB with too few rows returns False.
+        """
+        store = get_transition_store()
+        min_new = RL_RETRAIN_MIN_NEW if min_new_transitions is None else int(min_new_transitions)
+        min_interval = (RL_RETRAIN_HOURS * 3600) if min_interval_seconds is None else float(min_interval_seconds)
+
+        try:
+            total = store.count()
+        except Exception as e:
+            print(f"[PPO] corpus count failed: {e}")
+            return False
+        if total < min_new:
+            return False
+
+        last_train = self._last_train_ts()
+        if last_train and (time.time() - last_train) < min_interval:
+            return False
+        new_since = store.count_since(last_train) if last_train else total
+        if new_since < min_new:
+            return False
+
+        rows = store.recent(limit=max(min_new, _CORPUS_LIMIT))
+        if self._train_from_rows(rows):
+            self._save()
+            return True
+        return False
+
+    def get_status(self) -> Dict:
+        """Status for GET /api/rl/status — reflects real store + checkpoint state."""
+        store = get_transition_store()
+        dist = {style: 0 for style in ACTION_STYLE_MAP.values()}
+        actions, total = [], 0
+        try:
+            actions = store.latest_actions(limit=200)
+            total = store.count()
+        except Exception:
+            pass
+        for a in actions:
+            style = ACTION_STYLE_MAP.get(a)
+            if style:
+                dist[style] += 1
+        last_train = self._last_train_ts()
+        return {
+            "trained": os.path.exists(MODEL_PATH),
+            "checkpoint_path": MODEL_PATH,
+            "transitions": total,
+            "recent_actions": len(actions),
+            "last_train_ts": last_train or None,
+            "last_train_age_seconds": (round(time.time() - last_train, 1) if last_train else None),
+            "buffer_size": len(self.buffer),
+            "n_step": N_STEP,
+            "action_distribution": dist,
+        }
 
     def _load_if_exists(self):
         if os.path.exists(MODEL_PATH):

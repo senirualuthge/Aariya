@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { apiBase } from './utils/apiHost';
+import { apiBase } from './utils/apiHost.js';
 
 // ── Autonomy live-strip persistence ──────────────────────────────────────────
 // The daemon's real activity (latest proactive action, plan lifecycle status,
@@ -90,16 +90,59 @@ function bumpActivityRate(rate, ts) {
   return prev;
 }
 
+// ── Latency masking (thinking affordance) ────────────────────────────────────
+// `thinking` is the raw logical flag (set the instant a turn starts, cleared
+// when the reply lands). `thinkingVisible` is what the UI should render: once
+// shown, it stays visible for at least THINKING_MIN_VISIBLE_MS so a fast reply
+// doesn't make the indicator strobe for a couple of frames.
+export const THINKING_MIN_VISIBLE_MS = 450;
+
+let _thinkingHideTimer = null;
+
+function _clearThinkingHideTimer() {
+  if (_thinkingHideTimer !== null) {
+    clearTimeout(_thinkingHideTimer);
+    _thinkingHideTimer = null;
+  }
+}
+
 const useStore = create((set) => ({
   // ── Core lifecycle ──────────────────────────────────────────────────────────
   started:   true,
-  thinking:  false,
+  thinking:  false,        // raw logical flag (drives behaviour)
+  thinkingVisible: false,  // min-hold display flag (use this in the UI)
+  thinkingSince: null,     // epoch ms when the current think began
   speaking:  false,
   listening: false,
   tracking:  false,
 
   setStarted:   (started)   => set({ started }),
-  setThinking:  (thinking)  => set({ thinking }),
+  // Min-hold so the "Thinking…" affordance never flashes on a fast reply.
+  setThinking:  (thinking)  => set((state) => {
+    if (thinking) {
+      _clearThinkingHideTimer();
+      // Only re-arm the clock on a fresh think; repeated `true` keeps the
+      // original timestamp so the min-hold window isn't silently extended.
+      return state.thinking
+        ? { thinking: true, thinkingVisible: true }
+        : { thinking: true, thinkingVisible: true, thinkingSince: Date.now() };
+    }
+
+    // Turning off — honour the minimum-visible floor.
+    const elapsed = state.thinkingSince == null ? Infinity : Date.now() - state.thinkingSince;
+    const remaining = THINKING_MIN_VISIBLE_MS - elapsed;
+    if (remaining <= 0) {
+      _clearThinkingHideTimer();
+      return { thinking: false, thinkingVisible: false, thinkingSince: null };
+    }
+    _clearThinkingHideTimer();
+    _thinkingHideTimer = setTimeout(() => {
+      _thinkingHideTimer = null;
+      // Only hide if no new think started during the hold.
+      set((s) => (s.thinking ? {} : { thinkingVisible: false, thinkingSince: null }));
+    }, remaining);
+    return { thinking: false };
+  }),
   setSpeaking:  (speaking)  => set({ speaking }),
   setListening: (listening) => set({ listening }),
   setTracking:  (tracking)  => set({ tracking }),
@@ -414,5 +457,11 @@ const useStore = create((set) => ({
   toggleGevPanel: () => set((state) => ({ showGevPanel: !state.showGevPanel })),
   setGevPanel: (val, focus = null) => set({ showGevPanel: val, gevFocus: focus }),
 }));
+
+/** Test-only helper: clear the pending min-hold timer and return to idle. */
+export function _resetThinkingForTests() {
+  _clearThinkingHideTimer();
+  useStore.setState({ thinking: false, thinkingVisible: false, thinkingSince: null });
+}
 
 export default useStore;

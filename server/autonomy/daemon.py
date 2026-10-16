@@ -21,6 +21,7 @@ brings them up next session).
 
 import asyncio
 import logging
+import os
 import time
 from typing import Any, Callable, Dict, List, Optional
 
@@ -62,6 +63,7 @@ EMOTION_RETRAIN_HOURS = config.EMOTION_RETRAIN_HOURS        # min hours between 
 EMOTION_RETRAIN_MIN_NEW = config.EMOTION_RETRAIN_MIN_NEW_SNAPSHOTS  # new snapshots needed
 EMOTION_TRAIN_EPOCHS = config.EMOTION_TRAIN_EPOCHS          # epochs per retrain
 EMOTION_TRAIN_SEQ_LEN = config.EMOTION_TRAIN_SEQ_LEN        # LSTM sequence length
+RL_RETRAIN_CHECK_SECONDS = config.RL_RETRAIN_CHECK_SECONDS  # PPO corpus-retrain eligibility
 # How often the daemon re-broadcasts the latest synoptic frame while idle
 # (s) so the /ws/synoptics panels keep animating between user turns.
 SYNAPTIC_BROADCAST_SECONDS = max(5, min(60, getattr(config, "SYNAPTIC_BROADCAST_SECONDS", 10)))
@@ -79,11 +81,14 @@ MEMORY_MAINTENANCE_SECONDS = max(300, min(21600, getattr(config, "MEMORY_MAINTEN
 
 
 class AutonomyDaemon:
-    def __init__(self, broadcast: Callable[[dict], Any]):
+    def __init__(self, broadcast: Callable[[dict], Any], user_id: Optional[str] = None):
         """
         Args:
             broadcast: async fn(dict) — delivers events to all connected
                        surfaces (normally session_manager.broadcast).
+            user_id:   tenant this daemon serves. Defaults to the
+                       AARIYA_USER_ID env var, then 'user_default', so a
+                       single-tenant deployment keeps working unchanged.
         """
         self.broadcast_fn = broadcast
         self.store = AutonomyStore()
@@ -92,7 +97,7 @@ class AutonomyDaemon:
         self.learner = BackgroundLearner(self.store)
         self.guard = get_initiative_guard()
 
-        self.user_id = "user_default"
+        self.user_id = user_id or os.getenv("AARIYA_USER_ID") or "user_default"
 
         # Persistent long-term goal registry shared with the brain: the daemon
         # advances goal progress as approved plans complete (§Goal Management).
@@ -115,6 +120,10 @@ class AutonomyDaemon:
         # LSTM emotion predictor self-retraining (non-blocking worker thread).
         self._last_emotion_retrain_check: float = time.time()
         self._emotion_train_task: Optional[asyncio.Task] = None
+        # PPO conversational-style policy self-retraining from the durable
+        # transition corpus (Track E) — non-blocking worker thread.
+        self._last_rl_retrain_check: float = time.time()
+        self._rl_train_task: Optional[asyncio.Task] = None
         self._last_synoptic_broadcast: float = 0.0
         self._last_prediction_verify: float = 0.0
         self._last_world_state: float = 0.0
@@ -414,6 +423,10 @@ class AutonomyDaemon:
         if now - self._last_emotion_retrain_check >= EMOTION_RETRAIN_CHECK_SECONDS:
             self._last_emotion_retrain_check = now
             await self._emotion_retrain_tick()
+
+        if now - self._last_rl_retrain_check >= RL_RETRAIN_CHECK_SECONDS:
+            self._last_rl_retrain_check = now
+            await self._rl_retrain_tick()
 
         # Periodic synoptics heartbeat: keep the /ws/synoptics panels live
         # between user turns so the ghost layer / anomaly overlay don't freeze
@@ -839,6 +852,51 @@ class AutonomyDaemon:
             "predicted_valence": round(avg_valence, 3),
         }
 
+    # ── 2b. PPO policy self-retraining from the transition corpus (Track E) ──
+
+    async def _rl_retrain_tick(self) -> None:
+        """Retrain the conversational-style PPO policy from the durable
+        transition log when enough NEW transitions have accrued since the last
+        checkpoint. CPU-bound, so it runs in a worker thread; the tick is never
+        stalled by it. No synthetic data — an empty corpus simply returns False.
+        """
+        if self._rl_train_task and not self._rl_train_task.done():
+            return  # a retrain pass is already running — don't stack
+
+        try:
+            from server.systems.rl.rl_policy import get_ppo_policy
+        except Exception as exc:
+            logger.debug("[AutonomyDaemon] RL policy unavailable: %s", exc)
+            return
+
+        policy = get_ppo_policy()
+
+        async def _run() -> None:
+            loop = asyncio.get_running_loop()
+            try:
+                ran = await loop.run_in_executor(None, policy.maybe_retrain_from_corpus)
+            except Exception as exc:
+                logger.warning("[AutonomyDaemon] RL retrain failed: %s", exc)
+                return
+            if not ran:
+                return
+            status = policy.get_status()
+            logger.info("[AutonomyDaemon] 🎛️ PPO policy retrained from %d transitions.",
+                        status.get("transitions", 0))
+            await self._emit_real_event(
+                "MODEL", "info",
+                f"PPO conversational policy retrained ({status.get('transitions', 0)} transitions)",
+                {"transitions": status.get("transitions"),
+                 "action_distribution": status.get("action_distribution")},
+            )
+            await self._broadcast_async({
+                "type": "autonomy.model_trained",
+                "model": "ppo_policy",
+                **status,
+            })
+
+        self._rl_train_task = asyncio.create_task(_run())
+
     # ── 2. LSTM emotion predictor self-retraining ────────────────────────────
 
     async def _emotion_retrain_tick(self) -> None:
@@ -1201,10 +1259,11 @@ def build_control_ack(action: str, plan_id: str, result: Dict[str, Any]) -> Dict
 # ── Singleton ─────────────────────────────────────────────────────────────────
 _daemon: Optional[AutonomyDaemon] = None
 
-def get_daemon(broadcast: Optional[Callable[[dict], Any]] = None) -> AutonomyDaemon:
+def get_daemon(broadcast: Optional[Callable[[dict], Any]] = None,
+               user_id: Optional[str] = None) -> AutonomyDaemon:
     global _daemon
     if _daemon is None:
-        _daemon = AutonomyDaemon(broadcast=broadcast or (lambda msg: None))
+        _daemon = AutonomyDaemon(broadcast=broadcast or (lambda msg: None), user_id=user_id)
     return _daemon
 
 def set_daemon(daemon: Optional[AutonomyDaemon]) -> None:

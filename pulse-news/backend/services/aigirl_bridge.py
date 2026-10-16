@@ -20,14 +20,31 @@ AIGIRL_API_URL = os.getenv("AIGIRL_API_URL", "http://localhost:8000")
 
 
 async def dispatch_alert_to_aigirl(article: Dict[str, Any]) -> bool:
-    """Send a breaking news alert signal to the AI Girl event bus."""
+    """Send a breaking news alert to the AI Girl event bus.
+
+    Emits the formal ``news.alert`` contract (the server validates it and
+    projects it into the news feed BrainV2 reads). All fields are taken from the
+    real article — nothing is invented; missing fields are simply omitted.
+    """
     priority = article.get("alert_priority", "normal")
     importance = article.get("importance", 0) or 0
 
     severity = "critical" if priority == "critical" else "high" if priority == "high" else "info"
 
+    payload: Dict[str, Any] = {
+        "headline": str(article.get("title", "") or "").strip(),
+        "summary": str(article.get("summary", "") or ""),
+        "importance": min(1.0, max(0.0, float(importance) / 10.0)),
+        "category": str(article.get("category", "general") or "general"),
+        "topics": [str(t) for t in (article.get("key_entities") or []) if str(t).strip()],
+        "url": str(article.get("url", "") or ""),
+    }
+    published = article.get("published_at") or article.get("timestamp")
+    if isinstance(published, (int, float)):
+        payload["ts"] = float(published)
+
     signal = {
-        "type": "system",
+        "type": "news.alert",
         "severity": severity,
         "source": {
             "system": "pulse-news",
@@ -37,12 +54,8 @@ async def dispatch_alert_to_aigirl(article: Dict[str, Any]) -> bool:
         "context": {
             "platform": "pulse",
         },
-        "payload": {
-            "title": article.get("title", "News Alert"),
-            "description": article.get("summary", ""),
-            "root_cause": f"Pulse AI News detected breaking event (importance={importance})",
-        },
-        "confidence": min(1.0, importance / 10.0),
+        "payload": payload,
+        "confidence": min(1.0, float(importance) / 10.0),
     }
 
     try:
@@ -52,7 +65,7 @@ async def dispatch_alert_to_aigirl(article: Dict[str, Any]) -> bool:
                 json=signal,
             )
             if resp.status_code in (200, 201):
-                logger.info("[AIGirl] Alert dispatched: %s", article.get("title", "")[:60])
+                logger.info("[AIGirl] Alert dispatched: %s", payload["headline"][:60])
                 return True
             else:
                 logger.warning("[AIGirl] Dispatch returned %s: %s", resp.status_code, resp.text[:100])

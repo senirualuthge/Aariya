@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import useStore from '../store';
 import { getDB } from '../db/init';
 import { neuralEngine } from './ai/NeuralEngine';
+import { getUserId } from './userIdentity';
 
 export default function PersonalitySystem() {
     const { started } = useStore();
@@ -10,7 +11,7 @@ export default function PersonalitySystem() {
         if (!started) return;
 
         const db = getDB();
-        const userId = 'user_default';
+        const userId = getUserId();
 
         // Load existing personality or initialize
         const existing = db.prepare(`

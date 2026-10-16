@@ -27,6 +27,9 @@ Available knobs (defaults in parentheses):
     AARIYA_INSIGHT_COOLDOWN_SECONDS     (300)  min gap between insight shares
     AARIYA_OPPORTUNITY_COOLDOWN_SECONDS (900)  min gap between plan nudges
     AARIYA_CURIOSITY_COOLDOWN_SECONDS   (1800) min gap between curiosity sparks
+    AARIYA_NEWS_COOLDOWN_SECONDS        (3600) min gap between news check-ins
+    AARIYA_NEWS_MIN_IMPORTANCE          (0.6)  min importance (0..1) to surface
+    AARIYA_NEWS_MAX_AGE_SECONDS         (3600) freshness window for news alerts
 
   Initiative safety guard
     AARIYA_INITIATIVE_COOLDOWN_SECONDS  (300)  min gap between initiations
@@ -135,6 +138,25 @@ class AutonomyConfig(BaseModel):
     )
     CURIOSITY_COOLDOWN_SECONDS: int = Field(
         default_factory=lambda: _int_env("AARIYA_CURIOSITY_COOLDOWN_SECONDS", 1800, minimum=30)
+    )
+
+    # ── PPO conversational-policy retraining (Track E) ─────────────────────
+    # How often the daemon checks whether a corpus retrain is due. The decision
+    # itself (count + checkpoint mtime) is cheap; the update runs in a thread.
+    RL_RETRAIN_CHECK_SECONDS: int = Field(
+        default_factory=lambda: _int_env("AARIYA_RL_RETRAIN_CHECK_SECONDS", 3600, minimum=30)
+    )
+    # News check-ins (Track D): min gap between them, plus the importance /
+    # freshness gate that decides whether a real ingested alert is worth
+    # bringing up unprompted.
+    NEWS_COOLDOWN_SECONDS: int = Field(
+        default_factory=lambda: _int_env("AARIYA_NEWS_COOLDOWN_SECONDS", 3600, minimum=60)
+    )
+    NEWS_MIN_IMPORTANCE: float = Field(
+        default_factory=lambda: _float_env("AARIYA_NEWS_MIN_IMPORTANCE", 0.6)
+    )
+    NEWS_MAX_AGE_SECONDS: int = Field(
+        default_factory=lambda: _int_env("AARIYA_NEWS_MAX_AGE_SECONDS", 3600, minimum=60)
     )
 
     # ── Idle stream-of-consciousness (visible inner life) ────────────────────

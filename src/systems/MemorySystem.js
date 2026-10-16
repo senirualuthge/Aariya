@@ -1,10 +1,11 @@
 import { getDB } from '../db/init';
 import useStore from '../store';
+import { getUserId } from './userIdentity';
 
 export class MemorySystem {
     constructor() {
         this.db = getDB();
-        this.userId = 'user_default';
+        this.userId = getUserId();
     }
 
     // Store a memory
