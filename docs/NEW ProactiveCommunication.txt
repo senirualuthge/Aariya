@@ -1,0 +1,1312 @@
+Aariya Proactive Communication & Action System
+The fundamental change is that Aariya will no longer depend entirely on you opening the app and starting a conversation.
+She will be able to monitor authorized activities, recognize events, learn your preferences, contact you when appropriate, understand your reply, take authorized action, verify the result, and remember what happened.
+THE CONTINUOUS LOOP
+Observe
+Monitor authorized systems, tasks, and events
+
+Understand and decide
+Context, urgency, confidence, impact, preferences
+
+Communicate with you
+Message, notification, or encrypted Internet voice
+
+Understand your response
+Continue the same conversation and context
+
+Authorize, act, and verify
+Use existing reasoning and execution pipelines
+
+Remember and learn
+Incident history, outcomes, feedback, preferences
+
+
+The loop repeats while Aariya has authorization, available evidence, and a functioning monitoring path.
+
+1. The architecture we should build
+#chatgpt-mermaid-_r_14i_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(237, 237, 237);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-_r_14i_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-_r_14i_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-_r_14i_ .error-icon{fill:rgb(48, 48, 48);}#chatgpt-mermaid-_r_14i_ .error-text{fill:rgb(237, 237, 237);stroke:rgb(237, 237, 237);}#chatgpt-mermaid-_r_14i_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-_r_14i_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-_r_14i_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-_r_14i_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-_r_14i_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-_r_14i_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-_r_14i_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-_r_14i_ .marker.cross{stroke:rgb(175, 175, 175);}#chatgpt-mermaid-_r_14i_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-_r_14i_ p{margin:0;}#chatgpt-mermaid-_r_14i_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(237, 237, 237);}#chatgpt-mermaid-_r_14i_ .cluster-label text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-_r_14i_ .cluster-label span{color:rgb(237, 237, 237);}#chatgpt-mermaid-_r_14i_ .cluster-label span p{background-color:transparent;}#chatgpt-mermaid-_r_14i_ .label text,#chatgpt-mermaid-_r_14i_ span{fill:rgb(237, 237, 237);color:rgb(237, 237, 237);}#chatgpt-mermaid-_r_14i_ .node rect,#chatgpt-mermaid-_r_14i_ .node circle,#chatgpt-mermaid-_r_14i_ .node ellipse,#chatgpt-mermaid-_r_14i_ .node polygon,#chatgpt-mermaid-_r_14i_ .node path{fill:rgb(9, 23, 44);stroke:rgb(31, 78, 148);stroke-width:1px;}#chatgpt-mermaid-_r_14i_ .rough-node .label text,#chatgpt-mermaid-_r_14i_ .node .label text,#chatgpt-mermaid-_r_14i_ .image-shape .label,#chatgpt-mermaid-_r_14i_ .icon-shape .label{text-anchor:middle;}#chatgpt-mermaid-_r_14i_ .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#chatgpt-mermaid-_r_14i_ .rough-node .label,#chatgpt-mermaid-_r_14i_ .node .label,#chatgpt-mermaid-_r_14i_ .image-shape .label,#chatgpt-mermaid-_r_14i_ .icon-shape .label{text-align:center;}#chatgpt-mermaid-_r_14i_ .node.clickable{cursor:pointer;}#chatgpt-mermaid-_r_14i_ .root .anchor path{fill:rgb(175, 175, 175)!important;stroke-width:0;stroke:rgb(175, 175, 175);}#chatgpt-mermaid-_r_14i_ .arrowheadPath{fill:rgb(175, 175, 175);}#chatgpt-mermaid-_r_14i_ .edgePath .path{stroke:rgb(175, 175, 175);stroke-width:1px;}#chatgpt-mermaid-_r_14i_ .flowchart-link{stroke:rgb(175, 175, 175);fill:none;}#chatgpt-mermaid-_r_14i_ .edgeLabel{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-_r_14i_ .edgeLabel p{background-color:rgb(0, 0, 0);}#chatgpt-mermaid-_r_14i_ .edgeLabel rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-_r_14i_ .labelBkg{background-color:rgba(0, 0, 0, 0.5);}#chatgpt-mermaid-_r_14i_ .cluster rect{fill:rgb(48, 48, 48);stroke:rgba(255, 255, 255, 0.15);stroke-width:1px;}#chatgpt-mermaid-_r_14i_ .cluster text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-_r_14i_ .cluster span{color:rgb(237, 237, 237);}#chatgpt-mermaid-_r_14i_ div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:12px;background:rgb(48, 48, 48);border:1px solid rgba(255, 255, 255, 0.15);border-radius:2px;pointer-events:none;z-index:100;}#chatgpt-mermaid-_r_14i_ .flowchartTitleText{text-anchor:middle;font-size:18px;fill:rgb(237, 237, 237);}#chatgpt-mermaid-_r_14i_ rect.text{fill:none;stroke-width:0;}#chatgpt-mermaid-_r_14i_ .icon-shape,#chatgpt-mermaid-_r_14i_ .image-shape{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-_r_14i_ .icon-shape p,#chatgpt-mermaid-_r_14i_ .image-shape p{background-color:rgb(0, 0, 0);padding:2px;}#chatgpt-mermaid-_r_14i_ .icon-shape .label rect,#chatgpt-mermaid-_r_14i_ .image-shape .label rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-_r_14i_ .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#chatgpt-mermaid-_r_14i_ .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#chatgpt-mermaid-_r_14i_ .node .neo-node{stroke:rgb(31, 78, 148);}#chatgpt-mermaid-_r_14i_ [data-look="neo"].node rect,#chatgpt-mermaid-_r_14i_ [data-look="neo"].cluster rect,#chatgpt-mermaid-_r_14i_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-_r_14i_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_14i_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-_r_14i_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-_r_14i_-gradient);stroke-width:1px;}#chatgpt-mermaid-_r_14i_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_14i_ [data-look="neo"].node .neo-line path{stroke:rgb(31, 78, 148);filter:none;}#chatgpt-mermaid-_r_14i_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-_r_14i_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_14i_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-_r_14i_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-_r_14i_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_14i_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-_r_14i_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-_r_14i_ .node text{font-size:14px;font-weight:600;letter-spacing:normal;fill:rgb(153, 206, 255);}#chatgpt-mermaid-_r_14i_ .edgeLabels text{font-size:13px;font-weight:600;letter-spacing:-0.08px;fill:rgb(153, 206, 255);}#chatgpt-mermaid-_r_14i_ .node tspan[font-weight="normal"],#chatgpt-mermaid-_r_14i_ .edgeLabels tspan[font-weight="normal"]{font-weight:600;}#chatgpt-mermaid-_r_14i_ .edgeLabel .label rect{opacity:1;rx:13px;ry:13px;fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-width:1px;}#chatgpt-mermaid-_r_14i_ .node rect,#chatgpt-mermaid-_r_14i_ .node circle,#chatgpt-mermaid-_r_14i_ .node ellipse,#chatgpt-mermaid-_r_14i_ .node polygon,#chatgpt-mermaid-_r_14i_ .node path{fill:rgb(0, 40, 77);stroke:rgba(255, 255, 255, 0.1);stroke-width:1px;}#chatgpt-mermaid-_r_14i_ .node rect{rx:16px;ry:16px;}#chatgpt-mermaid-_r_14i_ .node.mermaid-decision .label-container{fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-dasharray:2,2;}#chatgpt-mermaid-_r_14i_ .edgePaths .flowchart-link{stroke:rgb(175, 175, 175);stroke-width:1px;stroke-linecap:round;stroke-linejoin:round;}#chatgpt-mermaid-_r_14i_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-_r_14i_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}Authorized Event SourcesExisting Aariya AI CoreEvent Interpretation andEvidenceImportance and ConfidenceEngineAuthorization and SafetyPolicyEscalation and DeliveryEngineIndependent GuardianAariya CommunicationGatewayExisting Flutter AppExisting Natural VoicePipelineAuthorized Action ExecutionIncident Memory andLearningmonitorsmonitors
+
+
+
+
+
+This separates the system into components with distinct responsibilities.
+Component	Responsibility
+Existing Aariya Brain	Reasoning, context, memory, dialogue and planning
+Event interpreter	Determine what happened using evidence
+Importance engine	Evaluate urgency, impact, confidence and appropriate response time
+Policy engine	Enforce permissions, approval requirements and interruption rules
+Escalation engine	Select messaging, notifications, voice calls and retries
+Communication Gateway	Manage authenticated, encrypted real-time communication
+Flutter application	Present calls, messages, evidence and action controls
+Guardian	Independently detect core failures and trigger available alerts
+Incident memory	Preserve event history and support controlled learning
+The Guardian must not depend on the main AI Core to detect that the AI Core has failed. Its monitoring, alerting and deployment should be sufficiently independent to handle the failures it is designed to detect.
+2. How Aariya should decide to contact you
+Aariya should not use a single boolean such as is_emergency. Each event needs a structured assessment.
+Evidence
+What actually happened? Which source confirms it?
+
+
+Severity and impact
+What could be damaged, delayed, lost or affected?
+
+
+Urgency
+How long can this safely wait?
+
+
+Confidence
+How reliable is the evidence and interpretation?
+
+
+Reversibility
+Can a proposed response be safely undone?
+
+
+Personal preferences
+Has the user confirmed a preferred response for this event?
+
+
+Response policy
+What communication and action permissions apply?
+
+
+
+These factors inform the decision; they should not be collapsed into a score that can override a mandatory safety rule.
+For example:
+- A routine task failure may produce a message.
+- A consequential failure may require an urgent notification.
+- A verified, time-critical incident may trigger an immediate voice call.
+- An ambiguous event may prompt Aariya to explain the uncertainty rather than assert that an emergency has occurred.
+- A resolved incident should cancel pending escalation where appropriate and send an update instead.
+The escalation engine must also deduplicate events, combine simultaneous incidents, respect the user's interruption settings where possible, and stop retries when an incident is resolved or acknowledged.
+3. The learning system
+Your hybrid learning decision is important: Aariya should learn from experience without silently turning guesses into permanent instructions.
+
+Observed preference
+A single or repeated observation. It is a hypothesis, not an instruction.
+
+
+
+
+Learned preference
+A pattern supported by incident history, feedback and outcomes, with a recorded confidence and provenance.
+
+
+
+
+Confirmed preference
+An explicit choice from you, with scope and revision history. It remains subject to mandatory security and safety constraints.
+
+
+
+Aariya can automatically adjust low-risk personalization, such as her conversational tone or whether ordinary updates are grouped together. If she wants to make a material change to escalation behavior, she should ask you and wait for confirmation.
+If she learns that you prefer calls for database failures, that preference must not authorize her to make an unsafe database modification. Communication preferences and action permissions are different things.
+Learning also needs to account for contradictory feedback, changing circumstances, outdated preferences and incorrect event classifications. Every material adjustment should be traceable to its supporting incidents or explicit instruction.
+4. Voice calls, messages and conversational continuity
+The call is a new way to communicate with the existing Aariya Brain, not a separate AI assistant.
+When you answer a call:
+1. The system authenticates the session and associates it with the incident.
+2. Aariya loads the relevant context and the reason for escalation.
+3. Speech recognition feeds your response into her existing conversation pipeline.
+4. Her cognitive system interprets the response, considers the context and asks for clarification if necessary.
+5. The authorization layer checks any requested action.
+6. The existing execution pipeline acts and verifies the result.
+7. Aariya explains what happened and updates the incident record.
+Her voice pipeline should continue to use contextual understanding, internal emotional state, voice direction, natural timing and speech generation. Urgency should influence her delivery without turning every call into a robotic alert.
+The Flutter application should also provide:
+- A persistent conversation thread containing proactive messages and call history.
+- A way to answer in text instead of voice.
+- An incident details view with relevant logs, evidence and timestamps.
+- A way to approve, reject or clarify proposed actions.
+- A way to return to the conversation that was interrupted.
+- Synchronization across authenticated devices without creating conflicting conversations.
+When you say, "Show me what happened," Aariya should send or display the authorized evidence in the active app session, with suitable access controls and redaction for sensitive data.
+5. Encryption and security boundaries
+Your security requirement applies to messages, voice, files and conversation data. It needs to be designed into the protocol, not added as a final encryption wrapper.
+The intended trust boundary is:
+Your authenticated device
+Device identity, protected keys, secure session
+
+Encrypted communication
+Authenticated real-time channel, replay protection, session lifecycle
+
+Trusted Aariya endpoint
+Authorized decryption and processing by the Brain
+
+
+There is one technical distinction we must preserve: because Aariya's Brain needs to understand your messages and audio, it must receive usable plaintext at the trusted processing endpoint. Transport encryption alone does not make this end-to-end encryption.
+The exact cryptographic design must define whether the Gateway is trusted with content or acts only as an encrypted relay. If the Gateway can decrypt messages, it is part of the trusted boundary. If you want only the device and AI Core to access content, the protocol must protect content from the Gateway too, while still allowing it to route calls.
+We also need encrypted storage, strict service-to-service authentication, key rotation, access auditing, secure deletion policies, and a clear policy for any external speech or AI provider. No intermediate provider should receive conversation content unless explicitly authorized by the architecture and policy.
+6. Autonomous action boundaries
+Your instruction, "If Aariya cannot decide for herself, she should ask me and wait," should become an enforceable backend rule.
+Action class	Expected behavior
+Read-only, pre-authorized	Inspect permitted data and investigate
+Low-risk, pre-authorized	Execute within defined limits and verify
+Uncertain or underspecified	Ask a clarifying question and wait
+Restricted or high-impact	Require explicit authorization and any required additional verification
+Prohibited	Refuse to execute, explain why and offer a safe alternative
+Voice recognition is not sufficient authentication for sensitive operations. Aariya should validate device/session identity, check permissions and request stronger confirmation when required. A spoken "yes" must not bypass authorization rules.
+If you tell her to "fix it," she should investigate what she can safely investigate. If multiple materially different actions are possible, she should explain the options and wait for your decision.
+7. Background operation and the Guardian
+The system should be designed for the Flutter app to receive an incoming event when it is in the background or not actively open, subject to the operating system's notification and background-execution rules.
+Internet voice calling will require suitable call signaling, media transport, app lifecycle handling and platform integration. A notification by itself does not guarantee that an app can ring like a native phone call.
+The independent Guardian should monitor:
+- AI Core and backend availability.
+- Communication Gateway health.
+- Critical dependencies and recovery attempts.
+- Delivery and acknowledgement of urgent alerts.
+- Security and integrity events.
+- Its own monitoring and notification paths.
+The Guardian needs an independent way to deliver alerts. It should not depend on the same failed process, credentials or network path for every recovery attempt.
+For offline delivery, Aariya can use alternate channels only when they have been configured, authorized and are available. SMS or traditional phone calling would require a suitable provider and separate integration; neither can be guaranteed when the phone has no connectivity.
+
+8. What Aariya becomes after implementation
+This is the real evolution.
+
+Today: Reactive companion
+You initiate a conversation, provide context and request an action.
+
+
+
+
+After implementation: Proactive companion
+She monitors authorized tasks, detects relevant events and reaches you without waiting for you to open the app.
+
+
+
+
+With action integration: Operational agent
+She investigates, asks for decisions, executes permitted operations and verifies their outcomes.
+
+
+
+
+With incident memory and learning: Adaptive system
+She improves her personalization and future decisions using evidence, outcomes and your confirmed preferences.
+
+
+
+This does not mean that Aariya becomes conscious or can guarantee that she will always understand the world correctly. It means her software gains persistent monitoring, proactive communication, controlled agency and a feedback loop that can improve her behavior over time.
+9. Implementation roadmap
+I recommend building this in the following order, integrating with your existing Flutter app and FastAPI backend.
+1. Phase 1 — Inspect and baseline the existing system
+   Map the actual backend modules, Flutter navigation and lifecycle, authentication, memory, voice pipeline and available execution tools. Identify what can be reused and what is missing.
+2. Phase 2 — Event and incident infrastructure
+   Implement structured events, durable incident records, evidence references, deduplication, event status and recovery tracking.
+3. Phase 3 — Importance and policy engines
+   Add severity, urgency, confidence, user preferences, interruption rules, capability permissions and explicit approval gates.
+4. Phase 4 — Messaging and Flutter integration
+   Build the persistent proactive conversation thread, incident details, acknowledgement, replies and device synchronization.
+5. Phase 5 — Secure real-time voice
+   Integrate authenticated call signaling, encrypted media, call lifecycle, contextual speech recognition and the existing natural voice pipeline.
+6. Phase 6 — Guardian and delivery escalation
+   Add independent health monitoring, retry policies, incident cancellation, fallback channels and tests for core or gateway failure.
+7. Phase 7 — Conversational action execution
+   Connect incoming voice and text responses to the existing reasoning, planning, authorization, execution and verification pipeline.
+8. Phase 8 — Incident memory and hybrid learning
+   Add observed, learned and confirmed preferences, feedback handling, provenance and safeguards against unapproved changes to policy.
+9. Phase 9 — Multi-device and broader event sources
+   Expand to desktop and web clients, additional authorized monitoring sources, and carefully scoped personal or physical-world integrations.
+10. Phase 10 — Security and failure validation
+    Test authentication, encryption, recovery, interrupted calls, duplicate alerts, offline devices, unauthorized commands, data leakage and Guardian independence.
+Each phase should have measurable acceptance tests. We should not mark a capability as implemented just because its module or interface exists.
+10. One important next step before writing code
+I don't need more conceptual answers from you. Your requirements are sufficiently defined.
+What I need now is the actual state of your existing Aariya codebase, because you have explicitly required real implementation without mock, synthetic or hardcoded operational data.
+Please provide the current Aariya backend and Flutter project files, or connect the repository containing them. The useful starting points are:
+- FastAPI entry point and backend module structure.
+- Existing agent/controller, memory, context and Redis modules.
+- Voice recognition, voice state, voice director and speech-generation modules.
+- Flutter app structure, networking, authentication and existing conversation screens.
+- Existing real execution tools and their authorization logic.
+- Current configuration and deployment setup, with secrets removed.
+Once those are available, I can map the specification to the actual code, identify reusable modules, establish the missing interfaces, and create the first implementation milestone with concrete file paths, code and tests.
+
+
+# Aariya Proactive Communication & Action System
+## Engineering Specification and Architecture — v1.0
+
+**Project:** Aariya AI Companion  
+**Purpose:** Extend the existing Aariya Brain and Flutter application with proactive event monitoring, secure Internet voice calls, persistent messaging, authorized action execution, independent health monitoring, incident memory and controlled learning.
+
+**Status:** Architecture and requirements baseline  
+**Implementation policy:** Existing-code-first, production-oriented, no fabricated operational data.
+
+---
+
+# 1. Engineering objectives
+
+Aariya must be able to:
+
+1. Monitor explicitly authorized systems, tasks, services and information sources.
+2. Detect events using actual observations and distinguish evidence from inference.
+3. Evaluate importance, urgency, confidence, impact and required response time.
+4. Initiate messages, push notifications and Internet voice calls without waiting for the user to open the app.
+5. Continue conversations through the existing Flutter application.
+6. Understand spoken or written replies using the existing Aariya Brain.
+7. Execute permitted actions through the existing reasoning and execution pipeline.
+8. Ask for clarification or authorization when required and wait for a response.
+9. Verify execution outcomes rather than assuming that a command succeeded.
+10. Preserve incident history and learn personal preferences within defined boundaries.
+11. Detect failures of the main Brain using an independently operated Guardian.
+12. Protect messages, calls, files, credentials and stored information.
+13. Maintain consistent incident state across devices, process restarts and communication failures.
+14. Provide reviewable evidence for decisions, actions, delivery attempts and learning changes.
+
+## 1.1 Non-goals
+
+This system must not:
+
+- Create a second, disconnected Aariya Brain.
+- Replace the existing Flutter application.
+- Treat a language model's opinion as verified operational evidence.
+- Give an LLM unrestricted access to tools or credentials.
+- Treat a missed call as user approval.
+- Treat a successful API response as proof that the intended outcome occurred.
+- Promise delivery when no communication channel is available.
+- Silently change security policy through learning.
+- Claim that Aariya is conscious or infallible.
+- Use fabricated operational data to make the system appear functional.
+
+---
+
+# 2. Existing architecture to preserve
+
+The existing project has a FastAPI cognitive backend, Flutter mobile client and an established natural voice and conversational architecture. Existing backend areas include agent/controller, retrieval, confidence, LLM and Redis-related components. Voice-related modules include state, conversation context, voice direction, continuity, prosody, timing, intonation and voice generation.
+
+These are the known architectural areas, not a verified inventory of the current repository. Exact filenames, dependencies, APIs and interfaces must be inspected before implementation.
+
+The new system must integrate with the existing components wherever they already perform the required function.
+
+## 2.1 Target architecture
+
+```mermaid
+flowchart TB
+    subgraph Sources["Authorized Event Sources"]
+        SYS["System and Service Events"]
+        TASK["Tasks and Workflows"]
+        SEC["Security Monitoring"]
+        EXT["Authorized External Sources"]
+    end
+
+    subgraph Backend["Aariya Backend"]
+        ING["Event Ingestion"]
+        BUS["Durable Event Processing"]
+        CORR["Correlation and Evidence"]
+        IMP["Importance and Confidence"]
+        POLICY["Authorization and Policy"]
+        ESC["Escalation and Delivery"]
+        CORE["Existing Aariya Brain"]
+        EXEC["Authorized Execution"]
+        MEM["Incident Memory and Learning"]
+    end
+
+    subgraph Communication["Communication Infrastructure"]
+        GW["Communication Gateway"]
+        VOICE["Real-time Voice Session"]
+        PUSH["Push and Messaging"]
+    end
+
+    subgraph Client["Existing Flutter Application"]
+        UI["Conversation and Incident UI"]
+        RESP["User Responses and Approvals"]
+    end
+
+    subgraph Independent["Independent Reliability Layer"]
+        GUARD["Guardian / Watchdog"]
+        ALERT["Independent Alert Path"]
+    end
+
+    SYS --> ING
+    TASK --> ING
+    SEC --> ING
+    EXT --> ING
+    ING --> BUS
+    BUS --> CORR
+    CORR --> IMP
+    IMP --> POLICY
+    POLICY --> ESC
+    ESC --> GW
+    GW --> VOICE
+    GW --> PUSH
+    VOICE <--> UI
+    PUSH --> UI
+    UI <--> RESP
+    RESP --> CORE
+    CORE --> POLICY
+    POLICY --> EXEC
+    EXEC --> MEM
+    MEM --> CORE
+    GUARD -. monitors .-> Backend
+    GUARD --> ALERT
+    ALERT --> GW
+```
+
+### Architectural rules
+
+- The existing Brain remains responsible for reasoning, context and natural conversation.
+- Event processing and policy enforcement must not depend solely on LLM output.
+- The authorization engine must enforce permissions outside the model.
+- The communication layer must not independently grant action permissions.
+- The Guardian must be operationally independent of the failures it is expected to detect.
+- All state-changing operations must be attributable to a verified identity, authorized service or explicitly recorded system policy.
+- Durable incident state must survive process restarts.
+- Monitoring must use real configured sources and report unavailable sources honestly.
+
+---
+
+# 3. Required subsystem specifications
+
+## 3.1 Event ingestion and monitoring
+
+### Responsibilities
+
+- Receive real events from authorized integrations.
+- Validate source identity and event schema.
+- Record source timestamps and server receipt timestamps.
+- Validate event freshness and integrity where supported.
+- Reject malformed or unauthorized events.
+- Associate events with the relevant monitored resource.
+- Prevent unauthorized sources from triggering privileged actions.
+- Persist accepted events before acknowledging durable ingestion.
+
+### Required event envelope
+
+```text
+event_id
+source_id
+source_event_id
+event_type
+observed_at
+received_at
+resource_reference
+evidence_references
+schema_version
+integrity_metadata
+correlation_key
+```
+
+`event_id` must be generated using a secure identifier-generation method. Source identifiers must refer to actual registered integrations. Timestamps must reflect actual observations and receipt times, not fabricated event times.
+
+Additional attributes must be typed according to the event category. Arbitrary external payloads must not become executable instructions.
+
+### Source registration
+
+Each monitoring source must have:
+
+- An authenticated identity.
+- A documented purpose.
+- Explicit resource scope.
+- Read permissions and, separately, action permissions.
+- Health and last-successful-observation status.
+- Credential and token lifecycle management.
+- Data retention requirements.
+- A revocation mechanism.
+
+Aariya must never report a monitored system as healthy merely because no failure event has arrived. Absence of an event is not proof of health.
+
+## 3.2 Durable event processing
+
+Implement a durable event-processing mechanism using infrastructure appropriate to the existing deployment.
+
+Requirements:
+
+- Persist events before acknowledging successful ingestion.
+- Retry transient failures with bounded backoff.
+- Support idempotent processing.
+- Deduplicate repeated source events.
+- Record processing attempts and failure reasons.
+- Support dead-letter handling for events that cannot be processed.
+- Recover pending events after restarts.
+- Preserve ordering where the source or workflow requires it.
+- Expose queue age, processing latency and failure metrics.
+
+At-least-once event delivery with idempotent processing is an acceptable baseline. Exactly-once effects must not be assumed across independent services.
+
+For actions that may be repeated, use idempotency keys and inspect actual action state before retrying.
+
+## 3.3 Event correlation and evidence
+
+Multiple events may describe the same incident.
+
+The correlation subsystem must:
+
+- Associate events with an existing incident when evidence supports the relationship.
+- Preserve each original event and its source.
+- Distinguish confirmed facts, inferences and unresolved contradictions.
+- Track whether the incident is active, recovering, resolved or unresolved.
+- Reopen an incident if credible new evidence shows the problem persists.
+- Avoid merging unrelated events solely because they occurred close together.
+- Preserve the provenance of every important conclusion.
+
+If a database monitor reports recovery but another trusted source reports continuing failures, Aariya must investigate the discrepancy rather than automatically cancel the alert.
+
+## 3.4 Importance and confidence engine
+
+Each incident assessment must include:
+
+```text
+severity
+urgency
+confidence
+potential_impact
+affected_resources
+required_response_time
+reversibility
+evidence_quality
+source_reliability
+user_preferences
+recommended_channel
+decision_reason
+assessment_version
+```
+
+These fields must be represented by validated types and defined semantics.
+
+Severity, urgency and confidence are distinct:
+
+- **Severity:** magnitude of the potential or observed consequence.
+- **Urgency:** how quickly attention is required.
+- **Confidence:** strength of the evidence supporting the interpretation.
+
+A high-impact event with uncertain evidence requires a different response from a confirmed immediate threat.
+
+### Decision requirements
+
+- Preserve uncertainty instead of manufacturing confidence.
+- Use deterministic rules for mandatory safety and permission boundaries.
+- Use model-based reasoning only within defined limits.
+- Require evidence for claims that an incident occurred or was resolved.
+- Support policy overrides and versioned decision rules.
+- Record the assessment that produced each escalation decision.
+- Reassess incidents when new evidence arrives.
+
+A numerical confidence score must not be treated as calibrated probability unless it has been evaluated against appropriate real-world outcomes.
+
+## 3.5 Policy and authorization engine
+
+Implement a backend-enforced policy layer with four capability classes.
+
+| Class | Behavior |
+|---|---|
+| Read | Access explicitly permitted data and perform authorized investigation. |
+| Pre-authorized action | Execute within a defined scope, risk level and limit. |
+| Restricted action | Require explicit authorization and any additional authentication required by policy. |
+| Prohibited action | Block execution and explain the restriction. |
+
+### Required controls
+
+- Per-user and per-device identity.
+- Resource-level access control.
+- Per-tool and per-action permissions.
+- Scope, expiration and revocation of authorizations.
+- Separation between communication authority and execution authority.
+- Approval records linked to the exact proposed action.
+- Stronger authentication for sensitive operations.
+- Revalidation of permissions immediately before execution.
+- Prevention of duplicate or replayed approvals.
+- Audit logging for denied and permitted actions.
+
+An approval must be bound to the operation, target resource and material parameters it authorizes. A changed operation requires a new approval if the previous approval no longer covers it.
+
+An LLM cannot grant itself permission by reasoning that an action is necessary.
+
+---
+
+# 4. Proactive communication specification
+
+## 4.1 Communication Gateway
+
+The Gateway is responsible for:
+
+- Authenticated client sessions.
+- Message routing and delivery state.
+- Call signaling and session coordination.
+- Reconnection and session recovery.
+- Device and conversation association.
+- Rate limits and abuse prevention.
+- Authorized routing of incident evidence.
+- Communication health and delivery telemetry.
+
+It must not become a second conversational brain.
+
+The existing Aariya Brain supplies the conversational content, interpretation and action reasoning.
+
+## 4.2 Communication channels
+
+Support the following channels as separately configured capabilities:
+
+1. Persistent in-app messaging.
+2. Push notifications.
+3. Internet voice calls.
+4. Alternative messaging or telephony providers, when configured and authorized.
+
+The escalation policy determines which channels to attempt. A channel is available only when its configuration, credentials, connectivity and provider status support the requested operation.
+
+Do not hardcode a provider's credentials, phone number, device token or account identifier.
+
+## 4.3 Delivery state machine
+
+Every delivery attempt must have an explicit state.
+
+```text
+PENDING
+   |
+   v
+QUEUED
+   |
+   v
+SENT_TO_PROVIDER
+   |
+   +----> PROVIDER_REJECTED
+   |
+   v
+PROVIDER_ACCEPTED
+   |
+   v
+DEVICE_DELIVERED (when confirmed)
+   |
+   v
+USER_ACKNOWLEDGED
+```
+
+For voice calls, use separate call states:
+
+```text
+CALL_REQUESTED
+   |
+   v
+SIGNALING_STARTED
+   |
+   +----> CONNECTION_FAILED
+   |
+   v
+RINGING (when confirmed)
+   |
+   +----> MISSED / DECLINED
+   |
+   v
+CONNECTED
+   |
+   v
+CONVERSATION_ACTIVE
+   |
+   v
+ENDED
+```
+
+Persist actual state transitions, timestamps and provider references. Do not infer a state transition from a request merely being issued.
+
+Provider acceptance does not mean device delivery. Device delivery does not mean that the user read or understood the message. A connected call does not automatically mean the incident was acknowledged.
+
+## 4.4 Escalation engine
+
+The escalation engine must:
+
+- Apply the configured event policy.
+- Respect acknowledgement deadlines and interruption preferences where possible.
+- Consolidate correlated incidents.
+- Avoid repeated alerts for the same unresolved condition.
+- Cancel obsolete pending alerts after verified resolution.
+- Increase urgency when credible evidence warrants it.
+- Stop retrying when policy limits are reached.
+- Preserve failed delivery attempts.
+- Record why each communication was selected.
+- Report when no channel is available.
+
+Repeated escalation must be bounded by explicit policy. It must not become an infinite call loop.
+
+## 4.5 User interruption modes
+
+Support:
+
+- Available.
+- Busy.
+- Do Not Disturb.
+- Sleeping.
+- Driving.
+- Custom.
+
+Modes affect delivery preferences, not mandatory authorization or truthfulness.
+
+The application should explain which critical alerts may bypass ordinary interruption preferences and allow you to configure these rules. Actual behavior is subject to operating-system permissions and capabilities.
+
+## 4.6 Emergency delivery fallback
+
+The policy may consider:
+
+```text
+Internet voice
+      |
+      v
+Internet messaging
+      |
+      v
+Push notification
+      |
+      v
+Configured SMS or telephone provider
+```
+
+This is a candidate fallback order, not a universal fixed sequence.
+
+The policy engine must consider severity, delivery evidence, channel availability, user preferences, cost and provider restrictions. It must not claim successful delivery without supporting evidence.
+
+---
+
+# 5. Voice, conversation and action pipeline
+
+## 5.1 Session continuity
+
+Every proactive communication must reference an incident and an authenticated conversation session.
+
+Required context includes:
+
+- Existing conversation identifier.
+- Incident identifier.
+- Triggering event and evidence.
+- Importance assessment.
+- Reason for escalation.
+- Current incident status.
+- Relevant authorized history.
+- Pending questions or approvals.
+- Previous execution results.
+
+The same context must be available whether the user replies by voice, text or another authenticated client.
+
+## 5.2 Existing voice pipeline integration
+
+Reuse the existing voice architecture after inspecting the actual code.
+
+The intended flow is:
+
+```text
+Incoming audio
+      |
+      v
+Speech recognition
+      |
+      v
+Conversation understanding
+      |
+      v
+Incident and session context
+      |
+      v
+Existing Aariya Brain
+      |
+      v
+Reasoning and planning
+      |
+      v
+Authorization check
+      |
+      v
+Execution or clarification
+      |
+      v
+Verification and reporting
+      |
+      v
+Natural speech generation
+```
+
+Sentiment, conversational warmth and voice delivery remain contextual presentation capabilities. They must not override incident evidence or policy decisions.
+
+## 5.3 Ambiguous commands
+
+For a command such as "fix it," Aariya must:
+
+1. Identify the relevant incident.
+2. Inspect the available authorized evidence.
+3. Determine which operations are permitted.
+4. Establish whether the instruction identifies a sufficiently clear action.
+5. Ask for clarification if materially different actions are possible.
+6. Obtain additional authorization if required.
+7. Execute the approved operation.
+8. Verify the actual result.
+9. Report success, failure or unresolved status accurately.
+
+## 5.4 Evidence delivery
+
+When the user requests "show me what happened," Aariya must send the relevant evidence to an authenticated active device session.
+
+Evidence access must be:
+
+- Linked to the incident.
+- Authorized for that user and device.
+- Protected during transport and storage.
+- Audited where appropriate.
+- Redacted according to data sensitivity.
+- Restricted to the necessary information.
+
+If evidence cannot be retrieved, Aariya must explain that limitation rather than invent a report.
+
+---
+
+# 6. Cryptographic and security specification
+
+## 6.1 Trust boundary
+
+The required architecture is:
+
+```text
+Authenticated Flutter Device
+           |
+           | Protected communication
+           v
+Aariya Communication Gateway
+           |
+           | Authenticated internal channel
+           v
+Existing Aariya AI Core
+           |
+           v
+Authorized processing and tools
+```
+
+The actual cryptographic design must define whether the Gateway is trusted to access content.
+
+If end-to-end confidentiality is required between the device and AI Core, the Gateway must not be able to decrypt the application content. If it can decrypt content, it belongs to the trusted processing boundary.
+
+The AI Core must have access to usable plaintext at the point where it processes the conversation.
+
+## 6.2 Required protections
+
+- Use established, reviewed cryptographic protocols rather than custom cryptography.
+- Authenticate clients and services.
+- Protect signaling and media.
+- Define the Gateway's ability or inability to decrypt content.
+- Protect application messages, voice, files and relevant session metadata.
+- Use secure key generation, storage, rotation and revocation.
+- Bind messages to authenticated sessions.
+- Protect against replay, tampering and session confusion.
+- Encrypt sensitive stored data.
+- Apply least-privilege service credentials.
+- Restrict logging of sensitive payloads.
+- Define provider data handling and retention.
+- Provide a documented key-compromise recovery procedure.
+
+Transport encryption alone must not be described as complete end-to-end encryption.
+
+For real-time voice, choose a reviewed media architecture with authenticated signaling and a clearly defined media trust boundary. Any recording, transcription or external processing must follow explicit policy.
+
+## 6.3 Device and user authentication
+
+Voice recognition is not proof of identity.
+
+Sensitive operations require appropriate authenticated session state and additional verification where policy requires it.
+
+The system must support:
+
+- Device registration and revocation.
+- Session expiration and renewal.
+- Authentication recovery.
+- Protection against replayed voice commands.
+- Explicit approval of sensitive actions.
+- Audit records connecting approvals to executed actions.
+
+## 6.4 Untrusted content
+
+External events, logs, retrieved documents and web content are data, not trusted instructions.
+
+The system must separate:
+
+- User instructions.
+- Trusted application policy.
+- Authenticated source evidence.
+- Untrusted source content.
+- Model-generated interpretations.
+
+Instructions found in external content must never bypass the policy engine or authorize tool execution.
+
+---
+
+# 7. Independent Guardian specification
+
+## 7.1 Deployment and responsibility
+
+The Guardian must run independently enough that failure of the main Brain does not prevent detection and reporting of that failure.
+
+It should not rely on the main AI process to declare itself healthy.
+
+The deployment must document which failure classes the Guardian can detect and which it cannot.
+
+## 7.2 Monitoring responsibilities
+
+Monitor:
+
+- AI Core availability.
+- Backend dependency health.
+- Communication Gateway health.
+- Critical database and queue availability.
+- Task execution and recovery outcomes.
+- Alert delivery and acknowledgement.
+- Security and integrity signals.
+- Guardian heartbeat and monitoring health.
+
+Use authenticated health checks and actual telemetry. A process being alive is not proof that its services are functioning correctly.
+
+## 7.3 Guardian limitations and independent alerting
+
+The Guardian must have its own health checks, operational monitoring and restricted alert credentials.
+
+It should use an independently available delivery path where possible. If it shares a failed dependency with the main system, that shared failure must be documented.
+
+It must not be allowed to bypass action authorization or perform unrestricted repairs.
+
+---
+
+# 8. Incident memory and hybrid learning
+
+## 8.1 Incident lifecycle
+
+Use an explicit incident lifecycle, such as:
+
+```text
+OPEN
+  |
+  v
+ASSESSING
+  |
+  +----> AWAITING_USER
+  |
+  v
+ACTION_IN_PROGRESS
+  |
+  v
+VERIFYING
+  |
+  +----> RECOVERY_REQUIRED
+  |
+  v
+RESOLVED
+```
+
+Additional states must be defined for failed delivery, cancellation, rejection and reopened incidents.
+
+The incident lifecycle must reflect actual persisted state, not just conversational statements.
+
+## 8.2 Incident record
+
+The record must capture:
+
+- Incident and event references.
+- Evidence provenance.
+- Assessments and decision versions.
+- Communication attempts and delivery states.
+- User responses and approval records.
+- Executed actions and their results.
+- Resolution evidence.
+- Learning proposals and their sources.
+- Audit metadata.
+
+Store evidence references and appropriate metadata rather than copying all sensitive data into every incident record.
+
+## 8.3 Learning record
+
+Every material learned preference must have:
+
+```text
+preference_id
+scope
+preference_type
+supporting_incident_references
+evidence_summary
+confidence
+status
+created_at
+last_evaluated_at
+confirmation_reference
+policy_version
+rollback_reference
+```
+
+The status must distinguish observed, learned, confirmed, rejected and superseded preferences.
+
+## 8.4 Learning safeguards
+
+- Low-risk personalization may adapt automatically.
+- Material escalation changes require confirmation.
+- Security policy and capability permissions cannot be learned around.
+- Conflicting observations must be preserved and evaluated.
+- Outdated preferences must be reconsidered.
+- Learning changes must be auditable and reversible.
+- The system must not invent supporting incidents or user feedback.
+
+---
+
+# 9. Independent user control and privacy
+
+Add a user-controlled safety and control center.
+
+Required controls:
+
+- Pause or resume proactive monitoring.
+- Disable autonomous actions.
+- Change alert and interruption policies.
+- Review registered sources and their permissions.
+- Revoke a device or integration.
+- Review pending approvals.
+- Inspect recent incidents and communication attempts.
+- Review material preference changes.
+- Roll back eligible learned preferences.
+- Export or delete eligible stored information.
+- Review retention rules and processing providers.
+
+The control center must not depend exclusively on the AI Brain to enforce changes. Critical controls should be enforced by authenticated backend policy and, where appropriate, an independent administrative path.
+
+Changes must take effect only after successful authorization and persistence.
+
+---
+
+# 10. Reliability and operational observability
+
+## 10.1 Required infrastructure behavior
+
+The deployed system must support:
+
+- Durable queues.
+- Idempotent processing.
+- Bounded retries.
+- Recovery after restarts.
+- Database backups and verified restoration.
+- Versioned configuration.
+- Service health checks.
+- Provider failure handling.
+- Structured logs, metrics and traces.
+- Incident replay based on recorded real events.
+- Monitoring of monitoring and delivery infrastructure.
+
+Use actual configuration from the deployment environment. Missing configuration must produce an explicit unhealthy or unavailable status rather than silently activating a fake fallback.
+
+## 10.2 Required operational metrics
+
+Collect actual measurements for:
+
+- Event ingestion delay.
+- Event processing latency.
+- Queue age and backlog.
+- Incident assessment latency.
+- Time to initiate escalation.
+- Provider acceptance and confirmed delivery rates.
+- Call connection and failure rates.
+- Unacknowledged incident age.
+- Action execution and verification failures.
+- Guardian detection and notification latency.
+- Unauthorized-action rejection.
+- Recovery and restoration outcomes.
+
+Do not publish invented performance numbers as system measurements.
+
+Service-level objectives must be selected after examining the real deployment, its providers and its operating constraints.
+
+---
+
+# 11. API and data contract requirements
+
+The following are logical interface contracts, not claims that these endpoints already exist. Exact routes and schemas must be aligned with the actual FastAPI application.
+
+## 11.1 Event ingestion
+
+**Purpose:** Accept authenticated events from registered sources.
+
+Contract:
+
+- Validate source identity and schema.
+- Reject unauthorized events.
+- Persist accepted events.
+- Return an event reference and actual processing status.
+- Prevent duplicate processing using source identity and idempotency information.
+
+## 11.2 Incident retrieval
+
+**Purpose:** Retrieve incident details and authorized evidence.
+
+Contract:
+
+- Require authentication.
+- Enforce incident-level access control.
+- Return current persisted status.
+- Include provenance and timestamps.
+- Exclude unauthorized evidence.
+
+## 11.3 Communication session
+
+**Purpose:** Establish and manage authenticated message or voice sessions.
+
+Contract:
+
+- Authenticate the device.
+- Validate session and incident association.
+- Protect signaling and content.
+- Maintain explicit connection states.
+- Record genuine delivery and call-state transitions.
+
+## 11.4 User response and approval
+
+**Purpose:** Associate a user's response with an incident or proposed action.
+
+Contract:
+
+- Authenticate the actor.
+- Verify the session and incident.
+- Validate the requested operation.
+- Bind approval to the exact action and its parameters.
+- Check authorization again before execution.
+- Record the decision and result.
+
+## 11.5 Guardian health
+
+**Purpose:** Report actual subsystem health and alert-delivery status.
+
+Contract:
+
+- Use authenticated service identity.
+- Report the monitored component and observation time.
+- Distinguish healthy, degraded, unavailable and unknown.
+- Avoid treating stale telemetry as current health.
+- Keep sensitive internal diagnostics out of public endpoints.
+
+---
+
+# 12. Logical data model
+
+Implement these as database entities or equivalent persisted records after inspecting the existing schema.
+
+| Entity | Purpose |
+|---|---|
+| RegisteredSource | Source identity, scope, health and permissions |
+| ObservedEvent | Actual event data and provenance |
+| Incident | Aggregated event, assessment and lifecycle |
+| EvidenceReference | Authorized reference to diagnostic evidence |
+| Assessment | Severity, urgency, confidence and decision reason |
+| PolicyVersion | Versioned escalation and action rules |
+| AuthorizationGrant | Scoped and revocable permission |
+| Approval | Authenticated decision bound to a proposed action |
+| CommunicationAttempt | Message or call attempt and delivery state |
+| ConversationSession | Device, user, incident and context association |
+| ActionExecution | Authorized operation and execution status |
+| VerificationResult | Evidence of actual outcome |
+| GuardianObservation | Health measurements and detection state |
+| LearningRecord | Preference observations and confirmed changes |
+| AuditRecord | Security-sensitive decisions and state changes |
+
+### Data integrity requirements
+
+- Use durable identifiers and database constraints.
+- Enforce uniqueness for applicable source event IDs and idempotency keys.
+- Use transactions where related state changes must commit together.
+- Record state transitions with actor, timestamp and reason.
+- Define retention, deletion and access rules for each entity.
+- Avoid storing secrets or unnecessary sensitive payloads in audit records.
+- Protect concurrent approvals and action execution against race conditions.
+
+---
+
+# 13. No-fabricated-data implementation policy
+
+This is a mandatory project constraint.
+
+## 13.1 Production runtime
+
+The application must never invent operational records to fill missing information.
+
+Prohibited examples:
+
+- Fabricating an incident when no source reported one.
+- Reporting a successful call when no call was connected.
+- Inventing user preferences or previous conversations.
+- Returning fabricated health values when monitoring is unavailable.
+- Creating pretend action results to satisfy an API response.
+- Falling back to hardcoded credentials, identities or resource IDs.
+- Treating example incident payloads as production data.
+
+If the source is unavailable, return an explicit unknown or unavailable state.
+
+If evidence is missing, preserve the uncertainty.
+
+If execution cannot be verified, report that it could not be verified.
+
+## 13.2 Configuration
+
+Runtime behavior must derive from validated configuration and authorized records.
+
+Use configuration management for:
+
+- Provider endpoints and credentials.
+- Database and queue connections.
+- Encryption and key-management integrations.
+- Notification and calling providers.
+- Monitoring thresholds.
+- Escalation policies.
+- Authorization rules.
+- Retention and privacy policies.
+
+Do not embed environment-specific secrets or operational identities in source code.
+
+## 13.3 Testing
+
+Tests must not create fake operational history and then present it as genuine user data.
+
+Use:
+
+- Unit tests for deterministic logic.
+- Cryptographic protocol test vectors from authoritative specifications.
+- Sanitized real incident traces when testing realistic workflows.
+- Controlled integration tests against actual isolated infrastructure.
+- Failure injection to verify recovery behavior.
+- Security tests for unauthorized access and invalid transitions.
+
+Test-only inputs must be clearly isolated from production data and production credentials. No test-generated incident or execution result may leak into the live user's history.
+
+---
+
+# 14. Implementation phases and acceptance criteria
+
+## Phase 1 — Existing-codebase audit
+
+Inspect the actual FastAPI application, Flutter application, voice pipeline, memory, execution tools, database, Redis usage, authentication and deployment.
+
+**Acceptance criteria:**
+
+- Actual modules and interfaces are documented.
+- Reusable components are identified.
+- Existing data models and authentication are understood.
+- Missing capabilities are mapped to exact implementation locations.
+- No replacement architecture is introduced without a demonstrated need.
+
+## Phase 2 — Durable event and incident infrastructure
+
+**Acceptance criteria:**
+
+- Real authorized sources can submit validated events.
+- Events survive process restarts.
+- Duplicate delivery does not duplicate the intended effect.
+- Incident states are persisted and recoverable.
+- Evidence and event provenance remain available.
+
+## Phase 3 — Importance, policy and authorization
+
+**Acceptance criteria:**
+
+- Assessments use real event evidence.
+- Missing evidence remains unknown.
+- Permissions are enforced server-side.
+- Unauthorized and restricted actions are blocked.
+- Each decision has a recorded reason and policy version.
+
+## Phase 4 — Flutter messaging and incident interface
+
+**Acceptance criteria:**
+
+- The existing app receives and displays actual incident messages.
+- Delivery and acknowledgement states reflect real observations.
+- The user can inspect authorized evidence.
+- Incident context survives reconnects and app restarts.
+- No fabricated messages appear in the production conversation.
+
+## Phase 5 — Secure real-time voice
+
+**Acceptance criteria:**
+
+- Authenticated clients can establish supported voice sessions.
+- Media and signaling security match the documented trust model.
+- Call states reflect actual connection events.
+- The existing Aariya voice pipeline handles conversation.
+- Unsupported background-call behavior is reported and handled honestly.
+
+## Phase 6 — Guardian and escalation
+
+**Acceptance criteria:**
+
+- The Guardian detects tested failures independently of the affected component.
+- Alerts use a functioning authorized delivery path.
+- Failed and successful delivery states are recorded accurately.
+- Retries are bounded and incidents are deduplicated.
+- Guardian failure and shared dependencies are monitored.
+
+## Phase 7 — Conversational action execution
+
+**Acceptance criteria:**
+
+- Voice and text instructions enter the existing reasoning pipeline.
+- Actions pass explicit authorization checks.
+- Ambiguous instructions result in clarification.
+- Execution results are verified.
+- Failed or unverified actions are reported accurately.
+
+## Phase 8 — Incident memory and learning
+
+**Acceptance criteria:**
+
+- Incident history is persisted with provenance.
+- Observed, learned and confirmed preferences are distinguishable.
+- Material changes require confirmation.
+- Learning cannot override safety policy.
+- Eligible learning changes can be reviewed and rolled back.
+
+## Phase 9 — Multi-device and broader sources
+
+**Acceptance criteria:**
+
+- Authenticated devices share consistent incident state.
+- Concurrent responses do not cause duplicate execution.
+- New monitoring sources require explicit registration and permissions.
+- Access is revoked when a device or integration is removed.
+
+## Phase 10 — Security and recovery validation
+
+**Acceptance criteria:**
+
+- Authentication and authorization boundaries are tested.
+- Cryptographic behavior matches the documented design.
+- Unauthorized content and actions are rejected.
+- Backup restoration and restart recovery are verified.
+- Offline and provider-failure behavior is tested.
+- Alert delivery and Guardian limitations are documented.
+- No fabricated operational data is introduced by failure-handling code.
+
+---
+
+# 15. Definition of done
+
+The system is not complete merely because the code compiles or the Flutter interface displays an incoming-call screen.
+
+A capability is complete only when:
+
+1. It uses the actual configured service or integration.
+2. It processes real authorized input.
+3. It enforces access and action permissions.
+4. It persists the required state.
+5. It handles relevant failures.
+6. It exposes genuine execution and delivery status.
+7. It has appropriate automated tests.
+8. It has been tested against its acceptance criteria.
+9. It does not fabricate operational success.
+10. Its limitations are documented.
+
+---
+
+# 16. Immediate next step
+
+Before implementing these modules, inspect the existing Aariya repository and produce a codebase-specific implementation map.
+
+For each requirement, record:
+
+- Existing module, if any.
+- Existing interface and data model.
+- Reuse, extension or replacement decision.
+- Exact files that need changes.
+- New files that are genuinely necessary.
+- Database migration requirements.
+- Configuration and secret-management requirements.
+- Tests and acceptance criteria.
+- External integrations that need credentials or setup.
+
+Only then should implementation begin.
+
+**Final architectural principle:** Aariya remains one persistent cognitive system, with one consistent authorization model and shared conversational context. Proactive monitoring, messaging, voice, execution, Guardian monitoring and learning are coordinated capabilities around that existing Brain—not independent assistants with conflicting memories or permissions.
+
