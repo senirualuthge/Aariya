@@ -50,6 +50,11 @@ class BaseSwarmAgent:
 
 _ANON_PREFIX = "anon:"
 
+# How long a disconnected phone keeps its last reported stats in the control
+# center. Long enough to notice "it was here and dropped", short enough that
+# anonymous legacy sockets don't accumulate forever.
+_DEVICE_RETENTION_S = 600.0
+
 
 class DeviceRegistry:
     """Counts connected mobile DEVICES, not raw sockets.
@@ -108,6 +113,14 @@ class DeviceRegistry:
         """Total open channels across every device."""
         return sum(self._channels.values())
 
+    def channels_for(self, key: str) -> int:
+        """Open channel count for one device key (0 once fully disconnected)."""
+        return self._channels.get(key, 0)
+
+    def keys(self) -> list[str]:
+        """Client keys with at least one open channel."""
+        return list(self._channels)
+
     def _key(self, client_id: Optional[str]) -> str:
         if isinstance(client_id, str) and client_id.strip():
             return client_id.strip()
@@ -151,6 +164,39 @@ class MobileTelemetry:
         return asdict(self)
 
 
+@dataclass
+class DeviceTelemetry:
+    """Per-phone state, keyed by the stable ``client_id`` the app announces.
+
+    ``MobileTelemetry.device`` can only hold the most recent sample, so with two
+    phones connected the dashboard would show whichever reported last. The
+    control center needs one row per phone, which is what this record tracks.
+    """
+    key: str = ""
+    first_seen: float = 0.0
+    last_seen: float = 0.0
+    metrics: dict = field(default_factory=dict)
+    metrics_ts: float = 0.0
+
+    def to_dict(self, channels: int = 0) -> dict:
+        m = self.metrics or {}
+        label = (
+            " ".join(p for p in (m.get("manufacturer"), m.get("model")) if p)
+            or str(m.get("platform") or "")
+            or self.key
+        )
+        return {
+            "id": self.key,
+            "label": label,
+            "connected": channels > 0,
+            "channels": channels,
+            "first_seen": self.first_seen,
+            "last_seen": self.last_seen,
+            "metrics_ts": self.metrics_ts or None,
+            "metrics": dict(m),
+        }
+
+
 # ── Agent ────────────────────────────────────────────────────────────────
 
 @register_agent
@@ -173,6 +219,8 @@ class MobileGatewayAgent(BaseSwarmAgent):
     def __init__(self) -> None:
         self._telemetry = MobileTelemetry()
         self._registry = DeviceRegistry("MobileGatewayAgent")
+        # client key → per-phone stats (battery / CPU / memory / model)
+        self._devices: dict[str, DeviceTelemetry] = {}
         self._start_time: float = time.time()
         self._tick_task: Optional[asyncio.Task] = None
         self._running = False
@@ -209,6 +257,11 @@ class MobileGatewayAgent(BaseSwarmAgent):
         the phone's chat + control sockets collapse into a single device.
         """
         key = self._registry.connect(client_id)
+        entry = self._devices.get(key)
+        if entry is None:
+            entry = DeviceTelemetry(key=key, first_seen=time.time())
+            self._devices[key] = entry
+        entry.last_seen = time.time()
         self._sync_counts()
         self._telemetry.last_activity_ts = time.time()
         logger.info(
@@ -221,6 +274,10 @@ class MobileGatewayAgent(BaseSwarmAgent):
     def on_client_disconnected(self, client_key: Optional[str] = None) -> None:
         """Release one channel; the device is dropped when its last one goes."""
         self._registry.disconnect(client_key)
+        if client_key:
+            entry = self._devices.get(client_key)
+            if entry is not None:
+                entry.last_seen = time.time()
         self._sync_counts()
         logger.info(
             f"[MobileGatewayAgent] Client disconnected "
@@ -246,11 +303,21 @@ class MobileGatewayAgent(BaseSwarmAgent):
             alpha * latency_ms + (1 - alpha) * self._telemetry.avg_latency_ms
         )
 
-    def record_device_metrics(self, device: dict, ts: float = 0.0) -> None:
+    def record_device_metrics(
+        self,
+        device: dict,
+        ts: float = 0.0,
+        client_key: Optional[str] = None,
+    ) -> None:
         """Store the phone's latest reported device metrics (battery, CPU,
         memory, model…). Kept as the most recent sample so the System Health
         tab can render the phone's own performance. Also counts as proof of
         life, so it refreshes last_activity_ts.
+
+        [client_key] is the key returned by [on_client_connected] for the
+        control channel that sent this frame — it attributes the sample to the
+        right phone so two connected devices don't overwrite each other in the
+        control center's device list.
 
         Defensive by design: this runs inside the /ws/mobile/control handler
         (which has no generic exception guard), so a malformed payload from a
@@ -266,6 +333,39 @@ class MobileGatewayAgent(BaseSwarmAgent):
         self._telemetry.device_last_ts = ts_f
         self._telemetry.last_activity_ts = time.time()
 
+        if not client_key:
+            return
+        entry = self._devices.get(client_key)
+        if entry is None:
+            entry = DeviceTelemetry(key=client_key, first_seen=time.time())
+            self._devices[client_key] = entry
+        entry.metrics = dict(device)
+        entry.metrics_ts = ts_f
+        entry.last_seen = time.time()
+
+    def devices(self, now: Optional[float] = None) -> list[dict]:
+        """One row per known phone, newest activity first.
+
+        Includes phones that dropped recently (``connected: false``) so the
+        control center can show "last seen" instead of silently losing the
+        device the moment its socket closes. Entries older than
+        [_DEVICE_RETENTION_S] with no open channel are pruned here.
+        """
+        now_f = now if now is not None else time.time()
+        rows: list[dict] = []
+        stale: list[str] = []
+        for key, entry in self._devices.items():
+            channels = self._registry.channels_for(key)
+            if channels <= 0 and (now_f - entry.last_seen) > _DEVICE_RETENTION_S:
+                stale.append(key)
+                continue
+            rows.append(entry.to_dict(channels=channels))
+        for key in stale:
+            self._devices.pop(key, None)
+
+        rows.sort(key=lambda r: (not r["connected"], -(r["last_seen"] or 0)))
+        return rows
+
     # ── Public read ───────────────────────────────────────────────────────────
 
     @property
@@ -278,6 +378,7 @@ class MobileGatewayAgent(BaseSwarmAgent):
         t["agent_id"] = self.agent_id
         t["description"] = self.description
         t["status"] = "active" if self._telemetry.connected_clients > 0 else "idle"
+        t["devices"] = self.devices()
         return t
 
     # ── Internal ──────────────────────────────────────────────────────────────

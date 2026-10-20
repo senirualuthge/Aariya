@@ -80,8 +80,9 @@ def _shard_code(params: Dict[str, Any], user_id: str) -> Dict[str, Any]:
 
 def _shard_system(params: Dict[str, Any], user_id: str) -> Dict[str, Any]:
     import psutil
+    from server.infrastructure.cpu_meter import cpu_percent
     return {
-        "cpu_percent": psutil.cpu_percent(interval=None),
+        "cpu_percent": cpu_percent(),
         "memory_percent": psutil.virtual_memory().percent,
         "loadavg": [round(x, 2) for x in (psutil.getloadavg() if hasattr(psutil, "getloadavg") else ())],
     }

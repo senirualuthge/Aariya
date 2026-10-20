@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/services/websocket_service.dart';
 import '../../../core/services/connection_monitor.dart';
+import '../../../core/services/device_metrics.dart';
 
 part 'analytics_cards.dart';
 part 'analytics_widgets.dart';
@@ -39,6 +40,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   String _emotion     = 'neutral';
   List<_AgentData> _agents = [];
 
+  // ── This device (own phone, sampled by DeviceMetricsReporter) ───────────────
+  // Deliberately separate from the server figures above: `_cpu`/`_ram` describe
+  // the brain's machine, these describe the handset in your hand. Keeping both
+  // visible is the point — a laggy app with an idle brain (or vice versa) is
+  // diagnosed by comparing the two.
+  double? _devCpu;              // null on iOS — the OS doesn't expose it here
+  double? _devRam;
+  double  _devRamUsedGb  = 0;
+  double  _devRamTotalGb = 0;
+  int?    _battery;             // null until the first sample lands
+  bool    _charging      = false;
+  String  _devModel      = '';
+  String  _devManufacturer = '';
+  String  _devOs         = '';
+  String  _devPlatform   = '';  // 'android' | 'ios' | ...
+
   // ── History buffers ─────────────────────────────────────────────────────────
   final List<double> _cpuHistory = [];
   final List<double> _ramHistory = [];
@@ -63,6 +80,40 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
     _sub = WebSocketService.instance.analyticsStream.listen(_onFrame);
+
+    // Own-device stats come from the reporter that already samples them every
+    // 10s for the backend, so the screen shows a number instantly (bootstrap
+    // takes one sample at launch) and never double-samples /proc.
+    _applyDeviceSample(notify: false);
+    DeviceMetricsReporter.instance.latest.addListener(_onDeviceSample);
+  }
+
+  void _onDeviceSample() => _applyDeviceSample();
+
+  void _applyDeviceSample({bool notify = true}) {
+    final d = DeviceMetricsReporter.instance.latest.value;
+    if (d.isEmpty) return;
+
+    void apply() {
+      _battery           = (d['battery']    as num?)?.toInt();
+      _charging          = d['charging'] == true;
+      _devCpu            = (d['cpu_percent'] as num?)?.toDouble();
+      _devRam            = (d['ram_percent'] as num?)?.toDouble();
+      _devRamUsedGb      = (d['ram_used_gb']  as num?)?.toDouble() ?? 0;
+      _devRamTotalGb     = (d['ram_total_gb'] as num?)?.toDouble() ?? 0;
+      _devModel          = d['model']       as String? ?? '';
+      _devManufacturer   = d['manufacturer'] as String? ?? '';
+      _devOs             = d['os_version']  as String? ?? '';
+      _devPlatform       = d['platform']    as String? ?? '';
+    }
+
+    // initState runs before the first build — assigning there needs no setState.
+    if (!notify) {
+      apply();
+      return;
+    }
+    if (!mounted) return;
+    setState(apply);
   }
 
   void _push(List<double> buf, double val) {
@@ -134,6 +185,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   @override
   void dispose() {
     _sub?.cancel();
+    DeviceMetricsReporter.instance.latest.removeListener(_onDeviceSample);
     _pulseCtrl.dispose();
     super.dispose();
   }
@@ -184,6 +236,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   ],
                   _buildQuickStats(),
                   const SizedBox(height: 16),
+                  // The handset itself, above the brain's own resources, so
+                  // "is MY phone the bottleneck?" is answerable at a glance.
+                  _buildDeviceSection(),
+                  const SizedBox(height: 14),
                   _buildBrainRow(),
                   const SizedBox(height: 14),
                   _buildResourceCard(

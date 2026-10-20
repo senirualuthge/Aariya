@@ -765,6 +765,7 @@ async def websocket_mobile_control(websocket: WebSocket):
                     _control_gateway.record_device_metrics(
                         message.get("device") or {},
                         message.get("ts") or 0.0,
+                        _control_client_key,
                     )
                 continue
 

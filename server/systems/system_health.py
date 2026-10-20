@@ -50,6 +50,8 @@ import time
 from collections import deque
 from typing import Any, Callable, Optional
 
+from server.infrastructure.cpu_meter import cpu_percent, cpu_percent_per_core
+
 logger = logging.getLogger("aariya.system_health")
 
 # How often the monitor broadcasts a fresh frame (s).
@@ -393,10 +395,10 @@ def _collect_server_perf() -> dict:
         import psutil
         proc = _get_proc_handle() or psutil.Process()
 
-        out["cpu_percent"] = round(psutil.cpu_percent(interval=None), 1)
+        out["cpu_percent"] = cpu_percent()
         out["cpu_count"] = psutil.cpu_count(logical=True) or 0
         try:
-            out["cpu_per_core"] = [round(p, 1) for p in psutil.cpu_percent(interval=None, percpu=True)]
+            out["cpu_per_core"] = cpu_percent_per_core()
         except Exception:
             pass
 
@@ -535,6 +537,7 @@ def _collect_mobile() -> dict:
         "last_activity_ts": None,
         "device": {},
         "device_last_ts": None,
+        "devices": [],
         "channels": {},
     }
     try:
@@ -554,6 +557,9 @@ def _collect_mobile() -> dict:
         # Phone-reported device metrics (battery / CPU / memory / model).
         out["device"] = g.get("device") or {}
         out["device_last_ts"] = g.get("device_last_ts") or None
+        # Per-device rows so the AI Control Center can show every connected
+        # phone, not just whichever one reported most recently.
+        out["devices"] = g.get("devices") or []
     except Exception:
         pass
 

@@ -190,7 +190,8 @@ class AutonomyDaemon:
 
         async def _src_system_health() -> Dict[str, Any]:
             import psutil
-            cpu = psutil.cpu_percent(interval=None)
+            from server.infrastructure.cpu_meter import cpu_percent
+            cpu = cpu_percent()
             mem = psutil.virtual_memory().percent
             attention = cpu > 90.0 or mem > 90.0
             return {"cpu_percent": cpu, "memory_percent": mem,

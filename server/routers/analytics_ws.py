@@ -18,6 +18,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from server.infrastructure.observability import logger
 from server.infrastructure.session_manager import manager
+from server.infrastructure.cpu_meter import cpu_percent
 from server.systems.agent.mobile_analytics_agent import get_mobile_analytics
 from server.systems.security.auth import verify_ws_token
 
@@ -28,7 +29,11 @@ router = APIRouter()
 def _get_system_stats() -> dict:
     vm = psutil.virtual_memory()
     return {
-        "cpu": round(psutil.cpu_percent(interval=None), 1),
+        # Shared meter, not psutil.cpu_percent(interval=None): that call shares
+        # one process-wide baseline, so this 1 Hz loop used to measure whatever
+        # sliver was left after the health broadcaster / autonomy daemon read
+        # it — reporting 0% or 100% at random when two phones were connected.
+        "cpu": cpu_percent(),
         "ram": round(vm.percent, 1),
         "ram_used_gb": round(vm.used / (1024 ** 3), 2),
         "ram_total_gb": round(vm.total / (1024 ** 3), 2),

@@ -68,10 +68,11 @@ def collect_metrics() -> dict:
         metrics["memory_used_gb"] = round(vm.used / (1024**3), 1)
         metrics["memory_total_gb"] = round(vm.total / (1024**3), 1)
         metrics["server_rss_mb"] = round(proc.memory_info().rss / (1024**2))
-        # Tiny blocking interval so the very first sample is real, not psutil's
-        # 0.0 "no previous sample" placeholder (ticks are minutes apart, so
-        # 100 ms here is negligible).
-        metrics["cpu_percent"] = round(psutil.cpu_percent(interval=0.1), 1)
+        # Shared meter instead of cpu_percent(interval=0.1): that call blocked
+        # this async loop for 100 ms *and* reset the process-wide psutil
+        # baseline used by the analytics stream.
+        from server.infrastructure.cpu_meter import cpu_percent
+        metrics["cpu_percent"] = cpu_percent()
     except Exception as exc:
         logger.warning("psutil metrics unavailable: %s", exc)
 

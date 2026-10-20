@@ -51,10 +51,14 @@ _BATTERY_LOW_PCT = _env_float("AARIYA_ENERGY_BATTERY_LOW_PCT", 25.0)
 def snapshot() -> Dict[str, Any]:
     """One honest psutil reading of everything this module reasons about."""
     import psutil
+    from server.infrastructure.cpu_meter import cpu_percent
 
     data: Dict[str, Any] = {
         "ts": time.time(),
-        "cpu_percent": psutil.cpu_percent(interval=None),
+        # Shared meter — see server/infrastructure/cpu_meter.py. Calling
+        # psutil.cpu_percent(interval=None) here reset the process-wide
+        # baseline that the analytics stream depends on.
+        "cpu_percent": cpu_percent(),
         "memory_percent": psutil.virtual_memory().percent,
         "loadavg": [round(x, 2) for x in (psutil.getloadavg() if hasattr(psutil, "getloadavg") else ())],
     }
