@@ -245,6 +245,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/health", tags=["system"])
+async def health_liveness() -> dict:
+    """Cheap liveness probe for uptime checks, containers and curl.
+
+    Deliberately does NOT build the System Health snapshot: that walks psutil,
+    probes every subsystem and can take tens of milliseconds, which is wrong for
+    a probe. Full metrics live at ``GET /api/system/health``.
+    """
+    return {"status": "ok", "service": "aariya-brain", "ts": time.time()}
+
 # --- GLOBAL SYSTEMS ---
 session_manager = SessionManager()
 # BUG #20 FIX: signal_bus is now wired into the cognitive loop
