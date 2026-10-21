@@ -153,6 +153,26 @@ def test_metrics_without_a_client_key_do_not_create_a_phantom_device():
     assert gw.snapshot()["device"]["model"] == "NE2215"
 
 
+def test_anonymous_channels_do_not_pretend_to_be_phones_until_they_report():
+    """An older app build has no client_id: three channels, three anon keys.
+
+    Pre-creating a row per key would show three empty "phones" instead of the
+    one that actually sends telemetry.
+    """
+    gw = MobileGatewayAgent()
+    gw.on_client_connected()  # chat
+    gw.on_client_connected()  # analytics
+    control = gw.on_client_connected()  # control
+
+    assert gw.devices() == []
+
+    gw.record_device_metrics(ONE_PLUS, 1.0, control)
+    rows = gw.devices()
+    assert len(rows) == 1
+    assert rows[0]["id"] == control
+    assert rows[0]["metrics"]["model"] == "NE2215"
+
+
 def test_system_health_exposes_the_device_list(monkeypatch):
     from server.systems import system_health
 

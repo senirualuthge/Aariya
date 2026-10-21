@@ -6,6 +6,7 @@
  *   • Real-time signals hub (5-level severity, causal timeline)
  *   • Neural monitor (personality axes, emotion state, trust meter)
  *   • Agent Registry (auto-discovered swarm agents via /api/agents/ws)
+ *   • Connected devices (per-phone battery / CPU / memory from the app)
  *   • Live event log ([SENSORS] [SWARM] [BRAIN] [LLM] [VOICE])
  *   • Auto-Adapt toggle, Memory Wipe, Session Reset
  *   • Activated via ?route=analytics OR ElectronAPI
@@ -28,6 +29,7 @@ import AgentDiscoveryPanel from './AgentDiscoveryPanel';
 import AgentVisualizer from './AgentVisualizer';
 import RAGDashboard from './rag/RAGDashboard';
 import SystemHealthTab from './SystemHealthTab';
+import ConnectedDevicesCard from './ConnectedDevicesCard';
 import SessionHistoryCard from './SessionHistoryCard';
 import BrainScene from './BrainScene';
 import './AnalyticsDashboard.css';
@@ -1200,6 +1202,9 @@ function OverviewTab({ allSignals, trust, personality, emotions, personalityPres
         <KpiCard label="Trust Score" value={`${Math.round((trust || 0.5) * 100)}%`} color={trust > 0.6 ? '#10b981' : '#ffd93d'} icon="🤝" />
         <KpiCard label="Total Signals" value={allSignals.length} color="#3b82f6" icon="📡" />
       </div>
+
+      {/* Connected phones — one tile per device, with its own live stats */}
+      <ConnectedDevicesCard />
 
       {/* Emotion Predictor status (polls /api/emotion/predictor) */}
       <PredictorStatusCard enabled={predictorEnabled} />

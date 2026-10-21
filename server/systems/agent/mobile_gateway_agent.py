@@ -257,11 +257,16 @@ class MobileGatewayAgent(BaseSwarmAgent):
         the phone's chat + control sockets collapse into a single device.
         """
         key = self._registry.connect(client_id)
-        entry = self._devices.get(key)
-        if entry is None:
-            entry = DeviceTelemetry(key=key, first_seen=time.time())
-            self._devices[key] = entry
-        entry.last_seen = time.time()
+        # Identified phones get a row immediately, so the control center can
+        # show "connected, waiting for telemetry" instead of nothing. Anonymous
+        # (older app build) sockets are not pre-created: each of their three
+        # channels has its own key and would show up as three empty phones.
+        if not key.startswith(_ANON_PREFIX):
+            entry = self._devices.get(key)
+            if entry is None:
+                entry = DeviceTelemetry(key=key, first_seen=time.time())
+                self._devices[key] = entry
+            entry.last_seen = time.time()
         self._sync_counts()
         self._telemetry.last_activity_ts = time.time()
         logger.info(

@@ -27,7 +27,6 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { subscribeMetrics } from '../systems/metricsClient';
 
 // ── Status palette ────────────────────────────────────────────────────────────
 const STATUS_COLOR = {
@@ -46,68 +45,7 @@ const STATUS_LABEL = {
 const MONO = "'JetBrains Mono', monospace";
 
 import { apiBase } from '../utils/apiHost';
-const REST_URL = () => `${apiBase()}/api/system/health`;
-
-// ── Hook: live health snapshot (WS frame + REST fallback) ────────────────────
-function useSystemHealth() {
-  const [snapshot, setSnapshot] = useState(null);
-  const [source, setSource] = useState('offline'); // 'ws' | 'api' | 'offline' (label only)
-  const [stale, setStale] = useState(true);        // true when both feeds are quiet
-  const lastFrameAtRef = useRef(0);
-  const inFlightRef = useRef(false);
-
-  // Fallback fetch (stable across renders so the REFRESH button can call it).
-  const fetchRestRef = useRef(null);
-
-  useEffect(() => {
-    let mounted = true;
-
-    // Live path: server broadcasts a frame every ~2 s on the shared socket.
-    const unsub = subscribeMetrics(
-      (m) => m.type === 'system_health',
-      (m) => {
-        if (!mounted) return;
-        lastFrameAtRef.current = Date.now();
-        setStale(false);
-        setSnapshot(m.data);
-        setSource('ws');
-      }
-    );
-
-    async function fetchRest() {
-      if (inFlightRef.current || !mounted) return;
-      inFlightRef.current = true;
-      try {
-        const res = await fetch(REST_URL());
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (mounted) {
-          lastFrameAtRef.current = Date.now();
-          setStale(false);
-          setSnapshot(data);
-          setSource('api');
-        }
-      } catch { /* offline — stay silent */ } finally {
-        inFlightRef.current = false;
-      }
-    }
-    fetchRestRef.current = fetchRest;
-
-    fetchRest(); // immediate first paint
-    const timer = setInterval(() => {
-      const quietFor = Date.now() - lastFrameAtRef.current;
-      if (quietFor > 6000) fetchRest();            // WS quiet → REST fallback
-      setStale((prev) => {                          // both dead → honest offline
-        const isStale = lastFrameAtRef.current === 0 || quietFor > 12000;
-        return isStale === prev ? prev : isStale;
-      });
-    }, 3000);
-
-    return () => { mounted = false; clearInterval(timer); unsub(); };
-  }, []);
-
-  return { snapshot, source, stale, refetch: () => fetchRestRef.current?.() };
-}
+import useSystemHealth from '../hooks/useSystemHealth';
 
 // ── Hook: client device metrics (measured locally in this browser) ───────────
 function useDeviceMetrics() {
@@ -334,6 +272,20 @@ export default function SystemHealthTab() {
   const checks = snapshot?.checks || [];
   const functions = snapshot?.functions || [];
   const mobile = snapshot?.mobile || {};
+  // One entry per connected phone (server sends `devices[]`). Older backends
+  // only expose the most recent single sample — keep that working.
+  const mobileDevices = Array.isArray(mobile.devices) && mobile.devices.length > 0
+    ? mobile.devices
+    : (mobile.device && Object.keys(mobile.device).length > 0
+      ? [{
+          id: 'legacy',
+          label: [mobile.device.manufacturer, mobile.device.model].filter(Boolean).join(' ') || 'Phone',
+          connected: true,
+          channels: mobile.connected_channels ?? 1,
+          metrics_ts: mobile.device_last_ts,
+          metrics: mobile.device,
+        }]
+      : []);
   const history = snapshot?.history || {};
   const score = snapshot?.score ?? null;
 
@@ -601,36 +553,55 @@ export default function SystemHealthTab() {
                 <Kv k="Dashboard stream" v={`${mobile.channels.dashboard.payloads_sent ?? 0} payloads · ${mobile.channels.dashboard.payloads_per_second ?? 0}/s`} />
               )}
 
-              {/* ── Phone-reported device metrics (battery / CPU / memory) ── */}
-              {mobile.device && Object.keys(mobile.device).length > 0 && (
+              {/* ── Phone-reported device metrics, one block per phone ── */}
+              {mobileDevices.length > 0 && (
                 <div style={{ borderTop: '1px solid rgba(167,139,250,0.15)', marginTop: 12, paddingTop: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', letterSpacing: 1.5, textTransform: 'uppercase' }}>
-                      📲 Phone Device
-                    </span>
-                    {mobile.device_last_ts != null && (
-                      <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', fontFamily: MONO }}>
-                        {fmtTime(mobile.device_last_ts)}
-                      </span>
-                    )}
+                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
+                    📲 Phone Devices · {mobileDevices.filter((d) => d.connected).length} live
                   </div>
-                  {mobile.device.battery != null && (
-                    <Meter label="Battery" value={mobile.device.battery} max={100}
-                      display={`${mobile.device.battery}%${mobile.device.charging ? ' ⚡' : ''}`}
-                      color={mobile.device.battery > 20 ? '#34d399' : '#ef4444'} />
-                  )}
-                  {mobile.device.cpu_percent != null && (
-                    <Meter label="CPU" value={mobile.device.cpu_percent} max={100}
-                      display={`${mobile.device.cpu_percent}%`}
-                      color={mobile.device.cpu_percent > 85 ? '#ef4444' : mobile.device.cpu_percent > 65 ? '#ffd93d' : '#a78bfa'} />
-                  )}
-                  {mobile.device.ram_percent != null && (
-                    <Meter label="Memory" value={mobile.device.ram_percent} max={100}
-                      display={`${mobile.device.ram_percent}% · ${mobile.device.ram_used_gb ?? '?'}/${mobile.device.ram_total_gb ?? '?'} GB`}
-                      color="#fb923c" />
-                  )}
-                  <Kv k="Model" v={[mobile.device.manufacturer, mobile.device.model].filter(Boolean).join(' ') || '—'} />
-                  <Kv k="OS" v={mobile.device.os_version || mobile.device.platform || '—'} />
+                  {mobileDevices.map((d) => {
+                    const m = d.metrics || {};
+                    const tone = d.connected ? '#a78bfa' : '#94a3b8';
+                    return (
+                      <div
+                        key={d.id || d.label}
+                        style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: tone }}>
+                            {d.connected ? '●' : '○'} {d.label || 'Phone'}
+                          </span>
+                          {d.metrics_ts != null && (
+                            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', fontFamily: MONO }}>
+                              {d.connected ? fmtTime(d.metrics_ts) : `seen ${fmtTime(d.last_seen)}`}
+                            </span>
+                          )}
+                        </div>
+                        {m.battery != null && (
+                          <Meter label="Battery" value={m.battery} max={100}
+                            display={`${m.battery}%${m.charging ? ' ⚡' : ''}`}
+                            color={m.battery > 20 ? '#34d399' : '#ef4444'} />
+                        )}
+                        {m.cpu_percent != null && (
+                          <Meter label="CPU" value={m.cpu_percent} max={100}
+                            display={`${m.cpu_percent}%`}
+                            color={m.cpu_percent > 85 ? '#ef4444' : m.cpu_percent > 65 ? '#ffd93d' : '#a78bfa'} />
+                        )}
+                        {m.ram_percent != null && (
+                          <Meter label="Memory" value={m.ram_percent} max={100}
+                            display={`${m.ram_percent}% · ${m.ram_used_gb ?? '?'}/${m.ram_total_gb ?? '?'} GB`}
+                            color="#fb923c" />
+                        )}
+                        <Kv k="Model" v={[m.manufacturer, m.model].filter(Boolean).join(' ') || '—'} />
+                        <Kv k="OS" v={m.os_version || m.platform || '—'} />
+                        {Object.keys(m).length === 0 && (
+                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
+                            Connected — waiting for its first telemetry frame.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>
