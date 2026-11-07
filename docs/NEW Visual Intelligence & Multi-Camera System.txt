@@ -1,0 +1,13 @@
+Milestone	Deliverable	Completion criteria
+V1 — Existing-system audit	Inventory of existing vision code, dependencies, APIs, and tests	Existing capabilities and gaps are verified.
+V2 — Camera infrastructure	Camera adapters, registration, lifecycle, and health monitoring	Authorized real cameras connect, disconnect, and recover correctly.
+V3 — Visual perception	Object detection and tracking	Real frames produce validated detections and measurable results.
+V4 — Text intelligence	Printed OCR and handwriting recognition	Actual camera images produce text with confidence and error handling.
+V5 — Person perception	Person detection and supported tracking	Real test footage produces validated detections and tracking results.
+V6 — Multi-camera fusion	Timestamp alignment and observation association	Cross-camera associations are evaluated against ground truth, including ambiguous cases.
+V7 — Aariya integration	AI Core receives relevant visual observations	Aariya can use verified observations in contextual reasoning.
+V8 — Event intelligence	Meaningful event detection and communication	Configured events trigger appropriate actions without excessive alerts.
+V9 — Security and resilience	Permissions, retention, monitoring, and failure recovery	Unauthorized access is denied and failure cases are tested.
+
+
+

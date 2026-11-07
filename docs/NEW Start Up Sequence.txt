@@ -1,0 +1,571 @@
+Aariya Startup Integrity — Patch Overlay
+This is a patch overlay for the Aariya launchers supplied in the conversation. It does not contain the complete Aariya application or backend source.
+Apply safely
+1. Extract this folder outside the Aariya repository.
+2. Run:
+   bash apply-overlay.sh /path/to/Aariya
+3. The installer backs up every replaced file under .aariya/startup-integrity-backups/<timestamp>/, merges only the relevant scripts into the existing package.json, preserves other dependencies and scripts, adds diagnostic-output ignore rules, and performs syntax validation. It does not start the brain, GUI or external provider checks.
+4. From the actual project root, run npm run startup:check, review all output, then run npm run dev. Separately run npm run gui only when needed; it continues to own the Electron window and does not launch another brain.
+Live output and reports
+Checks, retries, discoveries and runtime state changes are printed as they occur. Each preflight writes a .jsonl event stream and a final .json summary under .aariya/diagnostics/. Runtime monitor events are appended to their own JSONL stream and summarized when monitoring stops.
+Current verification limits
+The supplied files describe the launchers and desktop main process, but not the actual server/main.py internals, cognitive modules, Redis setup, voice pipeline, communication gateway or live health routes. The overlay checks installed/runtime prerequisites and configured local/online provider endpoints that it can safely identify. Uncovered capability behavior remains UNVERIFIED until a real *.capability.json contract or provider-specific health adapter is added. It does not fabricate successful health checks.
+
+Safe automatic repair handlers are not included yet; the current patch performs bounded retries, reporting and rechecks, but avoids modifying application code, package installations, access controls or user data without a reviewed allowlisted repair action.
+
+Aariya Startup Integrity and Live CLI
+This is an overlay for the existing Aariya repository. It preserves the current launch ownership model:
+- npm run dev is the combined launcher (scripts/dev.mjs) for uvicorn and Vite.
+- npm run dev:brain launches only the brain in the foreground.
+- npm run dev:ui launches only Vite, now through the preflight wrapper.
+- npm run gui runs a CLI preflight first, then launches Electron only; it does not spawn a brain or Vite. main.js rechecks GUI readiness before creating the window.
+- npm run backend:start uses the persistent macOS launchd process and runs a preflight before bootstrapping it.
+What this overlay adds
+1. A shared, dependency-free Node startup engine in scripts/startup/engine.mjs.
+2. Live terminal output for each check, retries, discovery events, startup decisions, and runtime health transitions.
+3. JSONL event streams and a final JSON report under .aariya/diagnostics/.
+4. Runtime/version, dependency, Python/FastAPI/Uvicorn, required-file, and port checks based on the real repository and runtime.
+5. Safe configuration discovery: environment variable names and recognized .env filenames are reported; secret values are never written to the reports.
+6. A source/config inventory which records added, changed and removed project paths and SHA-256 hashes, including dependency manifests. The first run establishes a baseline; later startup and runtime scans surface changes, including changes to recognized .env* files without logging their values. A new or changed file is a candidate for review, not proof a feature works.
+7. Basic non-generation provider probes for configured Ollama-compatible local endpoints and OpenAI model-list endpoints. These do not send a prompt or make an inference request. Other providers are reported as unverified until a provider-specific health adapter is registered. Remote online-provider credentials are sent only to HTTPS endpoints; the checker never transmits them to a remote HTTP endpoint.
+8. TCP reachability checks for configured service endpoints discovered in environment/.env configuration (such as databases, caches, or communication services). TCP reachability does not prove authentication or protocol-level health.
+9. Runtime monitoring that reports state transitions instead of flooding the terminal with an identical message every interval.
+Important limits
+A TCP port accepting connections does not prove FastAPI routes, cognitive logic, memory operations, model inference, voice processing, or secure communication work. To verify those functions, the backend must expose a genuine health contract and each capability must define a check appropriate to its implementation. The overlay deliberately records missing health contracts as UNVERIFIED, never PASS; until real capability health contracts exist, preflight cannot report full READY status.
+
+The uploaded source set did not include the live backend implementation, its LLM provider adapters, the route definitions, Redis setup, or feature registration code. This overlay therefore does not invent checks claiming those functions are healthy. The discovery engine detects file changes and supports executable health contracts; the actual Aariya modules still need their specific contracts registered.
+
+The chosen safe-repair policy is conservative. This overlay performs bounded retries and rechecks, but ships no application-mutating repair adapters. It never installs packages, edits application code, changes access policy, deletes user data, or runs arbitrary discovered commands. A repair may be added only as an explicit, reviewed allowlisted adapter with a rollback plan.
+Commands
+- npm run dev — preflight, existing launchd handover, then start brain and Vite.
+- npm run dev:brain — brain-only preflight and launch.
+- npm run dev:ui — UI-only preflight and launch.
+- npm run gui — run CLI preflight before launching Electron, then recheck and wait for the existing Vite server before opening the window.
+- npm run startup:check — run the combined development preflight without starting servers.
+- npm run startup:check:brain — run brain-only preflight.
+- npm run startup:check:ui — run UI-only preflight.
+- npm run startup:check:gui — run desktop preflight.
+- npm run startup:check:persistent — run persistent-brain preflight.
+For npm run dev -- --clean, existing port holders are allowed through the preflight port gate because the launcher's existing cleanup step will run afterward. Use --clean only when it is safe for that command to terminate the process holding ports 8000 or 5173.
+Configuration
+- AARIYA_PYTHON: explicit Python executable override. If set but unusable, preflight blocks rather than silently selecting another interpreter.
+- AARIYA_REQUIRE_LLM=1: treat the absence of a provider that passes a supported readiness probe as a critical failure, even when no recognized provider settings were found. If a configured provider was actually probed and no provider passed, startup is blocked. If no supported check can identify any configured provider, the result is UNVERIFIED and startup may continue as degraded under the hybrid policy.
+- AARIYA_CHECK_ATTEMPTS: bounded retry attempts (default 3, capped at 5).
+- AARIYA_CHECK_RETRY_DELAY_MS: retry backoff base (default 500ms).
+- AARIYA_CHECK_TIMEOUT_MS: per-request/probe timeout (default 6000ms).
+- AARIYA_MONITOR_INTERVAL_MS: runtime monitor interval (default 30000ms, minimum 5000ms).
+- AARIYA_DISCOVERY_INTERVAL_MS: live source/config discovery interval (default 60000ms, minimum 10000ms).
+- AARIYA_READY_TIMEOUT_MS: server-listener startup deadline for standalone brain/UI launchers (default 60000ms).
+- AARIYA_GUI_UI_WAIT_ATTEMPTS: how many 500ms attempts Electron makes for Vite readiness (default 180, or about 90 seconds).
+- AARIYA_HEALTH_URL: an explicitly configured real brain health URL. If unset, the GUI can only report TCP reachability for the brain, not application health.
+The current combined scripts/dev.mjs launch path uses ports 8000 and 5173 as in the original source. The persistent backend.sh port remains controlled by AARIYA_PORT.
+Capability health contracts
+Place actual capability descriptors in the repository using the *.capability.json suffix. Do not register a capability until its entrypoint and real health check exist. Supported health-check types are:
+- http: requires urlEnv, which names a configured URL environment variable; the check requires a 2xx response.
+- tcp: requires hostEnv and portEnv configured in the real environment or recognized .env files.
+- python-import: requires a real dotted Python module name and checks that the selected interpreter can import it.
+A descriptor can specify a unique id, version, description, entrypoint, criticality (core or optional), dependencies (registered capability IDs), and healthCheck. Do not put secrets or literal credentials in a descriptor. HTTP health checks should use an authenticated endpoint if the service requires one; never make a private health endpoint public just for preflight.
+
+The runtime currently validates id, version, a safe relative entrypoint, criticality, dependencies, and the supported healthCheck shape. Dependency IDs are reconciled against discovered manifests. Keep each health check truthful and minimal; do not mark a capability ready merely because its entrypoint exists.
+How to verify after applying
+Run the syntax checks for the added Node scripts, then from the actual project root run npm run startup:check and review each result. Do not treat a successful syntax check or a free TCP port as proof that the cognitive backend is ready. Confirm AARIYA_HEALTH_URL and the real capability contracts against routes that exist in the backend source.
+
+2. Required project structure
+The following shows the intended structure after installing the patch. Existing Aariya files remain in place; the new scripts/startup/ directory contains the shared engine.
+Aariya/
+
+package.json
+
+Existing npm commands plus startup-check commands
+
+
+main.js
+
+Electron preflight and GUI readiness
+
+
+scripts/dev.mjs
+
+Combined brain + UI launcher
+
+
+scripts/dev-brain.mjs
+
+Brain-only preflight and launcher
+
+
+scripts/dev-ui.mjs
+
+UI-only preflight and launcher
+
+
+scripts/backend.sh
+
+Persistent brain lifecycle integration
+
+
+scripts/startup/
+
+engine.mjs
+
+Core checks, retries, events, discovery and monitoring
+
+preflight.mjs
+
+CLI entry point for startup checks
+
+capability-manifest.schema.json
+
+Capability contract schema
+
+
+capabilities/
+
+Optional directory for registered capability health contracts; create it when adding your real contracts.
+
+
+.aariya/diagnostics/
+
+Generated JSONL event streams and final JSON reports.
+
+
+.aariya/startup-integrity-backups/
+
+Timestamped backups of files replaced by the installer.
+
+
+
+
+3. Installation steps
+Step 1 — Back up your current project
+Open a terminal in your existing Aariya project.
+git status --short
+
+
+Commit your current work or make a separate backup before applying the patch. This is important because the installer replaces existing launch scripts.
+Step 2 — Extract and apply the patch
+Extract the downloaded ZIP somewhere outside the project. Then run the installer from the extracted patch directory:
+bash apply-overlay.sh "/absolute/path/to/Aariya"
+
+
+Replace /absolute/path/to/Aariya with your actual project path.
+
+The installer backs up replaced files, merges the necessary npm scripts into your existing package.json, adds diagnostic paths to .gitignore, and runs syntax validation. It does not install extra npm packages or start your services.
+Step 3 — Review the changed files
+Return to the actual project root:
+git status --short
+git diff -- package.json
+git diff -- scripts/dev.mjs
+git diff -- scripts/dev-brain.mjs
+git diff -- scripts/backend.sh
+git diff -- main.js
+
+
+Review the changes before starting the application.
+Step 4 — Run the startup checker by itself
+npm run startup:check
+
+
+This executes the combined development preflight without launching the brain or GUI.
+
+The CLI should print the individual checks as they run. It also generates diagnostic reports under .aariya/diagnostics/.
+
+Interpret the overall result as follows:
+Status	Meaning
+READY	All required checks passed.
+DEGRADED	Aariya can start under the configured policy, but some checks remain unverified or optional services are unavailable.
+BLOCKED	A critical check failed and startup must stop.
+UNVERIFIED	There is insufficient evidence to claim that a capability works.
+
+Do not treat a successful preflight as proof that every AI capability functions. That requires real health checks for the actual subsystems.
+Step 5 — Start the brain and UI
+npm run dev
+
+
+This runs the preflight before the existing launcher hands over the persistent brain and starts the development servers. After both servers become reachable, the runtime monitor begins watching their health.
+
+To open the desktop interface, keep the development command running and open a second terminal:
+npm run gui
+
+
+npm run gui does not start another brain or Vite server. It checks readiness and opens Electron against the existing UI server.
+
+Important: avoid running npm run backend:start alongside npm run dev for the same brain port. Those are different lifecycle modes and can conflict.
+4. Commands available after installation
+Command	Purpose
+npm run startup:check	Combined preflight
+npm run startup:check:brain	Brain-specific preflight
+npm run startup:check:ui	UI-specific preflight
+npm run startup:check:gui	Electron preflight
+npm run startup:check:persistent	Persistent-brain preflight
+npm run dev	Start brain and UI with preflight and monitoring
+npm run dev:brain	Start the brain alone
+npm run dev:ui	Start Vite alone
+npm run gui	Open Electron after readiness checks
+npm run health	Check the persistent-service status and dependency-scan scheduling
+
+The persistent backend commands use macOS launchd; their lifecycle operations are platform-specific.
+5. Register real capability checks
+The startup engine can discover new or changed source files, but a discovered file is not proof of a working feature. To verify individual capabilities, you must register a health contract that tests the real implementation.
+
+For example, suppose the backend has a genuine readiness endpoint. Create capabilities/brain-api.capability.json:
+{
+  "id": "brain-api",
+  "version": "1.0.0",
+  "description": "Aariya brain readiness",
+  "entrypoint": "server/main.py",
+  "criticality": "core",
+  "dependencies": [],
+  "healthCheck": {
+    "type": "http",
+    "urlEnv": "AARIYA_HEALTH_URL"
+  }
+}
+
+
+This is a template, not an assertion that your backend already has that endpoint.
+
+Before registering it, verify that server/main.py exists and that the health route actually checks the intended state. Configure AARIYA_HEALTH_URL to the real endpoint in your environment. For example, only if you implement that route:
+AARIYA_HEALTH_URL=http://127.0.0.1:8000/health/ready
+
+
+The endpoint should report unavailable critical dependencies accurately. Do not create a route that always returns a successful status regardless of the brain's actual condition.
+
+The same contract system supports HTTP, TCP, and Python-import checks. TCP proves reachability only; Python-import verifies that a module can be imported, not that its logic works.
+6. What remains to make this complete for Aariya
+The supplied patch provides the startup framework, live reporting and initial discovery. It does not yet provide verified, application-specific health contracts for all the capabilities you selected.
+
+The next development work is to integrate actual checks for:
+- Cognitive reasoning, controller and retriever behavior.
+- Local and online LLM readiness, including appropriate fallback validation.
+- Redis and persistent memory operations.
+- Voice processing and text-to-speech components.
+- Communication gateway, notifications and Flutter connectivity.
+- Authentication, permissions and security configuration.
+- External services and dependencies.
+- GUI-to-brain API compatibility.
+The LLM checks in this version are deliberately limited: supported provider probes can verify configuration or provider endpoint availability without sending an inference prompt. This is not sufficient to prove that a model can successfully complete a real Aariya task.
+
+Safe automatic repair handlers also still need to be implemented. The current patch supports diagnosis, bounded retries and reporting, but does not automatically modify application code, install packages or alter user data.
+
+Your next action should be to install the patch and run npm run startup:check. Review the first real CLI report; it will show which checks are currently covered, which capabilities are unverified, and what needs to be connected to Aariya's actual backend before we claim full startup readiness.
+
+Aariya Startup Integrity — Patch Overlay
+This is a patch overlay for the Aariya launchers supplied in the conversation. It does not contain the complete Aariya application or backend source.
+Apply safely
+1. Extract this folder outside the Aariya repository.
+2. Run:
+   bash apply-overlay.sh /path/to/Aariya
+3. The installer backs up every replaced file under .aariya/startup-integrity-backups/<timestamp>/, merges only the relevant scripts into the existing package.json, preserves other dependencies and scripts, adds diagnostic-output ignore rules, and performs syntax validation. It does not start the brain, GUI or external provider checks.
+4. From the actual project root, run npm run startup:check, review all output, then run npm run dev. Separately run npm run gui only when needed; it continues to own the Electron window and does not launch another brain.
+Live output and reports
+Checks, retries, discoveries and runtime state changes are printed as they occur. Each preflight writes a .jsonl event stream and a final .json summary under .aariya/diagnostics/. Runtime monitor events are appended to their own JSONL stream and summarized when monitoring stops.
+Current verification limits
+The supplied files describe the launchers and desktop main process, but not the actual server/main.py internals, cognitive modules, Redis setup, voice pipeline, communication gateway or live health routes. The overlay checks installed/runtime prerequisites and configured local/online provider endpoints that it can safely identify. Uncovered capability behavior remains UNVERIFIED until a real *.capability.json contract or provider-specific health adapter is added. It does not fabricate successful health checks.
+
+Safe automatic repair handlers are not included yet; the current patch performs bounded retries, reporting and rechecks, but avoids modifying application code, package installations, access controls or user data without a reviewed allowlisted repair action.
+
+Aariya Startup Integrity and Live CLI
+This is an overlay for the existing Aariya repository. It preserves the current launch ownership model:
+- npm run dev is the combined launcher (scripts/dev.mjs) for uvicorn and Vite.
+- npm run dev:brain launches only the brain in the foreground.
+- npm run dev:ui launches only Vite, now through the preflight wrapper.
+- npm run gui runs a CLI preflight first, then launches Electron only; it does not spawn a brain or Vite. main.js rechecks GUI readiness before creating the window.
+- npm run backend:start uses the persistent macOS launchd process and runs a preflight before bootstrapping it.
+What this overlay adds
+1. A shared, dependency-free Node startup engine in scripts/startup/engine.mjs.
+2. Live terminal output for each check, retries, discovery events, startup decisions, and runtime health transitions.
+3. JSONL event streams and a final JSON report under .aariya/diagnostics/.
+4. Runtime/version, dependency, Python/FastAPI/Uvicorn, required-file, and port checks based on the real repository and runtime.
+5. Safe configuration discovery: environment variable names and recognized .env filenames are reported; secret values are never written to the reports.
+6. A source/config inventory which records added, changed and removed project paths and SHA-256 hashes, including dependency manifests. The first run establishes a baseline; later startup and runtime scans surface changes, including changes to recognized .env* files without logging their values. A new or changed file is a candidate for review, not proof a feature works.
+7. Basic non-generation provider probes for configured Ollama-compatible local endpoints and OpenAI model-list endpoints. These do not send a prompt or make an inference request. Other providers are reported as unverified until a provider-specific health adapter is registered. Remote online-provider credentials are sent only to HTTPS endpoints; the checker never transmits them to a remote HTTP endpoint.
+8. TCP reachability checks for configured service endpoints discovered in environment/.env configuration (such as databases, caches, or communication services). TCP reachability does not prove authentication or protocol-level health.
+9. Runtime monitoring that reports state transitions instead of flooding the terminal with an identical message every interval.
+Important limits
+A TCP port accepting connections does not prove FastAPI routes, cognitive logic, memory operations, model inference, voice processing, or secure communication work. To verify those functions, the backend must expose a genuine health contract and each capability must define a check appropriate to its implementation. The overlay deliberately records missing health contracts as UNVERIFIED, never PASS; until real capability health contracts exist, preflight cannot report full READY status.
+
+The uploaded source set did not include the live backend implementation, its LLM provider adapters, the route definitions, Redis setup, or feature registration code. This overlay therefore does not invent checks claiming those functions are healthy. The discovery engine detects file changes and supports executable health contracts; the actual Aariya modules still need their specific contracts registered.
+
+The chosen safe-repair policy is conservative. This overlay performs bounded retries and rechecks, but ships no application-mutating repair adapters. It never installs packages, edits application code, changes access policy, deletes user data, or runs arbitrary discovered commands. A repair may be added only as an explicit, reviewed allowlisted adapter with a rollback plan.
+Commands
+- npm run dev — preflight, existing launchd handover, then start brain and Vite.
+- npm run dev:brain — brain-only preflight and launch.
+- npm run dev:ui — UI-only preflight and launch.
+- npm run gui — run CLI preflight before launching Electron, then recheck and wait for the existing Vite server before opening the window.
+- npm run startup:check — run the combined development preflight without starting servers.
+- npm run startup:check:brain — run brain-only preflight.
+- npm run startup:check:ui — run UI-only preflight.
+- npm run startup:check:gui — run desktop preflight.
+- npm run startup:check:persistent — run persistent-brain preflight.
+For npm run dev -- --clean, existing port holders are allowed through the preflight port gate because the launcher's existing cleanup step will run afterward. Use --clean only when it is safe for that command to terminate the process holding ports 8000 or 5173.
+Configuration
+- AARIYA_PYTHON: explicit Python executable override. If set but unusable, preflight blocks rather than silently selecting another interpreter.
+- AARIYA_REQUIRE_LLM=1: treat the absence of a provider that passes a supported readiness probe as a critical failure, even when no recognized provider settings were found. If a configured provider was actually probed and no provider passed, startup is blocked. If no supported check can identify any configured provider, the result is UNVERIFIED and startup may continue as degraded under the hybrid policy.
+- AARIYA_CHECK_ATTEMPTS: bounded retry attempts (default 3, capped at 5).
+- AARIYA_CHECK_RETRY_DELAY_MS: retry backoff base (default 500ms).
+- AARIYA_CHECK_TIMEOUT_MS: per-request/probe timeout (default 6000ms).
+- AARIYA_MONITOR_INTERVAL_MS: runtime monitor interval (default 30000ms, minimum 5000ms).
+- AARIYA_DISCOVERY_INTERVAL_MS: live source/config discovery interval (default 60000ms, minimum 10000ms).
+- AARIYA_READY_TIMEOUT_MS: server-listener startup deadline for standalone brain/UI launchers (default 60000ms).
+- AARIYA_GUI_UI_WAIT_ATTEMPTS: how many 500ms attempts Electron makes for Vite readiness (default 180, or about 90 seconds).
+- AARIYA_HEALTH_URL: an explicitly configured real brain health URL. If unset, the GUI can only report TCP reachability for the brain, not application health.
+The current combined scripts/dev.mjs launch path uses ports 8000 and 5173 as in the original source. The persistent backend.sh port remains controlled by AARIYA_PORT.
+Capability health contracts
+Place actual capability descriptors in the repository using the *.capability.json suffix. Do not register a capability until its entrypoint and real health check exist. Supported health-check types are:
+- http: requires urlEnv, which names a configured URL environment variable; the check requires a 2xx response.
+- tcp: requires hostEnv and portEnv configured in the real environment or recognized .env files.
+- python-import: requires a real dotted Python module name and checks that the selected interpreter can import it.
+A descriptor can specify a unique id, version, description, entrypoint, criticality (core or optional), dependencies (registered capability IDs), and healthCheck. Do not put secrets or literal credentials in a descriptor. HTTP health checks should use an authenticated endpoint if the service requires one; never make a private health endpoint public just for preflight.
+
+The runtime currently validates id, version, a safe relative entrypoint, criticality, dependencies, and the supported healthCheck shape. Dependency IDs are reconciled against discovered manifests. Keep each health check truthful and minimal; do not mark a capability ready merely because its entrypoint exists.
+How to verify after applying
+Run the syntax checks for the added Node scripts, then from the actual project root run npm run startup:check and review each result. Do not treat a successful syntax check or a free TCP port as proof that the cognitive backend is ready. Confirm AARIYA_HEALTH_URL and the real capability contracts against routes that exist in the backend source.
+
+
+1. Essential additions
+1. Startup integrity and false-ready prevention
+
+Every capability needs a real, capability-specific readiness check. Listening TCP ports alone must never establish that the brain is ready. Distinguish process health, service health and functional readiness.
+Critical
+
+
+
+2. Capability drift detection
+
+Compare the current repository, registered capabilities, dependencies and configuration against the previous verified state. Detect newly added modules, removed modules, changed integrations, missing contracts and incompatible versions.
+Critical
+
+
+
+3. Dependency graph and impact analysis
+
+Know which capabilities depend on which services. If Redis fails, identify the memory and retrieval functions affected instead of marking the entire system indiscriminately as failed. Detect dependency cycles and missing required dependencies.
+Critical
+
+
+
+4. Safe repair and rollback
+
+Every automatic repair should have an allowlisted action, preconditions, timeout, audit record and verification step. Save a recoverable configuration backup before modifying it. Never automatically weaken security controls or rewrite core logic.
+Critical
+
+
+
+5. Continuous health monitoring
+
+After startup, detect runtime failures, repeated restarts, memory pressure, stalled model requests, lost connections and capabilities that stop responding. Define when to retry, disable a capability, alert you or restart a process.
+Critical
+
+
+
+2. Additional protections worth adding
+These address failure cases that are easy to miss when building a startup checker.
+6. Startup lock and duplicate-process prevention
+
+Prevent two startup sequences from simultaneously launching competing brains or modifying the same diagnostic files. Verify who owns ports 8000 and 5173 before taking any action. Never kill an unrelated process just because it occupies a port.
+
+
+7. Configuration and secret protection
+
+Validate required environment variables, provider settings, authentication and encryption configuration. Redact secrets in all logs, and protect diagnostic files against unauthorized access. Structured logging and secret masking are consistent with OWASP guidance. 
+
+OWASP Cheat Sheet Series
+
+
+
+
+
+8. Data integrity and migration checks
+
+Verify that memory databases, schemas, configuration files and required directories are accessible and consistent. Back up before approved repairs or migrations. A missing database should not trigger an automatic destructive reset.
+
+
+9. Online/offline operating modes
+
+Define which capabilities may continue locally when the internet, online LLM, or external APIs become unavailable. Switching to an online provider must respect data privacy and task permissions.
+
+
+10. Check freshness and configuration drift
+
+Do not reuse a previously successful health result after relevant source files, configuration, model selection or dependencies change. Record when a check was performed and what version of the capability it tested.
+
+
+11. Graceful cancellation and shutdown
+
+If startup is cancelled or a child process fails, stop only the processes owned by that launch session, close file handles, finalize diagnostic reports and preserve useful failure details. Node's child-process lifecycle distinguishes process exit from the closing of its standard I/O streams, which matters for reliable cleanup and reporting. 
+
+Node.js v26.12.1 Documentation
+
+
+
+
+
+12. Failure-injection tests
+
+Test real failure scenarios: Redis unavailable, local LLM offline, online credentials invalid, GUI server missing, corrupted configuration, failed repair and unexpected child-process termination. Verify the CLI status, exit code, cleanup and report for every case.
+
+
+
+3. Add these rules to the specification
+I would make the following requirements mandatory:
+- Evidence-based readiness: no capability is READY without a successful check against the real implementation.
+- Dependency-aware decisions: a failure affects only the capabilities that depend on it, unless it compromises a system-wide requirement.
+- Bounded startup: all checks and retries have explicit timeouts; no dependency can stall startup indefinitely.
+- Safe ownership: the checker never takes over or terminates processes without verifying that the launch session owns them.
+- Auditable repair: record the proposed action, approval or policy authorization, outcome and post-repair verification.
+- Clear operator control: provide a way to cancel startup, inspect the last report and run diagnostics without launching services.
+- No silent policy changes: discovering a new capability does not automatically grant permissions, enable it or change the data it may access.
+4. Define the completion criteria
+Aariya's startup system should not be considered complete until these scenarios pass:
+Scenario	Expected result
+All required services healthy	READY; both reports written
+Optional integration unavailable	Bounded retries, then permitted degraded operation
+Required cognitive function fails	BLOCKED unless an explicitly approved alternative can satisfy the requirement
+New capability discovered without a health contract	UNVERIFIED; not automatically enabled
+Local LLM fails	Apply the configured, privacy-aware fallback policy
+Configuration changes during development	Relevant checks rerun
+GUI starts without its required servers	Clear failure or explicitly supported offline mode
+Runtime capability stops working	Health transition logged and appropriate escalation applied
+Repair causes another failure	Stop retrying the repair, restore the approved backup where safe, and report the unresolved issue
+Terminal closes during startup	Owned child processes are cleaned up and diagnostic records are finalized as far as possible
+Aariya Startup Integrity — Source Package
+
+ZIP · Installable overlay for your existing Aariya project
+
+Download the complete code ZIP
+
+Read the full implementation and setup guide
+
+Read the quick-start README
+
+2. What code is included?
+The package contains these components:
+
+File or module
+
+Responsibility
+
+scripts/startup/engine.mjs
+
+Live CLI events, health checks, retries, reports and runtime monitoring
+
+scripts/startup/dependency-graph.mjs
+
+Dependency ordering, missing dependencies and cycle detection
+
+scripts/startup/approved-baseline.mjs
+
+SHA-256 integrity baseline and drift detection
+
+scripts/startup/process-lock.mjs
+
+Prevent concurrent startup and conflicting lifecycle operations
+
+scripts/startup/process-inspector.mjs
+
+Verify process ownership before terminating port holders
+
+scripts/startup/repair-registry.mjs
+
+Allowlisted, low-risk automatic repair
+
+scripts/startup/monitor.mjs
+
+Continuous health monitoring from a separate terminal
+
+scripts/startup/preflight.mjs
+
+CLI entry point for startup validation
+
+scripts/gui.mjs
+
+Run GUI preflight before launching Electron
+
+scripts/dev-ui.mjs
+
+UI-only preflight, launch and monitoring
+
+scripts/dev.mjs
+
+Integrate preflight with combined brain/UI startup
+
+scripts/dev-brain.mjs
+
+Integrate preflight with brain-only startup
+
+scripts/backend.sh
+
+Add checks and lifecycle locking for the persistent macOS service
+
+scripts/startup/tests/
+
+Automated tests for the safeguards
+
+The overlay also updates your npm scripts while preserving unrelated dependencies and custom scripts.
+
+3. Install and test it
+Step 1 — Back up Aariya. Review git status --short and commit or back up your existing changes.
+
+Step 2 — Extract the ZIP outside the project. Open a terminal in the extracted aariya-startup-integrity-patch folder.
+
+Step 3 — Apply the overlay. Replace the example project path with your actual Aariya repository path.
+
+bash apply-overlay.sh "/absolute/path/to/Aariya"
+
+The installer creates backups of replaced files and runs syntax checks and the startup test suite.
+
+Step 4 — Review the integration. In your actual Aariya project root:
+
+git status --short
+git diff -- package.json
+git diff -- scripts/dev.mjs
+git diff -- scripts/dev-brain.mjs
+git diff -- scripts/backend.sh
+git diff -- main.js
+
+Step 5 — Run the automated checks.
+
+npm run test:startup
+npm run startup:check
+
+The startup preflight is designed to run before your services start. Run the combined startup:check with the development servers stopped, because ports 8000 and 5173 are checked for conflicts.
+
+Step 6 — Review and approve the baseline.
+
+npm run startup:baseline:status
+npm run startup:baseline:approve
+
+Only approve the baseline after reviewing the code and configuration changes. This records file hashes, not source contents or environment-variable values.
+
+4. Connect real Aariya capabilities
+The framework discovers new modules and validates registered capability contracts, but a module is not operational merely because its file exists.
+
+For example, after implementing and verifying a real brain readiness endpoint, you could register a contract like this:
+
+{
+  "id": "brain-api",
+  "version": "1.0.0",
+  "description": "Aariya brain readiness",
+  "entrypoint": "server/main.py",
+  "criticality": "core",
+  "dependencies": [],
+  "healthCheck": {
+    "type": "http",
+    "urlEnv": "AARIYA_HEALTH_URL"
+  }
+}
+
+The server/main.py entrypoint and health route must actually exist. Configure AARIYA_HEALTH_URL to the real route. A capability with no valid health evidence must remain UNVERIFIED, not PASS.
+
+5. Validation results and remaining work
+The final test suite passed 16 tests, including dependency-failure propagation, pre-launch health-check deferral, process ownership, lock handling, approved-baseline drift, HTTP readiness, safe repair restrictions and configuration-file security. The installer smoke test also passed and confirmed that unrelated scripts and dependencies were preserved.
+
+There are still two important boundaries:
+
+Application-specific health checks need to be connected to your actual brain, memory, voice, communication, LLM and security implementations. Those source modules and routes were not included in the files available for this integration.
+
+Automatic repair is deliberately limited. The built-in repair can create a missing diagnostics directory safely. General repairs to application logic, databases, dependencies or security configuration still require individually reviewed repair handlers.
+
+The next practical milestone is to install the overlay in Aariya and use the first real CLI report to identify which capability contracts need to be connected to the existing implementations. That is what will move the system from a validated startup framework toward verified readiness across Aariya's actual capabilities.
+
