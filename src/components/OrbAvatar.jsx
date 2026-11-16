@@ -54,7 +54,6 @@ export default function OrbAvatar() {
     // ================= Audio =================
     let audioCtx = null, analyser = null, freqData = null, timeData = null, source = null;
     let micLive = false;
-    const sens = 1.4;
 
     async function enableMic() {
       try {
@@ -68,7 +67,7 @@ export default function OrbAvatar() {
         source = audioCtx.createMediaStreamSource(stream);
         source.connect(analyser);
         micLive = true;
-      } catch (err) {
+      } catch {
         /* mic blocked — fall back to idle animation */
       }
     }

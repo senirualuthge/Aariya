@@ -93,7 +93,7 @@ export default function NewsPanel() {
         const json = await res.json();
         setAlerts(json.data || []);
       }
-    } catch (e) {
+    } catch {
       /* non-fatal */
     }
   }, []);
@@ -146,7 +146,7 @@ export default function NewsPanel() {
     readerRef.current.token += 1;
     try {
       window.speechSynthesis.cancel();
-    } catch (e) {
+    } catch {
       /* noop */
     }
     setReading(false);
@@ -193,12 +193,12 @@ export default function NewsPanel() {
       readerRef.current.utterance = u;
       try {
         window.speechSynthesis.speak(u);
-      } catch (e) {
+      } catch {
         setReading(false);
       }
     };
     step();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [rate, stopReading]);
 
   const togglePause = () => {
@@ -210,7 +210,7 @@ export default function NewsPanel() {
           setPaused(false);
           return;
         }
-      } catch (e) {
+      } catch {
         /* fall through to restart */
       }
       startReading(sentenceIdx >= 0 ? sentenceIdx : 0);
@@ -218,7 +218,7 @@ export default function NewsPanel() {
       try {
         window.speechSynthesis.pause();
         setPaused(true);
-      } catch (e) {
+      } catch {
         setPaused(true);
       }
     }
@@ -230,7 +230,7 @@ export default function NewsPanel() {
       try {
         window.speechSynthesis.pause();
         setPaused(true);
-      } catch (e) {
+      } catch {
         /* noop */
       }
     }

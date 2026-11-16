@@ -1144,6 +1144,13 @@ export default function BrainScene({ data }) {
     const [history, setHistory] = useState([]);
     const [scrubIdx, setScrubIdx] = useState(-1);
     const lastTs = useRef(0);
+    // Latest scrub position, readable inside the history effect without making
+    // the effect re-run every time the user scrubs (auto-follow only applies
+    // when the scrubber sits on "live", so the effect must not depend on it).
+    const scrubIdxRef = useRef(-1);
+    useEffect(() => {
+        scrubIdxRef.current = scrubIdx;
+    }, [scrubIdx]);
 
     // Capture synoptic frames into a rolling history for the timeline scrubber
     useEffect(() => {
@@ -1156,7 +1163,7 @@ export default function BrainScene({ data }) {
                 synoptic: { ...data.synoptic, timestamp: st },
                 trust: data.trust, valence: data.valence, arousal: data.arousal,
             }];
-            if (scrubIdx === -1 || scrubIdx === prev.length - 1) setScrubIdx(next.length - 1);
+            if (scrubIdxRef.current === -1 || scrubIdxRef.current === prev.length - 1) setScrubIdx(next.length - 1);
             return next;
         });
     }, [data]);

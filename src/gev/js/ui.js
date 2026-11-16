@@ -80,8 +80,6 @@ import {
   createLoadingFeedbackState,
   createTrafficSyncFeedbackState,
   presentGlobalLoadingStatus,
-  presentGlobalStatusNotice,
-  presentLoadingFeedback,
   reduceLoadingFeedback,
   reduceTrafficSyncFeedback,
 } from './loadingFeedback.js';
@@ -1034,7 +1032,7 @@ class CockpitViewController {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!this.active && !this.isEntryAllowed()) return;
-      const changed = this.active ? this.exit() : this.enter();
+      this.active ? this.exit() : this.enter();
       return;
     }
   }

@@ -12,6 +12,14 @@
 //  - "Forget" deletes the profile and its descriptor outright, and there is no
 //    way to un-delete it — the privacy-respecting default.
 
+// This module intentionally ships the panel component together with the
+// session-scoped identity registry it owns and the identification hook that
+// drives it: they share one registry instance, so splitting them would either
+// duplicate it or add a module whose only caller is this file. The rule below
+// is an HMR-only concern, so it is silenced deliberately rather than by
+// splitting the module.
+/* eslint-disable react-refresh/only-export-components -- component + its session registry/hook belong together */
+
 import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { IdentityRegistry } from '../systems/personIdentity';
@@ -65,12 +73,12 @@ export function usePersonIdentification(descriptorSource) {
   const setPeopleContext = useStore((s) => s.setPeopleContext);
 
   useEffect(() => {
-    setKnownPeople(registry.list().map(({ descriptor, ...rest }) => rest));
+    setKnownPeople(registry.list().map(({ descriptor: _descriptor, ...rest }) => rest));
 
     const unsubscribeRegistry = registry.subscribe((event) => {
       if (event.type === 'enrolled' || event.type === 'renamed'
         || event.type === 'noted' || event.type === 'cleared') {
-        setKnownPeople(registry.list().map(({ descriptor, ...rest }) => rest));
+        setKnownPeople(registry.list().map(({ descriptor: _descriptor, ...rest }) => rest));
       }
     });
 

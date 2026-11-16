@@ -369,7 +369,7 @@ function VoiceSystem() {
       ws.current?.close();
     };
   }, [updateState, setAutonomyState, addProactiveMessage, addThought, registerSender,
-      pushAutonomyActivity, setLastProactive, setPlanStatus]);
+      pushAutonomyActivity, setLastProactive, setPlanStatus, setSynoptic]);
 
   return null;
 }

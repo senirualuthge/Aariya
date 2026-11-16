@@ -3,7 +3,7 @@
 // This module provides a no-op fallback for browser contexts
 
 const isBrowser = typeof window !== 'undefined';
-// eslint-disable-next-line no-undef
+ 
 const IS_NODE = !isBrowser && typeof process !== 'undefined' && process.versions?.node;
 
 let dbInstance = null;

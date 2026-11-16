@@ -25,6 +25,10 @@ export default defineConfig([
     'dist',
     'node_modules',
     'venv',
+    // Any venv anywhere in the tree — HabitTracker/.venv is a separate Python
+    // project whose site-packages must never be linted as app source.
+    '**/.venv/**',
+    '**/venv/**',
     'public',
     'mobile/build',
     'coverage',

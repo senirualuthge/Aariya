@@ -3611,7 +3611,6 @@ async function main() {
       // display would measure the same thing half a minute later.
       const dfHold = await evalPage(async () => {
         const Cesium = await import('/node_modules/cesium/Build/Cesium/index.js');
-        const v = window.__godsEyeView.viewer;
         const fl = window.__godsEyeView.dataManager.layers.get('flights').module;
         // `.module` is the layer OBJECT (the default export), not the module
         // namespace, so the handoff seam is not on it. Reach the namespace the
@@ -3812,7 +3811,7 @@ async function sampleFrames(page, count, sampleFn, ...args) {
         resolve();
       };
       const remove = v.scene.postRender.addEventListener(() => {
-        try { out.push(fn(...extra)); } catch (e) { out.push(null); }
+        try { out.push(fn(...extra)); } catch { out.push(null); }
         if (++i >= n) {
           finish();
           return;

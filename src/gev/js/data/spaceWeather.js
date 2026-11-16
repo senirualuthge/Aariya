@@ -70,20 +70,20 @@ export function createSpaceWeatherLayer({ overlayHost = DEFAULT_OVERLAY_HOST } =
       overlayHost.setVisible(SPACE_WEATHER_OVERLAY_SOURCE_ID, false);
     },
 
-    enable(viewer) {
+    enable(_viewer) {
       _enabled = true;
       if (_dataSource) _dataSource.show = true;
       overlayHost.setVisible(SPACE_WEATHER_OVERLAY_SOURCE_ID, true);
     },
 
-    disable(viewer) {
+    disable(_viewer) {
       _enabled = false;
       if (_dataSource) _dataSource.show = false;
       overlayHost.clearSource(SPACE_WEATHER_OVERLAY_SOURCE_ID);
       overlayHost.setVisible(SPACE_WEATHER_OVERLAY_SOURCE_ID, false);
     },
 
-    async update(viewer) {
+    async update(_viewer) {
       try {
         const response = await fetch('/api/gev/space-weather');
         if (!response.ok) { _lastError = `HTTP ${response.status}`; return false; }

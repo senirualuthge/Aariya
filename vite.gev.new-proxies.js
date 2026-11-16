@@ -406,7 +406,7 @@ export function volcanoesProxy() {
       'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=last7days&minmagnitude=0&eventtype=earthquake',
       { signal: AbortSignal.timeout(TIMEOUT_MS) },
     );
-    const body = await readResponseTextCapped(r, MAX_RESPONSE_BYTES);
+    await readResponseTextCapped(r, MAX_RESPONSE_BYTES);
     if (!r.ok) throw new Error(`USGS HTTP ${r.status}`);
 
     // Also try the volcano-specific feed
@@ -464,7 +464,7 @@ export function powerOutagesProxy() {
   const cache = makeMemCache(300_000);
   const inflight = new Map();
 
-  async function fetchPowerOutages(params) {
+  async function fetchPowerOutages(_params) {
     // US outage data from EIA (Energy Information Administration)
     const outages = [];
     try {
@@ -526,7 +526,7 @@ export function transitProxy() {
   const cache = makeMemCache(30_000); // 30s for live transit
   const inflight = new Map();
 
-  async function fetchTransit(params) {
+  async function fetchTransit(_params) {
     // Transitland aggregated feed
     const vehicles = [];
     try {
@@ -975,7 +975,6 @@ export function geofenceProxy() {
 export function dvrProxy() {
   // DVR timeline is managed by the backend GEV agent — this proxy forwards to it
   const cache = makeMemCache(10_000); // 10s
-  const inflight = new Map();
 
   return {
     name: 'dvr-proxy',

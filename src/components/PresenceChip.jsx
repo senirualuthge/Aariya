@@ -13,7 +13,7 @@ const MODE_META = {
 const DEFAULT_META = MODE_META.CALM;
 
 /// Behavior-mode accent color — shared by the chip and the summary popover.
-export function modeColor(mode) {
+function modeColor(mode) {
   return (MODE_META[(mode || '').toUpperCase()] || DEFAULT_META).color;
 }
 

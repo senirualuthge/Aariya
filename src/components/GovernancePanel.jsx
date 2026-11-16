@@ -102,7 +102,7 @@ export default function GovernancePanel() {
       setConsent(c);
       if (h) setHealth(h);
       setError('');
-    } catch (e) {
+    } catch {
       setError('Server unreachable — is the backend running?');
     }
   }, []);

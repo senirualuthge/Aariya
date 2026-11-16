@@ -507,28 +507,6 @@ function clamp(value, min, max) {
 }
 
 /**
- * Normalizes an angle to the (-180, 180] range.
- * @param {number} deg
- * @returns {number}
- */
-function normalizeSignedAngle(deg) {
-  let value = deg % 360;
-  if (value > 180) value -= 360;
-  if (value <= -180) value += 360;
-  return value;
-}
-
-/**
- * Returns the absolute angular difference between two headings in degrees.
- * @param {number} aDeg
- * @param {number} bDeg
- * @returns {number} Value in [0, 180].
- */
-function angularDeltaAbs(aDeg, bDeg) {
-  return Math.abs(normalizeSignedAngle(aDeg - bDeg));
-}
-
-/**
  * Task 5 (height-datum fix): maps the scene's `globe.show` flag to the surface
  * regime key the per-camera ground cache is keyed by (spec §2 "cache by
  * surface regime", collapsed to two keys — ion World Terrain and Re:Earth
