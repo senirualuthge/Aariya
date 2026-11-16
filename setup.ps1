@@ -9,7 +9,12 @@ python --version
 
 # Install Python dependencies
 Write-Host "`nInstalling Python dependencies..." -ForegroundColor Yellow
-pip install -r server/requirements.txt
+# Prefer the exact tested pins; fall back to the floor file on old checkouts.
+if (Test-Path "server\requirements.lock") {
+    pip install -r server\requirements.lock
+} else {
+    pip install -r server\requirements.txt
+}
 
 # Run database migrations
 Write-Host "`nRunning database migrations..." -ForegroundColor Yellow

@@ -1,5 +1,12 @@
 # BUG #6 FIX: chromadb, sentence-transformers, and trafilatura were documented
 # in §4.1 tech stack but missing from this file. Added below.
+#
+# This file states INTENT: which packages are needed and the minimum version
+# that is secure. The exact versions CI and setup.sh install live in
+# server/requirements.lock (regenerate it after changing anything here — see
+# the header of that file). Floors alone are not a lock: `>=` resolves to
+# whatever PyPI published this morning, which is how an upstream major can
+# break the suite without a single line of this repo changing.
 
 fastapi>=0.111.0
 uvicorn>=0.23.0

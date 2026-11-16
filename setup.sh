@@ -19,7 +19,12 @@ source server/.venv/bin/activate
 
 # Install Python dependencies
 echo -e "\n\033[33mInstalling Python dependencies...\033[0m"
-pip install -r server/requirements.txt
+# Prefer the exact tested pins; fall back to the floor file on old checkouts.
+if [ -f "server/requirements.lock" ]; then
+    pip install -r server/requirements.lock
+else
+    pip install -r server/requirements.txt
+fi
 
 # Run database migrations
 echo -e "\n\033[33mRunning database migrations...\033[0m"

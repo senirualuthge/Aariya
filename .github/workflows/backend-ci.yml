@@ -48,10 +48,17 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: server/requirements.txt
+          cache-dependency-path: |
+            server/requirements.txt
+            server/requirements.lock
 
+      # Install the exact tested pins, not the floors. requirements.txt only
+      # says "at least this secure version"; resolving those floors on every
+      # run let upstream majors (FastAPI 0.141's _IncludedRouter wrappers, for
+      # one) land in CI with no review. requirements.lock is the tree that
+      # actually passed the suite; bump it deliberately.
       - name: Install backend dependencies
-        run: pip install -r server/requirements.txt
+        run: pip install -r server/requirements.lock
 
       - name: Hermetic backend suite
         run: python -m pytest server/tests/ -q
