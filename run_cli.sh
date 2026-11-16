@@ -1,5 +1,8 @@
 #!/bin/bash
-if [ -d "venv" ]; then
+if [ -d "server/.venv" ]; then
+    source server/.venv/bin/activate
+elif [ -d "venv" ]; then
+    echo "Warning: using legacy root-level venv. Re-run ./setup.sh to build server/.venv."
     source venv/bin/activate
 else
     echo "Warning: venv not found. Continuing with system python..."

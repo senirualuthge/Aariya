@@ -6,9 +6,12 @@ setlocal
 
 cd /d "%~dp0"
 
-REM Resolve the project venv python (root-level venv\ is the convention)
+REM Resolve the project venv python. server\.venv is the canonical environment
+REM (scripts\backend.sh, scripts\scan_deps.sh and CI all target it); a
+REM root-level venv\ is only a legacy fallback for older checkouts.
 set "PY=python"
-if exist "venv\Scripts\python.exe" set "PY=venv\Scripts\python.exe"
+if exist "server\.venv\Scripts\python.exe" set "PY=server\.venv\Scripts\python.exe"
+if not exist "server\.venv\Scripts\python.exe" if exist "venv\Scripts\python.exe" set "PY=venv\Scripts\python.exe"
 
 REM pytest is required (declared in server\requirements.txt)
 "%PY%" -c "import pytest" >nul 2>&1

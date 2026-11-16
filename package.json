@@ -31,7 +31,8 @@
     "three-stdlib": "2.36.0",
     "node-fetch": "2.7.0",
     "form-data": "4.0.6",
-    "fflate": ">=0.8.3"
+    "fflate": ">=0.8.3",
+    "dompurify": "^3.4.18"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

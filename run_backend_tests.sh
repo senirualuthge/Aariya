@@ -17,8 +17,16 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
-# ── Resolve the project venv python (root-level venv/ is the convention) ───
-if [ -x "venv/bin/python" ]; then
+# ── Resolve the project venv python ────────────────────────────────────────
+# server/.venv is the canonical environment: it is what scripts/backend.sh,
+# scripts/scan_deps.sh and the CI install target. A root-level venv/ is only a
+# legacy fallback (older checkouts created it via setup.sh) — running tests in a
+# different interpreter than the server uses is how version drift slips through.
+if [ -x "server/.venv/bin/python" ]; then
+    PY="server/.venv/bin/python"
+elif [ -x "server/.venv/Scripts/python.exe" ]; then
+    PY="server/.venv/Scripts/python.exe"
+elif [ -x "venv/bin/python" ]; then
     PY="venv/bin/python"
 elif [ -x "venv/Scripts/python.exe" ]; then
     PY="venv/Scripts/python.exe"

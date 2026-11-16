@@ -29,8 +29,27 @@ def test_health_returns_ok_without_building_the_full_snapshot():
     assert "checks" not in body
 
 
+def _route_paths(app):
+    """Collect paths recursively — newer FastAPI wraps `include_router` in
+    `_IncludedRouter` containers that expose `.original_router` instead of
+    `.path`, so a flat `{r.path for r in app.routes}` breaks on upgrades."""
+    paths = set()
+    stack = list(getattr(app, "routes", []) or [])
+    while stack:
+        route = stack.pop()
+        nested = getattr(route, "original_router", None)
+        if nested is not None:
+            stack.extend(getattr(nested, "routes", []) or [])
+            continue
+        path = getattr(route, "path", None)
+        if path:
+            paths.add(path)
+        stack.extend(getattr(route, "routes", []) or [])
+    return paths
+
+
 def test_full_snapshot_route_still_exists():
     """The probe is an addition, not a replacement."""
-    paths = {route.path for route in server_main.app.routes}
+    paths = _route_paths(server_main.app)
     assert "/health" in paths
     assert "/api/system/health" in paths

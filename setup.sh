@@ -9,13 +9,13 @@ echo -e "\n\033[33mChecking Python version...\033[0m"
 python3 --version || python --version
 
 # Set up virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-    echo -e "\n\033[33mCreating virtual environment...\033[0m"
-    python3 -m venv venv || python -m venv venv
+if [ ! -d "server/.venv" ]; then
+    echo -e "\n\033[33mCreating virtual environment (server/.venv)...\033[0m"
+    python3 -m venv server/.venv || python -m venv server/.venv
 fi
 
 echo -e "\n\033[33mActivating virtual environment...\033[0m"
-source venv/bin/activate
+source server/.venv/bin/activate
 
 # Install Python dependencies
 echo -e "\n\033[33mInstalling Python dependencies...\033[0m"

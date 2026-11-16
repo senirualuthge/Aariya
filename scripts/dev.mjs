@@ -70,15 +70,21 @@ const YELLOW = c('33');
 const RESET = c('0');
 
 // ── Executable resolution (cross-platform) ──────────────────────────────────
+// server/.venv is the canonical environment (scripts/backend.sh,
+// scripts/scan_deps.sh and CI all target it). A root-level venv/ is only a
+// legacy fallback for older checkouts created by setup.sh.
+const VENV_DIRS = [path.join('server', '.venv'), 'venv'];
+
 function resolveVenvExecutable(name) {
   // Only look in the layout that matches this platform — a venv copied between
   // OSes can contain both Scripts\ and bin\, and picking the foreign one (e.g.
   // a Windows .exe on macOS) fails with EACCES.
-  const rel = IS_WIN
-    ? path.join('venv', 'Scripts', `${name}.exe`)
-    : path.join('venv', 'bin', name);
-  const candidate = path.join(ROOT, rel);
-  return existsSync(candidate) ? candidate : null;
+  const rel = IS_WIN ? path.join('Scripts', `${name}.exe`) : path.join('bin', name);
+  for (const dir of VENV_DIRS) {
+    const candidate = path.join(ROOT, dir, rel);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
 }
 
 function resolveUvicorn() {

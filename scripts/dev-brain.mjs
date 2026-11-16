@@ -17,14 +17,20 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const IS_WIN = process.platform === 'win32';
 
+// server/.venv is the canonical environment (scripts/backend.sh,
+// scripts/scan_deps.sh and CI all target it). A root-level venv/ is only a
+// legacy fallback for older checkouts created by setup.sh.
+const VENV_DIRS = [path.join('server', '.venv'), 'venv'];
+
 // Only look in the layout that matches this platform — a venv copied between
 // OSes can contain both Scripts\ and bin\, and picking the foreign one fails.
 function venvPython() {
-  const rel = IS_WIN
-    ? path.join('venv', 'Scripts', 'python.exe')
-    : path.join('venv', 'bin', 'python');
-  const candidate = path.join(ROOT, rel);
-  return existsSync(candidate) ? candidate : null;
+  const rel = IS_WIN ? path.join('Scripts', 'python.exe') : path.join('bin', 'python');
+  for (const dir of VENV_DIRS) {
+    const candidate = path.join(ROOT, dir, rel);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
 }
 
 export function resolvePython() {
