@@ -248,6 +248,15 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_aariya_ws_ticket_expiry
             ON aariya_ws_tickets(expires_at);
+
+        -- Persistent pairing-attempt throttle (Patch 2.1). Sources are keyed
+        -- hashes, never raw addresses; __global__ bounds total guessing.
+        CREATE TABLE IF NOT EXISTS aariya_pairing_attempts (
+            source_hash TEXT PRIMARY KEY,
+            window_started_at REAL NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            blocked_until REAL NOT NULL DEFAULT 0
+        );
     """)
     conn.commit()
     conn.close()

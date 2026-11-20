@@ -42,7 +42,10 @@ server/.venv/bin/python -m server.tools.create_device_pairing_code --role dashbo
 server/.venv/bin/python -m server.tools.create_device_pairing_code --role mobile
 ```
 
-The command prints `XXXX-XXXX` and its expiry time.
+The command prints four five-character groups (`XXXXX-XXXXX-XXXXX-XXXXX`,
+100 bits of randomness) and its expiry time. Enrollment is throttled to five
+failed guesses per source and twenty attempts globally per 15 minutes; exceeded
+limits return HTTP 429 with `Retry-After`.
 
 ## 3. Pair the devices
 
@@ -80,11 +83,14 @@ credentials and tickets are not exposed in transit.
 
 ```http
 DELETE /api/auth/devices/{device_id}
-Authorization: Bearer <that device's credential or another device of the same owner>
+Authorization: Bearer <a DASHBOARD device credential of the same owner>
 ```
 
-Revoking a device immediately deletes its outstanding WebSocket tickets and
-rejects its credential; the other device is unaffected.
+Only a dashboard device may revoke devices. Revocation immediately deletes the
+target's outstanding tickets, rejects its credential, sends live sockets a
+`{"type":"device.revoked"}` frame, and closes them with code `4001`. Flutter and
+the Electron dashboard clear the local credential and show the pairing screen
+instead of reconnecting. The other device is unaffected.
 
 ## Endpoints
 
@@ -106,9 +112,18 @@ rejects its credential; the other device is unaffected.
   export/delete/consent mutations. Collaboration REST reads/writes and all
   MCP/tooling endpoints (`/api/tools/*`, `/api/knowledge/*`) also require a
   device credential; collab note/task authors are stamped with the device
-  label rather than a caller-supplied name. System Health remains a
-  shared-token diagnostic surface because it reports cross-user session/lock
-  state.
+  label rather than a caller-supplied name. System Health REST now requires a
+  dashboard device in strict mode (the legacy shared-token guard remains only
+  when device auth is not configured).
+* Dashboard-only authority includes `/api/fs/*`, `/api/sandbox/*`,
+  `/api/vision/*`, autonomy writes, memory import/push, security scans,
+  compliance mutations, device revocation, `/api/tools/call`, MCP sync,
+  code indexing, and SDK kill-switch/shutdown operations. Both device roles may
+  read autonomy state, events, memory export/ledger, tool listings, knowledge
+  graph queries, and compliance read-only views.
+* Set `AARIYA_DEVICE_AUTH_REQUIRED=1` to refuse startup when
+  `AARIYA_OWNER_ID` is missing, preventing an accidental legacy-mode
+deployment.
 * `WS_SECRET_TOKEN` remains useful as a transport-level shared secret, but it
   no longer establishes device ownership.
 * `AARIYA_TRUSTED_PROXIES` must contain your reverse proxy for

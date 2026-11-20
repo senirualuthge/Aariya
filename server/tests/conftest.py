@@ -30,6 +30,7 @@ def _hermetic_device_auth(monkeypatch):
     device authentication. Strict-mode tests opt in explicitly with
     monkeypatch.setenv inside the test/fixture."""
     monkeypatch.delenv("AARIYA_OWNER_ID", raising=False)
+    monkeypatch.delenv("AARIYA_DEVICE_AUTH_REQUIRED", raising=False)
     monkeypatch.delenv("AARIYA_ALLOW_INSECURE_DEVICE_AUTH", raising=False)
     yield
 

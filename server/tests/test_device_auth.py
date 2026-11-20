@@ -5,6 +5,8 @@ legacy shared-token mode to strict device authentication. The database is the
 isolated tmp SQLite fixture, so no real credential or device is touched.
 """
 
+import asyncio
+import re
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 
@@ -18,7 +20,10 @@ from server.systems.security.device_auth import (
     DeviceAuthError,
     create_pairing_code,
     redeem_ws_ticket,
+    revoke_device_and_disconnect,
+    validate_device_auth_configuration,
 )
+from server.systems.security.device_connection_registry import device_connections
 
 OWNER = "u1"
 
@@ -438,6 +443,109 @@ def test_tools_and_knowledge_require_a_credential_in_strict_mode(client):
     assert client.post("/api/tools/call", json={"name": "shell"}).status_code == 401
     assert client.post("/api/knowledge/ingest", json={"user_id": OWNER}).status_code == 401
     assert client.get("/api/knowledge/symbol?symbol=os").status_code == 401
+
+
+def test_pairing_codes_use_100_bits_and_four_groups(client):
+    code = create_pairing_code(role="mobile", owner_id=OWNER)
+    assert re.fullmatch(r"(?:[A-Z2-9]{5}-){3}[A-Z2-9]{5}", code)
+
+
+def test_pairing_attempts_are_rate_limited(client):
+    for _ in range(5):
+        response = client.post(
+            "/api/auth/device/enroll",
+            json={"pairing_code": "ZZZZZ-ZZZZZ-ZZZZZ-ZZZZZ", "label": "x", "platform": "t"},
+        )
+        assert response.status_code == 400
+        assert "invalid" in response.json()["detail"].lower()
+
+    blocked = client.post(
+        "/api/auth/device/enroll",
+        json={"pairing_code": "ZZZZZ-ZZZZZ-ZZZZZ-ZZZZZ", "label": "x", "platform": "t"},
+    )
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) > 0
+
+
+def test_required_device_auth_refuses_startup_without_owner(monkeypatch):
+    monkeypatch.setenv("AARIYA_DEVICE_AUTH_REQUIRED", "1")
+    monkeypatch.delenv("AARIYA_OWNER_ID", raising=False)
+    with pytest.raises(RuntimeError, match="AARIYA_OWNER_ID"):
+        validate_device_auth_configuration()
+
+
+def test_mobile_cannot_use_dashboard_rest_authority(client):
+    phone = _pair(client, role="mobile", label="phone", platform="android")
+    headers = _auth(phone["credential"])
+
+    assert client.get("/api/system/health", headers=headers).status_code == 403
+    assert client.get("/api/fs/roots", headers=headers).status_code == 403
+    assert client.get("/api/security/last-scan", headers=headers).status_code == 403
+    assert client.post("/api/autonomy/enable", json={"enabled": True}, headers=headers).status_code == 403
+    assert client.post(
+        "/api/compliance/consent", json={"user_id": OWNER, "consent": {}}, headers=headers
+    ).status_code == 403
+    assert client.post(
+        "/api/memory/import", json={"envelope": {}}, headers=headers
+    ).status_code == 403
+    assert client.post(
+        "/api/tools/call", json={"name": "shell"}, headers=headers
+    ).status_code == 403
+    assert client.delete(
+        f"/api/auth/devices/{phone['device_id']}", headers=headers
+    ).status_code == 403
+
+
+def test_mobile_can_read_personal_state(client):
+    phone = _pair(client, role="mobile", label="phone", platform="android")
+    headers = _auth(phone["credential"])
+
+    assert client.get("/api/autonomy/state", headers=headers).status_code == 200
+    assert client.get("/api/events/latest", headers=headers).status_code == 200
+    assert client.get("/api/memory/ledger", headers=headers).status_code == 200
+    assert client.get("/api/compliance/consent-status", headers=headers).status_code == 200
+
+
+def test_dashboard_health_requires_a_device_in_strict_mode(client):
+    assert client.get("/api/system/health").status_code == 401
+    laptop = _pair(client)
+    response = client.get(
+        "/api/system/health", headers=_auth(laptop["credential"])
+    )
+    assert response.status_code == 200
+
+
+class _FakeSocket:
+    def __init__(self):
+        self.sent = []
+        self.closed = None
+
+    async def send_text(self, payload):
+        self.sent.append(payload)
+
+    async def close(self, code=1000, reason=""):
+        self.closed = (code, reason)
+
+
+def test_revocation_closes_live_socket_and_rejects_late_registration(client):
+    laptop = _pair(client)
+    socket = _FakeSocket()
+
+    async def scenario():
+        device_connections.clear()
+        assert await device_connections.register(laptop["device_id"], socket)
+        assert await revoke_device_and_disconnect(laptop["device_id"], OWNER)
+        # A socket whose ticket was redeemed just before revocation must not be
+        # able to register after the device was marked revoked.
+        late = _FakeSocket()
+        assert not await device_connections.register(laptop["device_id"], late)
+        return late
+
+    late = asyncio.run(scenario())
+    assert any('"device.revoked"' in frame for frame in socket.sent)
+    assert socket.closed and socket.closed[0] == 4001
+    assert late.sent == [] and late.closed is None
+    device_connections.clear()
 
 
 def test_collab_rest_requires_a_credential_and_stamps_device(

@@ -13,16 +13,22 @@ server takes all three from the pairing record it created locally.
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from server.systems.security import auth as token_auth
 from server.systems.security.device_auth import (
     TICKET_TTL_SECONDS,
     DeviceAuthError,
     DevicePrincipal,
+    PairingRateLimited,
+    check_pairing_rate_limit,
+    clear_pairing_failures,
     enroll_device,
     issue_ws_ticket,
     list_devices,
+    record_pairing_failure,
+    require_dashboard_device,
     require_device,
     require_secure_http,
-    revoke_device,
+    revoke_device_and_disconnect,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["device-auth"])
@@ -40,16 +46,37 @@ class WsTicketRequest(BaseModel):
 
 @router.post("/device/enroll")
 def enroll(body: EnrollDeviceRequest, request: Request):
-    """Exchange a pairing code for a device credential (returned once)."""
+    """Exchange a pairing code for a device credential (returned once).
+
+    Every failure returns the same message, so the endpoint cannot be used to
+    probe whether a guessed code exists. Failed attempts are rate-limited per
+    source and globally in SQLite, before the code is looked up.
+    """
     require_secure_http(request)
+    source = token_auth._effective_client_host(request)
+    try:
+        check_pairing_rate_limit(source)
+    except PairingRateLimited as exc:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many pairing attempts; try again later",
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+
     try:
         principal, credential = enroll_device(
             pairing_code=body.pairing_code,
             label=body.label,
             platform=body.platform,
         )
-    except DeviceAuthError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    except DeviceAuthError:
+        record_pairing_failure(source)
+        raise HTTPException(
+            status_code=400,
+            detail="invalid, expired, or already used pairing code",
+        )
+
+    clear_pairing_failures(source)
     return {
         "device_id": principal.device_id,
         "owner_id": principal.owner_id,
@@ -92,10 +119,10 @@ def devices(principal: DevicePrincipal = Depends(require_device)):
 
 
 @router.delete("/devices/{device_id}")
-def revoke(
+async def revoke(
     device_id: str,
-    principal: DevicePrincipal = Depends(require_device),
+    principal: DevicePrincipal = Depends(require_dashboard_device),
 ):
-    if not revoke_device(device_id, principal.owner_id):
+    if not await revoke_device_and_disconnect(device_id, principal.owner_id):
         raise HTTPException(status_code=404, detail="Device not found or already revoked")
     return {"revoked": True, "device_id": device_id}

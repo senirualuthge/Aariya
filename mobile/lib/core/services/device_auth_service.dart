@@ -121,6 +121,12 @@ class DeviceAuthService {
     return DeviceIdentity.fromJson(body);
   }
 
+  /// The server revoked this device: clear the credential and require pairing.
+  Future<void> handleRevocation() async {
+    await clear();
+    needsPairing.value = true;
+  }
+
   /// Forget the local credential (device revoked, or the user chose to unpair).
   Future<void> clear() async {
     _cachedCredential = null;

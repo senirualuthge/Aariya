@@ -15,7 +15,7 @@ Provides:
 
 from fastapi import APIRouter, Depends
 
-from server.systems.security.auth import require_health_auth
+from server.systems.security.device_auth import require_dashboard_health_auth
 from server.systems.system_health import get_system_health
 
 # Both routes expose operational detail (including per-user session/lock state
@@ -25,7 +25,7 @@ from server.systems.system_health import get_system_health
 router = APIRouter(
     prefix="/api/system",
     tags=["system-health"],
-    dependencies=[Depends(require_health_auth)],
+    dependencies=[Depends(require_dashboard_health_auth)],
 )
 
 

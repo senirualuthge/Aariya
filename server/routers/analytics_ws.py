@@ -95,7 +95,9 @@ async def analytics_ws(websocket: WebSocket) -> None:
     if principal is None:
         return
 
-    await accept_personal_websocket(websocket, principal)
+    if not await accept_personal_websocket(websocket, principal):
+
+        return
     manager.analytics_clients.add(websocket)
     agent = get_mobile_analytics()
     # Attributed by the authenticated device id, not a client-supplied value.

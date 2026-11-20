@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from server.systems.security.device_auth import (
-    device_auth_enabled, personal_owner, require_device,
+    device_auth_enabled, personal_owner, require_dashboard_device, require_device,
 )
 from server.infrastructure.observability import logger
 
@@ -148,7 +148,10 @@ async def export_user_data(user_id: str = Depends(personal_owner)):
 
 
 @router.delete("/delete-user-data")
-async def delete_user_data(user_id: str = Depends(personal_owner)):
+async def delete_user_data(
+    user_id: str = Depends(personal_owner),
+    _dashboard=Depends(require_dashboard_device),
+):
     """
     Delete all user data (GDPR Article 17 - Right to be Forgotten).
     """
@@ -240,7 +243,11 @@ async def consent_status(user_id: str = Depends(personal_owner)):
 
 
 @router.post("/consent")
-async def set_consent(req: ConsentUpdateRequest, request_ctx: Request):
+async def set_consent(
+    req: ConsentUpdateRequest,
+    request_ctx: Request,
+    _dashboard=Depends(require_dashboard_device),
+):
     req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Set granular consent toggles — REAL feature-flag enforcement follows."""
     from server.systems.governance.consent_store import ConsentStore, CONSENT_CATEGORIES
@@ -267,7 +274,11 @@ async def set_consent(req: ConsentUpdateRequest, request_ctx: Request):
 
 
 @router.post("/revoke-consent")
-async def revoke_consent(request: ConsentRevocationRequest, request_ctx: Request):
+async def revoke_consent(
+    request: ConsentRevocationRequest,
+    request_ctx: Request,
+    _dashboard=Depends(require_dashboard_device),
+):
     request.user_id = _bound_user_id(request.user_id, request_ctx)
     """Revoke consent for specific data processing activities (enforced)."""
     from server.systems.governance.consent_store import ConsentStore
@@ -301,7 +312,11 @@ async def revoke_consent(request: ConsentRevocationRequest, request_ctx: Request
 # ── Companion governance: age band ────────────────────────────────────────────
 
 @router.post("/age-band")
-async def set_age_band(req: AgeBandRequest, request_ctx: Request):
+async def set_age_band(
+    req: AgeBandRequest,
+    request_ctx: Request,
+    _dashboard=Depends(require_dashboard_device),
+):
     req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Age policy is locked to 18+ — any request for a lower band is rejected.
     This endpoint only ever reports the locked 18+ state."""
@@ -326,7 +341,11 @@ async def set_age_band(req: AgeBandRequest, request_ctx: Request):
 # ── Companion governance: personality controls ────────────────────────────────
 
 @router.post("/personality/freeze")
-async def freeze_personality(req: FreezeRequest, request_ctx: Request):
+async def freeze_personality(
+    req: FreezeRequest,
+    request_ctx: Request,
+    _dashboard=Depends(require_dashboard_device),
+):
     req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Pause all personality drift (sticky until unfrozen)."""
     from server.systems.governance.consent_store import ConsentStore
@@ -337,7 +356,11 @@ async def freeze_personality(req: FreezeRequest, request_ctx: Request):
 
 
 @router.post("/personality/unfreeze")
-async def unfreeze_personality(req: FreezeRequest, request_ctx: Request):
+async def unfreeze_personality(
+    req: FreezeRequest,
+    request_ctx: Request,
+    _dashboard=Depends(require_dashboard_device),
+):
     req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Resume organic personality drift."""
     from server.systems.governance.consent_store import ConsentStore
@@ -348,7 +371,11 @@ async def unfreeze_personality(req: FreezeRequest, request_ctx: Request):
 
 
 @router.post("/personality/reset")
-async def reset_personality(req: FreezeRequest, request_ctx: Request):
+async def reset_personality(
+    req: FreezeRequest,
+    request_ctx: Request,
+    _dashboard=Depends(require_dashboard_device),
+):
     req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Restore the default persona (drops evolution file; next turn = baseline)."""
     from server.systems.governance.consent_store import ConsentStore

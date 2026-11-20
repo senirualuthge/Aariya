@@ -105,7 +105,7 @@ export default function DevicePairingCard() {
           style={{ ...input, flex: '1 1 150px', letterSpacing: 2, textTransform: 'uppercase' }}
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          placeholder="XXXX-XXXX"
+          placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
           aria-label="Pairing code"
           autoComplete="off"
         />

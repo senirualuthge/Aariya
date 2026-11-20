@@ -157,8 +157,9 @@ class WebSocketService {
   /// URL for one channel. Once paired, the backend knows this phone's device id
   /// from the ticket, so no client-supplied identity belongs in the URL.
   String _channelUrl(Uri baseUri, String path) {
+    final secure = baseUri.scheme == 'https' || baseUri.scheme == 'wss';
     return Uri(
-      scheme: 'ws',
+      scheme: secure ? 'wss' : 'ws',
       host: baseUri.host,
       port: baseUri.port,
       path: path,
@@ -254,6 +255,21 @@ class WebSocketService {
         if (decoded == null) return;
 
         final type = decoded['type'] as String? ?? '';
+
+        // ── Live revocation ────────────────────────────────────────────────
+        // Stop reconnecting, clear the dead credential, and send the user to
+        // the pairing screen instead of retrying a refused socket forever.
+        if (type == 'device.revoked') {
+          _authBlocked = true;
+          isConnected.value = false;
+          unawaited(DeviceAuthService.instance.handleRevocation());
+          try {
+            _chatChannel?.sink.close();
+            _controlChannel?.sink.close();
+            _analyticsChannel?.sink.close();
+          } catch (_) {}
+          return;
+        }
 
         // ── Protocol v2 ACK handling ───────────────────────────────────────
         if (type == 'ack') {

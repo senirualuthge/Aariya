@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from server.systems.llm_router import get_mcp_registry
-from server.systems.security.device_auth import personal_owner
+from server.systems.security.device_auth import personal_owner, require_dashboard_device
 from server.systems.mcp_client import load_server_configs, sync_remote_tools
 
 logger = logging.getLogger("aariya.tools.router")
@@ -59,7 +59,7 @@ async def mcp_status(_owner: str = Depends(personal_owner)):
 
 
 @router.post("/tools/mcp/sync")
-async def mcp_sync(_owner: str = Depends(personal_owner)):
+async def mcp_sync(_dashboard=Depends(require_dashboard_device)):
     """Discover tools from the configured MCP servers right now."""
     summary = await sync_remote_tools()
     return {"ok": True, **summary}
@@ -68,7 +68,7 @@ async def mcp_sync(_owner: str = Depends(personal_owner)):
 @router.post("/tools/call")
 async def call_tool(
     req: ToolCallRequest,
-    _owner: str = Depends(personal_owner),
+    _dashboard=Depends(require_dashboard_device),
 ):
     result = await get_mcp_registry().call(req.name, req.arguments)
     return result
@@ -103,7 +103,7 @@ class CodeIndexRequest(BaseModel):
 @router.post("/knowledge/code-index")
 async def knowledge_code_index(
     req: CodeIndexRequest,
-    _owner: str = Depends(personal_owner),
+    _dashboard=Depends(require_dashboard_device),
 ):
     """AST-parse real Python sources under an allowed root (AccessFIles §70)
     and fold the module/class/function structure into the graph."""

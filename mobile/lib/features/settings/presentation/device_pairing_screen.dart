@@ -252,7 +252,7 @@ class _DevicePairingScreenState extends State<DevicePairingScreen> {
               ),
               decoration: _decoration(
                 label: 'Code',
-                hint: 'XXXX-XXXX',
+                hint: 'XXXXX-XXXXX-XXXXX-XXXXX',
                 icon: Icons.key_outlined,
               ),
               onSubmitted: (_) => _pair(),

@@ -23,7 +23,10 @@ void main() {
 
     expect(find.text('TRUSTED DEVICE'), findsOneWidget);
     expect(find.text('PAIRING CODE'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'XXXX-XXXX'), findsOneWidget);
+    expect(
+      find.widgetWithText(TextField, 'XXXXX-XXXXX-XXXXX-XXXXX'),
+      findsOneWidget,
+    );
     expect(find.text('PAIR THIS PHONE'), findsOneWidget);
   });
 

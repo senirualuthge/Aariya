@@ -33,7 +33,7 @@ from typing import Optional
 
 logger = logging.getLogger("aariya.filesystem_router")
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from server.safety.filesystem_guard import allowed_roots
@@ -41,9 +41,14 @@ from server.safety.governor import get_safety_governor
 from server.safety.pending_actions import get_pending_action_store
 from server.systems.filesystem.access_events import tracked
 from server.systems.filesystem.filesystem_agent import FileSystemAgent
+from server.systems.security.device_auth import require_dashboard_device
 
 logger = logging.getLogger("aariya.fs.router")
-router = APIRouter(prefix="/api", tags=["filesystem"])
+router = APIRouter(
+    prefix="/api",
+    tags=["filesystem"],
+    dependencies=[Depends(require_dashboard_device)],
+)
 
 _agent: Optional[FileSystemAgent] = None
 

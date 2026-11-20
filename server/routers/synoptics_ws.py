@@ -43,7 +43,9 @@ async def synoptics_websocket(ws: WebSocket):
     if principal is None:
         return
 
-    await accept_personal_websocket(ws, principal)
+    if not await accept_personal_websocket(ws, principal):
+
+        return
     _subscribers.append(ws)
     try:
         while True:

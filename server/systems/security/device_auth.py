@@ -26,6 +26,7 @@ may use several devices but owns one Aariya.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import ipaddress
 import logging
 import os
@@ -73,8 +74,14 @@ TICKET_TTL_SECONDS = 30
 CREDENTIAL_PREFIX = "aariya-device."
 
 _PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I/O/0/1
-_PAIRING_GROUPS = 2
-_PAIRING_GROUP_LEN = 4
+_PAIRING_GROUPS = 4
+_PAIRING_GROUP_LEN = 5
+
+#: Persistent pairing throttle (Patch 2.1).
+PAIRING_RATE_WINDOW_SECONDS = 15 * 60
+PAIRING_MAX_FAILURES_PER_SOURCE = 5
+PAIRING_MAX_ATTEMPTS_GLOBAL = 20
+_GLOBAL_RATE_KEY = "__global__"
 
 
 class DeviceAuthError(Exception):
@@ -104,8 +111,152 @@ def device_auth_enabled() -> bool:
     return bool(configured_owner_id())
 
 
+def device_auth_required() -> bool:
+    """A production deployment can require the canonical owner at startup."""
+    return os.getenv("AARIYA_DEVICE_AUTH_REQUIRED", "0") == "1"
+
+
+def validate_device_auth_configuration() -> None:
+    """Fail fast instead of silently falling back to legacy trust."""
+    if device_auth_required() and not configured_owner_id():
+        raise RuntimeError(
+            "AARIYA_DEVICE_AUTH_REQUIRED=1 but AARIYA_OWNER_ID is not set; "
+            "refusing to start in legacy shared-token mode"
+        )
+
+
 def _insecure_transport_allowed() -> bool:
     return os.getenv("AARIYA_ALLOW_INSECURE_DEVICE_AUTH", "0") == "1"
+
+
+# ── Pairing throttle (persistent, keyed source hashes) ──────────────────────
+
+class PairingRateLimited(DeviceAuthError):
+    """The caller exceeded the pairing-attempt budget."""
+
+    def __init__(self, retry_after: int):
+        super().__init__("too many pairing attempts")
+        self.retry_after = max(1, int(retry_after))
+
+
+def _rate_hash(value: str) -> str:
+    """Keyed hash so the SQLite table never stores a raw source address."""
+    key = (
+        os.getenv("AARIYA_PAIRING_RATE_KEY")
+        or os.getenv("WS_SECRET_TOKEN")
+        or "aariya-pairing-rate-v1"
+    ).encode("utf-8")
+    return hmac.new(key, value.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _rate_row(conn, key: str, now: float):
+    row = conn.execute(
+        "SELECT window_started_at, attempts, blocked_until "
+        "FROM aariya_pairing_attempts WHERE source_hash = ?",
+        (key,),
+    ).fetchone()
+    if row is None:
+        return now, 0, 0.0
+    return row["window_started_at"], row["attempts"], row["blocked_until"]
+
+
+def _rate_write(conn, key: str, started: float, attempts: int, blocked: float) -> None:
+    conn.execute(
+        "INSERT INTO aariya_pairing_attempts "
+        "(source_hash, window_started_at, attempts, blocked_until) "
+        "VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(source_hash) DO UPDATE SET "
+        "window_started_at = excluded.window_started_at, "
+        "attempts = excluded.attempts, "
+        "blocked_until = excluded.blocked_until",
+        (key, started, attempts, blocked),
+    )
+
+
+def check_pairing_rate_limit(source: str) -> None:
+    """Raise PairingRateLimited before a code is even looked up.
+
+    A global row bounds total guessing; a per-source row bounds failures from
+    one address (behind a trusted proxy this is the real client address).
+    """
+    now = time.time()
+    global_key = _GLOBAL_RATE_KEY
+    source_key = _rate_hash(source or "unknown")
+    conn = get_db_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        g_started, g_attempts, g_blocked = _rate_row(conn, global_key, now)
+        if now - g_started >= PAIRING_RATE_WINDOW_SECONDS:
+            g_started, g_attempts, g_blocked = now, 0, 0.0
+        if g_blocked > now:
+            raise PairingRateLimited(g_blocked - now)
+        if g_attempts >= PAIRING_MAX_ATTEMPTS_GLOBAL:
+            g_blocked = g_started + PAIRING_RATE_WINDOW_SECONDS
+            _rate_write(conn, global_key, g_started, g_attempts, g_blocked)
+            conn.commit()
+            raise PairingRateLimited(g_blocked - now)
+        g_attempts += 1
+        _rate_write(conn, global_key, g_started, g_attempts, g_blocked)
+
+        s_started, s_attempts, s_blocked = _rate_row(conn, source_key, now)
+        if now - s_started >= PAIRING_RATE_WINDOW_SECONDS:
+            s_started, s_attempts, s_blocked = now, 0, 0.0
+        if s_blocked > now:
+            conn.commit()
+            raise PairingRateLimited(s_blocked - now)
+        if s_attempts >= PAIRING_MAX_FAILURES_PER_SOURCE:
+            s_blocked = s_started + PAIRING_RATE_WINDOW_SECONDS
+            _rate_write(conn, source_key, s_started, s_attempts, s_blocked)
+            conn.commit()
+            raise PairingRateLimited(s_blocked - now)
+        conn.commit()
+    except PairingRateLimited:
+        raise
+    except sqlite3.Error as exc:
+        conn.rollback()
+        logger.warning("Pairing rate-limit check failed: %s", exc)
+        # Fail closed: a broken throttle must not become an unlimited oracle.
+        raise PairingRateLimited(PAIRING_RATE_WINDOW_SECONDS) from exc
+    finally:
+        conn.close()
+
+
+def record_pairing_failure(source: str) -> None:
+    """Increment the failed-attempt counter for this source."""
+    now = time.time()
+    key = _rate_hash(source or "unknown")
+    conn = get_db_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        started, attempts, blocked = _rate_row(conn, key, now)
+        if now - started >= PAIRING_RATE_WINDOW_SECONDS:
+            started, attempts, blocked = now, 0, 0.0
+        attempts += 1
+        if attempts >= PAIRING_MAX_FAILURES_PER_SOURCE:
+            blocked = started + PAIRING_RATE_WINDOW_SECONDS
+        _rate_write(conn, key, started, attempts, blocked)
+        conn.commit()
+    except sqlite3.Error as exc:
+        conn.rollback()
+        logger.warning("Pairing failure counter update failed: %s", exc)
+    finally:
+        conn.close()
+
+
+def clear_pairing_failures(source: str) -> None:
+    """A successful pairing resets the source's failure counter."""
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "DELETE FROM aariya_pairing_attempts WHERE source_hash = ?",
+            (_rate_hash(source or "unknown"),),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        conn.rollback()
+        logger.warning("Pairing failure counter reset failed: %s", exc)
+    finally:
+        conn.close()
 
 
 # ── Hashing helpers ──────────────────────────────────────────────────────────
@@ -460,6 +611,16 @@ def revoke_device(device_id: str, owner_id: str) -> bool:
     return True
 
 
+async def revoke_device_and_disconnect(device_id: str, owner_id: str) -> bool:
+    """Revoke in SQLite first, then close every live connection immediately."""
+    if not revoke_device(device_id, owner_id):
+        return False
+    from server.systems.security.device_connection_registry import device_connections
+
+    await device_connections.disconnect_device(device_id)
+    return True
+
+
 # ── FastAPI dependencies ────────────────────────────────────────────────────
 
 def _bearer(headers) -> str:
@@ -499,6 +660,55 @@ def personal_actor(request: Request) -> Optional[DevicePrincipal]:
     if not device_auth_enabled():
         return None
     return require_device(request)
+
+
+def _legacy_http_principal() -> DevicePrincipal:
+    return DevicePrincipal(
+        device_id="",
+        owner_id="user_default",
+        role="dashboard",
+        label="legacy",
+        authenticated=False,
+    )
+
+
+def _require_http_role(request: Request, allowed: frozenset) -> DevicePrincipal:
+    """Authorize a REST request; legacy mode keeps pre-pairing compatibility."""
+    if not device_auth_enabled():
+        return _legacy_http_principal()
+    principal = require_device(request)
+    if principal.role not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="Your device is not authorized for this operation",
+        )
+    return principal
+
+
+def require_device_role(*allowed_roles: str):
+    """Build a FastAPI dependency that allows only the listed device roles."""
+    allowed = frozenset(allowed_roles)
+    if not allowed:
+        raise ValueError("at least one device role is required")
+
+    def dependency(request: Request) -> DevicePrincipal:
+        return _require_http_role(request, allowed)
+
+    return dependency
+
+
+require_personal_device = require_device_role("mobile", "dashboard")
+require_dashboard_device = require_device_role("dashboard")
+require_mobile_device = require_device_role("mobile")
+
+
+def require_dashboard_health_auth(request: Request):
+    """System Health REST fallback: dashboard identity in strict mode."""
+    if device_auth_enabled():
+        return _require_http_role(request, frozenset({"dashboard"}))
+    # Temporary compatibility for installations not yet paired.
+    token_auth.require_health_auth(request)
+    return None
 
 
 def personal_owner(
@@ -639,8 +849,12 @@ def legacy_principal(websocket: WebSocket, role: str) -> DevicePrincipal:
 async def accept_personal_websocket(
     websocket: WebSocket,
     principal: DevicePrincipal,
-) -> None:
-    """Accept the socket, echoing the device subprotocol when offered."""
+) -> bool:
+    """Accept the socket and register it for live revocation.
+
+    Returns False when the device was revoked between ticket redemption and
+    registration; the caller must stop handling the socket.
+    """
     offered = websocket.scope.get("subprotocols") or []
     subprotocol = (
         DEVICE_WS_SUBPROTOCOL
@@ -648,3 +862,23 @@ async def accept_personal_websocket(
         else None
     )
     await websocket.accept(subprotocol=subprotocol)
+
+    if not principal.authenticated:
+        return True
+
+    from server.systems.security.device_connection_registry import device_connections
+
+    if not await device_connections.register(principal.device_id, websocket):
+        logger.warning(
+            "[DeviceAuth] Refusing socket for revoked device %s",
+            principal.device_id,
+        )
+        try:
+            await websocket.send_text(
+                '{"type":"device.revoked","reason":"Device revoked","close_code":4001}'
+            )
+        except Exception:
+            pass
+        await websocket.close(code=4001, reason="Device revoked")
+        return False
+    return True

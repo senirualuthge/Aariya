@@ -16,9 +16,15 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-router = APIRouter(prefix="/api/security", tags=["security"])
+from server.systems.security.device_auth import require_dashboard_device
+
+router = APIRouter(
+    prefix="/api/security",
+    tags=["security"],
+    dependencies=[Depends(require_dashboard_device)],
+)
 
 # Project root (two levels up from this file)
 ROOT = Path(__file__).resolve().parent.parent.parent

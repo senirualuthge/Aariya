@@ -256,7 +256,9 @@ async def collab_room(ws: WebSocket, name: str, participant: str = "guest"):
         await ws.close(code=4404)
         return
 
-    await accept_personal_websocket(ws, principal)
+    if not await accept_personal_websocket(ws, principal):
+
+        return
     if principal.authenticated:
         # Presence is bound to the authenticated device, not a query string.
         participant = principal.label or principal.device_id

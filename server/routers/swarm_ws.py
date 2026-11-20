@@ -96,7 +96,8 @@ async def swarm_websocket_endpoint(ws: WebSocket):
     principal = await authenticate_personal_websocket(ws, "/api/swarm/ws")
     if principal is None:
         return
-    await accept_personal_websocket(ws, principal)
+    if not await accept_personal_websocket(ws, principal):
+        return
     _clients.add(ws)
     logger.info("Swarm WS client connected (%d total)", len(_clients))
 

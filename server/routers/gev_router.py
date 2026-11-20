@@ -441,7 +441,8 @@ async def gev_stream(ws: WebSocket):
     principal = await authenticate_personal_websocket(ws, "/api/gev/stream")
     if principal is None:
         return
-    await accept_personal_websocket(ws, principal)
+    if not await accept_personal_websocket(ws, principal):
+        return
     _ws_clients.add(ws)
     logger.info("[GEV WS] client connected (%d total)", len(_ws_clients))
 
@@ -496,7 +497,8 @@ async def gev_diff_stream(ws: WebSocket):
     principal = await authenticate_personal_websocket(ws, "/api/gev/stream-diff")
     if principal is None:
         return
-    await accept_personal_websocket(ws, principal)
+    if not await accept_personal_websocket(ws, principal):
+        return
     _ws_diff_clients.add(ws)
     logger.info("[GEV WS-DIFF] client connected (%d total)", len(_ws_diff_clients))
 

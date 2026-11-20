@@ -15,13 +15,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+
+from server.systems.security.device_auth import personal_owner
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 
 @router.get("/latest")
 async def events_latest(
+    _owner: str = Depends(personal_owner),
     limit: int = Query(12, ge=1, le=50),
     sources: str = Query("", description="Comma-separated tag filter, e.g. DAEMON,PLANNER,GOVERNANCE; empty = all"),
 ) -> Dict[str, Any]:

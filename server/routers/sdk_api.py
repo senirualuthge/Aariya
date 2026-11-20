@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from server.systems.trust_system import get_trust_system
 from server.systems.contradiction_detector import get_contradiction_detector
-from server.systems.security.device_auth import personal_owner
+from server.systems.security.device_auth import personal_owner, require_dashboard_device
 from server.systems.kill_switches import get_kill_switches, FeatureFlag
 from server.systems.audit_logger import get_audit_logger, AuditEventType
 
@@ -109,7 +109,10 @@ async def sdk_init(req: SDKInitRequest):
 
 
 @router.post("/shutdown")
-async def sdk_shutdown(session_id: str = Query(...)):
+async def sdk_shutdown(
+    session_id: str = Query(...),
+    _dashboard=Depends(require_dashboard_device),
+):
     """Shutdown an SDK session (Gap 5)."""
     if session_id in _sdk_sessions:
         del _sdk_sessions[session_id]
@@ -339,7 +342,10 @@ async def killswitches_state():
 
 
 @router.post("/killswitches/toggle")
-async def killswitches_toggle(req: KillSwitchToggleRequest):
+async def killswitches_toggle(
+    req: KillSwitchToggleRequest,
+    _dashboard=Depends(require_dashboard_device),
+):
     """Toggle a feature flag (audit-logged)."""
     ks = get_kill_switches()
     try:
@@ -365,7 +371,10 @@ async def killswitches_toggle(req: KillSwitchToggleRequest):
 
 
 @router.post("/killswitches/emotion-cap")
-async def killswitches_emotion_cap(req: EmotionCapRequest):
+async def killswitches_emotion_cap(
+    req: EmotionCapRequest,
+    _dashboard=Depends(require_dashboard_device),
+):
     """Set the global emotion intensity cap."""
     ks = get_kill_switches()
     old = ks.get_emotion_cap()

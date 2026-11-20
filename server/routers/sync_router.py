@@ -8,8 +8,13 @@ Distributed memory + embodiment API (AccessFIles §61 / §76).
   GET  /api/embodiment/status    — probe of actually-attached hardware
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from server.systems.security.device_auth import (
+    personal_owner,
+    require_dashboard_device,
+)
 
 router = APIRouter(prefix="/api", tags=["memory-sync", "embodiment"])
 
@@ -17,7 +22,7 @@ router = APIRouter(prefix="/api", tags=["memory-sync", "embodiment"])
 # ── §61 Distributed memory ────────────────────────────────────────────────────
 
 @router.get("/memory/export")
-async def memory_export():
+async def memory_export(_owner: str = Depends(personal_owner)):
     from server.systems.memory import sync
     try:
         return {"ok": True, "snapshot": sync.export_snapshot()}
@@ -30,7 +35,10 @@ class ImportRequest(BaseModel):
 
 
 @router.post("/memory/import")
-async def memory_import(req: ImportRequest):
+async def memory_import(
+    req: ImportRequest,
+    _dashboard=Depends(require_dashboard_device),
+):
     from server.systems.memory import sync
     try:
         return sync.import_snapshot(req.envelope)
@@ -41,7 +49,7 @@ async def memory_import(req: ImportRequest):
 
 
 @router.post("/memory/push")
-async def memory_push():
+async def memory_push(_dashboard=Depends(require_dashboard_device)):
     from server.systems.memory import sync
     return await _push()
 
@@ -53,7 +61,10 @@ async def _push():
 
 
 @router.get("/memory/ledger")
-async def memory_ledger(limit: int = 50):
+async def memory_ledger(
+    _owner: str = Depends(personal_owner),
+    limit: int = 50,
+):
     from server.systems.memory import sync
     entries = sync.read_ledger(limit=max(1, min(limit, 500)))
     return {"entries": entries, "count": len(entries),
@@ -64,7 +75,7 @@ async def memory_ledger(limit: int = 50):
 # ── §76 Embodiment ────────────────────────────────────────────────────────────
 
 @router.get("/embodiment/status")
-async def embodiment_status():
+async def embodiment_status(_owner: str = Depends(personal_owner)):
     from server.systems.embodiment.device_registry import probe_devices
     try:
         import asyncio

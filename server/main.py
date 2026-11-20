@@ -110,6 +110,11 @@ _gap_detect_lock = asyncio.Lock()
 # --- BUG #18 FIX: use lifespan context manager instead of deprecated @app.on_event ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail fast on a misconfigured production launch: a deployment that
+    # requires device auth must never silently fall back to legacy trust.
+    from server.systems.security.device_auth import validate_device_auth_configuration
+    validate_device_auth_configuration()
+
     # Fail fast on a multi-worker launch: each worker would hold its own
     # coordinator + brain per user. One worker is required until distributed
     # (Redis-backed) coordination exists.
@@ -366,7 +371,8 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
     principal = await authenticate_personal_websocket(websocket)
     if principal is None:
         return
-    await accept_personal_websocket(websocket, principal)
+    if not await accept_personal_websocket(websocket, principal):
+        return
     # Device-auth mode: the owner comes from the server-side device record, not
     # from ?user_id=. The legacy path keeps the historical fallback until
     # devices are paired (see device_auth.device_auth_enabled).
@@ -613,7 +619,8 @@ async def security_stream_ws(websocket: WebSocket):
     principal = await authenticate_personal_websocket(websocket, "/api/security/stream")
     if principal is None:
         return
-    await accept_personal_websocket(websocket, principal)
+    if not await accept_personal_websocket(websocket, principal):
+        return
     swarm = get_swarm_system()
     
     try:
@@ -657,7 +664,8 @@ async def websocket_mobile_chat(websocket: WebSocket):
     principal = await authenticate_personal_websocket(websocket, "/ws/mobile")
     if principal is None:
         return
-    await accept_personal_websocket(websocket, principal)
+    if not await accept_personal_websocket(websocket, principal):
+        return
     # The phone's owner is resolved server-side once it is paired.
     user_id = principal.owner_id
     session_manager.add_surface("mobile", user_id, websocket)
@@ -785,7 +793,8 @@ async def websocket_mobile_control(websocket: WebSocket):
     principal = await authenticate_personal_websocket(websocket, "/ws/mobile/control")
     if principal is None:
         return
-    await accept_personal_websocket(websocket, principal)
+    if not await accept_personal_websocket(websocket, principal):
+        return
     session_id = str(uuid4())
     logger.info(f"Mobile Control connected: {session_id}")
 
@@ -867,7 +876,8 @@ async def websocket_brain_metrics(websocket: WebSocket):
     principal = await authenticate_personal_websocket(websocket, "/ws/brain_metrics")
     if principal is None:
         return
-    await accept_personal_websocket(websocket, principal)
+    if not await accept_personal_websocket(websocket, principal):
+        return
     user_id = principal.owner_id
     session_manager.add_surface("dashboard", user_id, websocket)
     logger.info(f"Dashboard metrics link established for {user_id}")

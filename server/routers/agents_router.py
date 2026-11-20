@@ -106,7 +106,8 @@ async def agent_registry_ws(websocket: WebSocket):
     principal = await authenticate_personal_websocket(websocket, "/api/agents/ws")
     if principal is None:
         return
-    await accept_personal_websocket(websocket, principal)
+    if not await accept_personal_websocket(websocket, principal):
+        return
     watcher = get_watcher()
     registry = get_registry()
 

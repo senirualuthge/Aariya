@@ -8,11 +8,15 @@ mirrors these for in-session control.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from server.autonomy.daemon import get_daemon
 from server.autonomy.state import AutonomyStore
+from server.systems.security.device_auth import (
+    personal_owner,
+    require_dashboard_device,
+)
 
 logger = logging.getLogger("aariya.autonomy.router")
 router = APIRouter(prefix="/api/autonomy", tags=["autonomy"])
@@ -29,28 +33,40 @@ class GapRequest(BaseModel):
 
 
 @router.get("/state")
-async def autonomy_state():
+async def autonomy_state(_owner: str = Depends(personal_owner)):
     """Full snapshot of Aariya's inner world (goals, plans, insights...)."""
     return get_daemon().get_inner_world()
 
 
 @router.post("/enable")
-async def set_enabled(req: EnableRequest):
+async def set_enabled(
+    req: EnableRequest,
+    _dashboard=Depends(require_dashboard_device),
+):
     return get_daemon().set_enabled(req.enabled)
 
 
 @router.post("/plans/{plan_id}/approve")
-async def approve_plan(plan_id: str):
+async def approve_plan(
+    plan_id: str,
+    _dashboard=Depends(require_dashboard_device),
+):
     return await get_daemon().approve_plan(plan_id)
 
 
 @router.post("/plans/{plan_id}/reject")
-async def reject_plan(plan_id: str):
+async def reject_plan(
+    plan_id: str,
+    _dashboard=Depends(require_dashboard_device),
+):
     return await get_daemon().reject_plan(plan_id)
 
 
 @router.post("/gaps")
-async def queue_gap(req: GapRequest):
+async def queue_gap(
+    req: GapRequest,
+    _dashboard=Depends(require_dashboard_device),
+):
     """Manually ask Aariya to research something in the background."""
     store = AutonomyStore()
     added = store.add_gap(req.topic, req.context, req.priority)

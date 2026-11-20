@@ -187,8 +187,37 @@ export async function createWsTicket(path) {
  */
 export async function openAuthenticatedWebSocket(url, path) {
   const ticket = await createWsTicket(path);
-  if (!ticket) return new WebSocket(url);
-  return new WebSocket(url, ['aariya.v1', `aariya-ticket.${ticket}`]);
+  const socket = ticket
+    ? new WebSocket(url, ['aariya.v1', `aariya-ticket.${ticket}`])
+    : new WebSocket(url);
+  watchForRevocation(socket);
+  return socket;
+}
+
+/** Clear a revoked credential and stop callers from reconnecting forever. */
+async function revokeLocally(socket) {
+  await clearCredential();
+  pairingRequired();
+  try {
+    socket.close(4001, 'Device revoked');
+  } catch {
+    /* already closed */
+  }
+}
+
+function watchForRevocation(socket) {
+  socket.addEventListener('message', (event) => {
+    if (typeof event.data !== 'string') return;
+    try {
+      const frame = JSON.parse(event.data);
+      if (frame && frame.type === 'device.revoked') revokeLocally(socket);
+    } catch {
+      /* non-JSON frames are handled by the socket owner */
+    }
+  });
+  socket.addEventListener('close', (event) => {
+    if (event.code === 4001) revokeLocally(socket);
+  });
 }
 
 /** Current server-side identity, for a pairing/health panel. */
