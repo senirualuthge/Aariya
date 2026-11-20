@@ -21,7 +21,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse
 
 from ..infrastructure.agent_watcher import get_watcher
@@ -29,6 +29,7 @@ from ..infrastructure.agent_registry import get_registry
 from ..systems.security.device_auth import (
     accept_personal_websocket,
     authenticate_personal_websocket,
+    require_dashboard_device,
 )
 
 logger = logging.getLogger("aariya.agents_router")
@@ -37,7 +38,9 @@ router = APIRouter(prefix="/api/agents", tags=["Agent Registry"])
 # ── REST endpoints ────────────────────────────────────────────────────────────
 
 @router.get("")
-async def get_all_agents():
+async def get_all_agents(
+    _dashboard=Depends(require_dashboard_device),
+):
     """Return the full registry including status, detection method, etc."""
     registry = get_registry()
     return {
@@ -47,13 +50,17 @@ async def get_all_agents():
 
 
 @router.get("/stats")
-async def get_stats():
+async def get_stats(
+    _dashboard=Depends(require_dashboard_device),
+):
     """Quick stats — used by dashboard counters."""
     return get_registry().stats()
 
 
 @router.post("/scan")
-async def manual_scan():
+async def manual_scan(
+    _dashboard=Depends(require_dashboard_device),
+):
     """
     Trigger a manual scan immediately.
     Diff is also broadcast to all connected WebSocket clients.
@@ -74,7 +81,10 @@ async def manual_scan():
 
 
 @router.post("/{agent_id}/ack")
-async def acknowledge_agent(agent_id: str):
+async def acknowledge_agent(
+    agent_id: str,
+    _dashboard=Depends(require_dashboard_device),
+):
     """Mark a single 'new' agent as 'existing' after the UI has highlighted it."""
     registry = get_registry()
     # agent_id in URL may be URL-encoded — decode colon
@@ -86,7 +96,9 @@ async def acknowledge_agent(agent_id: str):
 
 
 @router.post("/ack-all")
-async def acknowledge_all():
+async def acknowledge_all(
+    _dashboard=Depends(require_dashboard_device),
+):
     """Dismiss all 'new' badges in the visualization."""
     get_registry().acknowledge_all_new()
     return {"message": "All new agents acknowledged"}

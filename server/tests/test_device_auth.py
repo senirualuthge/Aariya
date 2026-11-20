@@ -42,7 +42,7 @@ def client(strict_auth):
 
 
 def _pair(client, role="dashboard", label="laptop", platform="macos"):
-    code = create_pairing_code(role=role, owner_id=OWNER)
+    code = create_pairing_code(role=role)
     response = client.post(
         "/api/auth/device/enroll",
         json={"pairing_code": code, "label": label, "platform": platform},
@@ -83,7 +83,7 @@ def test_invalid_pairing_code_is_rejected(client):
 
 
 def test_expired_pairing_code_is_rejected(client):
-    code = create_pairing_code(role="mobile", owner_id=OWNER)
+    code = create_pairing_code(role="mobile")
     conn = get_db_connection()
     try:
         conn.execute(
@@ -102,7 +102,7 @@ def test_expired_pairing_code_is_rejected(client):
 
 
 def test_pairing_code_works_only_once(client):
-    code = create_pairing_code(role="mobile", owner_id=OWNER)
+    code = create_pairing_code(role="mobile")
     first = client.post(
         "/api/auth/device/enroll",
         json={"pairing_code": code, "label": "phone", "platform": "android"},
@@ -142,7 +142,7 @@ def test_credential_is_stored_only_as_a_hash(client):
 
 def test_enrollment_ignores_client_supplied_identity_fields(client):
     """A caller cannot choose owner, device id or role."""
-    code = create_pairing_code(role="mobile", owner_id=OWNER)
+    code = create_pairing_code(role="mobile")
     response = client.post(
         "/api/auth/device/enroll",
         json={
@@ -446,7 +446,7 @@ def test_tools_and_knowledge_require_a_credential_in_strict_mode(client):
 
 
 def test_pairing_codes_use_100_bits_and_four_groups(client):
-    code = create_pairing_code(role="mobile", owner_id=OWNER)
+    code = create_pairing_code(role="mobile")
     assert re.fullmatch(r"(?:[A-Z2-9]{5}-){3}[A-Z2-9]{5}", code)
 
 

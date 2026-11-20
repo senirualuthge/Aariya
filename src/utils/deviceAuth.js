@@ -14,8 +14,8 @@
 // `/api/auth/ws-ticket` for a single-use, path-bound ticket and offers it as
 // the `aariya-ticket.<token>` subprotocol.
 
-import { apiBase } from './apiHost';
-import { authHeaders as legacyAuthHeaders } from './authToken';
+import { apiBase } from './apiHost.js';
+import { authHeaders as legacyAuthHeaders } from './authToken.js';
 
 const memory = { credential: null, loaded: false, loading: null };
 
@@ -64,6 +64,35 @@ export async function loadCredential() {
 
 export async function hasCredential() {
   return Boolean(await loadCredential());
+}
+
+/**
+ * Ask the server whether it requires device authentication.
+ *
+ * The response deliberately exposes only the mode: no owner, device list or
+ * pairing information.
+ */
+export async function getServerAuthMode() {
+  const response = await fetch(
+    `${apiBase()}/api/auth/mode`
+  );
+
+  if (!response.ok) {
+    throw new DeviceAuthError(
+      `Could not verify server authentication mode (${response.status})`,
+      response.status,
+    );
+  }
+
+  const body = await response.json();
+
+  if (typeof body.device_auth_enabled !== "boolean") {
+    throw new DeviceAuthError(
+      "Invalid authentication-mode response"
+    );
+  }
+
+  return body.device_auth_enabled;
 }
 
 /**
@@ -151,7 +180,21 @@ async function handleAuthFailure(status) {
 /** Ask the backend for a single-use ticket for one WS path. */
 export async function createWsTicket(path) {
   const credential = await loadCredential();
-  if (!credential) return null;
+
+  if (!credential) {
+    const strictMode = await getServerAuthMode();
+
+    if (strictMode) {
+      pairingRequired();
+
+      throw new DeviceAuthError(
+        "Pair this computer before connecting to Aariya",
+        401,
+      );
+    }
+
+    return null;
+  }
 
   const response = await fetch(`${apiBase()}/api/auth/ws-ticket`, {
     method: 'POST',
@@ -180,8 +223,8 @@ export async function createWsTicket(path) {
 /**
  * Open a private WebSocket with a fresh ticket subprotocol.
  *
- * With no credential (legacy / unpaired local dev) the socket is opened
- * unchanged so a soft-mode server still works. Throws DeviceAuthError on a
+ * With no credential, the server's mode decides: legacy mode opens the socket
+ * unchanged, strict mode requires pairing first. Throws DeviceAuthError on a
  * refused ticket, which callers must treat as "pair again", not as a transient
  * failure to retry forever.
  */

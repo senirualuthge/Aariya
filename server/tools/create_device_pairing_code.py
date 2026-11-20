@@ -44,17 +44,12 @@ def main(argv=None) -> int:
         default=PAIRING_TTL_SECONDS,
         help=f"seconds until the code expires (default {PAIRING_TTL_SECONDS})",
     )
-    parser.add_argument(
-        "--owner",
-        default=None,
-        help="override AARIYA_OWNER_ID (defaults to the configured owner)",
-    )
     args = parser.parse_args(argv)
 
-    if not device_auth_enabled() and not args.owner:
+    if not device_auth_enabled():
         print(
-            "AARIYA_OWNER_ID is not configured. Set it in .env to the identity "
-            "that owns your existing memories (for this installation: u1).",
+            "AARIYA_OWNER_ID is not configured. "
+            "Configure the existing Aariya owner before pairing.",
             file=sys.stderr,
         )
         return 2
@@ -63,7 +58,6 @@ def main(argv=None) -> int:
     try:
         code = create_pairing_code(
             role=args.role,
-            owner_id=args.owner,
             ttl_seconds=args.ttl,
         )
     except DeviceAuthError as exc:

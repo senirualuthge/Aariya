@@ -12,6 +12,7 @@ Provides endpoints for:
 All endpoints are session-scoped and respect kill-switch gating.
 """
 
+import hmac
 import time
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,7 +20,11 @@ from pydantic import BaseModel, Field
 
 from server.systems.trust_system import get_trust_system
 from server.systems.contradiction_detector import get_contradiction_detector
-from server.systems.security.device_auth import personal_owner, require_dashboard_device
+from server.systems.security.device_auth import (
+    DevicePrincipal,
+    personal_owner,
+    require_dashboard_device,
+)
 from server.systems.kill_switches import get_kill_switches, FeatureFlag
 from server.systems.audit_logger import get_audit_logger, AuditEventType
 
@@ -33,11 +38,17 @@ _sdk_sessions: Dict[str, Dict[str, Any]] = {}
 # ── Request / Response models ─────────────────────────────────────────────────
 
 class SDKInitRequest(BaseModel):
-    sdk_key: str = Field(..., description="SDK API key")
-    device_id: str = Field(..., description="Hashed device identifier")
+    sdk_key: str = Field(
+        "",
+        description="Optional additional SDK authentication key",
+    )
+    device_id: Optional[str] = Field(
+        None,
+        description="Legacy-only identifier; ignored in strict mode",
+    )
     capabilities: Dict[str, bool] = Field(
-        default_factory=lambda: {"voice": True, "avatar": True, "memory": True},
-        description="Client capabilities",
+        default_factory=dict,
+        description="Capabilities reported by the connected client",
     )
 
 
@@ -78,14 +89,34 @@ class EmotionCapRequest(BaseModel):
 # ── SDK Init & Lifecycle (Gaps 1, 5) ──────────────────────────────────────────
 
 @router.post("/init")
-async def sdk_init(req: SDKInitRequest):
-    """Initialize an SDK session (Gap 1). Returns session_id + enabled features."""
-    # Validate SDK key against env (spec: sdk_key = os.getenv('SDK_API_KEY'))
+async def sdk_init(
+    req: SDKInitRequest,
+    principal: DevicePrincipal = Depends(require_dashboard_device),
+):
+    """Create an SDK session bound to the authenticated device."""
     import os
-    expected_key = os.getenv("SDK_API_KEY", "")
-    if expected_key and req.sdk_key != expected_key:
-        raise HTTPException(status_code=401, detail="Invalid SDK API key")
     from uuid import uuid4
+    expected_key = os.getenv("SDK_API_KEY", "")
+    if expected_key and not hmac.compare_digest(
+        req.sdk_key.encode("utf-8"),
+        expected_key.encode("utf-8"),
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid SDK API key",
+        )
+
+    sdk_device_id = (
+        principal.device_id
+        if principal.authenticated
+        else (req.device_id or "").strip()
+    )
+    if not sdk_device_id:
+        raise HTTPException(
+            status_code=401,
+            detail="A paired dashboard device is required",
+        )
+
     session_id = str(uuid4())
     ks = get_kill_switches()
     features = {
@@ -97,13 +128,13 @@ async def sdk_init(req: SDKInitRequest):
         "multi_language": ks.is_enabled(FeatureFlag.MULTI_LANGUAGE),
     }
     _sdk_sessions[session_id] = {
-        "device_id": req.device_id,
+        "device_id": sdk_device_id,
         "capabilities": req.capabilities,
         "features": features,
         "created_at": time.time(),
     }
     audit = get_audit_logger()
-    audit.log(AuditEventType.SESSION_START, session_id, req.device_id,
+    audit.log(AuditEventType.SESSION_START, session_id, sdk_device_id,
               data={"sdk_key": req.sdk_key[:8] + "...", "capabilities": req.capabilities})
     return {"session_id": session_id, "features": features}
 
@@ -288,6 +319,7 @@ async def audit_events(
     event_type: Optional[str] = Query(None),
     session_id: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
+    _dashboard=Depends(require_dashboard_device),
 ):
     """Query audit events with optional filters."""
     audit = get_audit_logger()
@@ -296,7 +328,11 @@ async def audit_events(
 
 
 @router.get("/audit/replay")
-async def audit_replay(session_id: Optional[str] = Query(None), limit: int = Query(20, le=100)):
+async def audit_replay(
+    session_id: Optional[str] = Query(None),
+    limit: int = Query(20, le=100),
+    _dashboard=Depends(require_dashboard_device),
+):
     """Get deterministic replay snapshots for compliance audits."""
     audit = get_audit_logger()
     snapshots = audit.get_replay_snapshots(session_id=session_id, limit=limit)
@@ -304,7 +340,9 @@ async def audit_replay(session_id: Optional[str] = Query(None), limit: int = Que
 
 
 @router.get("/audit/stats")
-async def audit_stats():
+async def audit_stats(
+    _dashboard=Depends(require_dashboard_device),
+):
     """Get audit event statistics."""
     audit = get_audit_logger()
     return audit.snapshot()
@@ -325,7 +363,10 @@ async def avatar_emotion_map():
 
 
 @router.get("/audit/verify/{event_id}")
-async def audit_verify(event_id: str):
+async def audit_verify(
+    event_id: str,
+    _dashboard=Depends(require_dashboard_device),
+):
     """Verify an audit event's integrity checksum."""
     audit = get_audit_logger()
     valid = audit.verify_integrity(event_id)
@@ -335,7 +376,9 @@ async def audit_verify(event_id: str):
 # ── Kill Switch endpoints ─────────────────────────────────────────────────────
 
 @router.get("/killswitches/state")
-async def killswitches_state():
+async def killswitches_state(
+    _dashboard=Depends(require_dashboard_device),
+):
     """Get all kill-switch states."""
     ks = get_kill_switches()
     return ks.snapshot()
@@ -383,7 +426,10 @@ async def killswitches_emotion_cap(
 
 
 @router.get("/killswitches/audit")
-async def killswitches_audit(limit: int = Query(30, le=100)):
+async def killswitches_audit(
+    limit: int = Query(30, le=100),
+    _dashboard=Depends(require_dashboard_device),
+):
     """Get kill-switch toggle audit log."""
     ks = get_kill_switches()
     return {"events": ks.get_audit_log(limit=limit)}
@@ -406,7 +452,10 @@ async def language_supported():
 # ── Full system snapshot ──────────────────────────────────────────────────────
 
 @router.get("/snapshot")
-async def full_snapshot(user_id: str = Depends(personal_owner)):
+async def full_snapshot(
+    user_id: str = Depends(personal_owner),
+    _dashboard=Depends(require_dashboard_device),
+):
     """Full SDK system snapshot for dashboard/synoptic."""
     ts = get_trust_system()
     ks = get_kill_switches()

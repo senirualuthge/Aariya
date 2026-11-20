@@ -77,9 +77,9 @@ _PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I/O/0/1
 _PAIRING_GROUPS = 4
 _PAIRING_GROUP_LEN = 5
 
-#: Persistent pairing throttle (Patch 2.1).
+#: Persistent pairing throttle (Patch 2.2, atomic reservation).
 PAIRING_RATE_WINDOW_SECONDS = 15 * 60
-PAIRING_MAX_FAILURES_PER_SOURCE = 5
+PAIRING_MAX_ATTEMPTS_PER_SOURCE = 5
 PAIRING_MAX_ATTEMPTS_GLOBAL = 20
 _GLOBAL_RATE_KEY = "__global__"
 
@@ -139,14 +139,26 @@ class PairingRateLimited(DeviceAuthError):
         self.retry_after = max(1, int(retry_after))
 
 
+def _pairing_rate_key() -> bytes:
+    key = os.getenv(
+        "AARIYA_PAIRING_RATE_KEY",
+        "",
+    ).strip()
+    encoded = key.encode("utf-8")
+    if len(encoded) < 32:
+        raise DeviceAuthError(
+            "AARIYA_PAIRING_RATE_KEY must contain at least 32 bytes"
+        )
+    return encoded
+
+
 def _rate_hash(value: str) -> str:
     """Keyed hash so the SQLite table never stores a raw source address."""
-    key = (
-        os.getenv("AARIYA_PAIRING_RATE_KEY")
-        or os.getenv("WS_SECRET_TOKEN")
-        or "aariya-pairing-rate-v1"
-    ).encode("utf-8")
-    return hmac.new(key, value.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.new(
+        _pairing_rate_key(),
+        value.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def _rate_row(conn, key: str, now: float):
@@ -173,72 +185,55 @@ def _rate_write(conn, key: str, started: float, attempts: int, blocked: float) -
     )
 
 
-def check_pairing_rate_limit(source: str) -> None:
-    """Raise PairingRateLimited before a code is even looked up.
+def reserve_pairing_attempt(source: str) -> None:
+    """Reserve source and global attempt budgets atomically.
 
-    A global row bounds total guessing; a per-source row bounds failures from
-    one address (behind a trusted proxy this is the real client address).
+    The old split check-then-record flow let simultaneous requests pass the
+    check together. This reserves both counters inside one ``BEGIN IMMEDIATE``
+    transaction, so the pairing code oracle advances by at most one guess per
+    accepted attempt even under concurrency.
     """
     now = time.time()
-    global_key = _GLOBAL_RATE_KEY
     source_key = _rate_hash(source or "unknown")
     conn = get_db_connection()
     try:
         conn.execute("BEGIN IMMEDIATE")
-        g_started, g_attempts, g_blocked = _rate_row(conn, global_key, now)
-        if now - g_started >= PAIRING_RATE_WINDOW_SECONDS:
-            g_started, g_attempts, g_blocked = now, 0, 0.0
-        if g_blocked > now:
-            raise PairingRateLimited(g_blocked - now)
-        if g_attempts >= PAIRING_MAX_ATTEMPTS_GLOBAL:
-            g_blocked = g_started + PAIRING_RATE_WINDOW_SECONDS
-            _rate_write(conn, global_key, g_started, g_attempts, g_blocked)
-            conn.commit()
-            raise PairingRateLimited(g_blocked - now)
-        g_attempts += 1
-        _rate_write(conn, global_key, g_started, g_attempts, g_blocked)
+        reservations = (
+            (_GLOBAL_RATE_KEY, PAIRING_MAX_ATTEMPTS_GLOBAL),
+            (source_key, PAIRING_MAX_ATTEMPTS_PER_SOURCE),
+        )
+        updates = []
+        for key, limit in reservations:
+            started, attempts, blocked = _rate_row(
+                conn,
+                key,
+                now,
+            )
+            if now - started >= PAIRING_RATE_WINDOW_SECONDS:
+                started = now
+                attempts = 0
+                blocked = 0.0
+            if blocked > now:
+                retry_after = blocked - now
+                conn.rollback()
+                raise PairingRateLimited(retry_after)
+            if attempts >= limit:
+                blocked = started + PAIRING_RATE_WINDOW_SECONDS
+                _rate_write(conn, key, started, attempts, blocked)
+                conn.commit()
+                raise PairingRateLimited(blocked - now)
+            updates.append((key, started, attempts + 1, blocked))
 
-        s_started, s_attempts, s_blocked = _rate_row(conn, source_key, now)
-        if now - s_started >= PAIRING_RATE_WINDOW_SECONDS:
-            s_started, s_attempts, s_blocked = now, 0, 0.0
-        if s_blocked > now:
-            conn.commit()
-            raise PairingRateLimited(s_blocked - now)
-        if s_attempts >= PAIRING_MAX_FAILURES_PER_SOURCE:
-            s_blocked = s_started + PAIRING_RATE_WINDOW_SECONDS
-            _rate_write(conn, source_key, s_started, s_attempts, s_blocked)
-            conn.commit()
-            raise PairingRateLimited(s_blocked - now)
+        for key, started, attempts, blocked in updates:
+            _rate_write(conn, key, started, attempts, blocked)
         conn.commit()
     except PairingRateLimited:
         raise
     except sqlite3.Error as exc:
         conn.rollback()
-        logger.warning("Pairing rate-limit check failed: %s", exc)
+        logger.warning("Pairing attempt reservation failed: %s", exc)
         # Fail closed: a broken throttle must not become an unlimited oracle.
         raise PairingRateLimited(PAIRING_RATE_WINDOW_SECONDS) from exc
-    finally:
-        conn.close()
-
-
-def record_pairing_failure(source: str) -> None:
-    """Increment the failed-attempt counter for this source."""
-    now = time.time()
-    key = _rate_hash(source or "unknown")
-    conn = get_db_connection()
-    try:
-        conn.execute("BEGIN IMMEDIATE")
-        started, attempts, blocked = _rate_row(conn, key, now)
-        if now - started >= PAIRING_RATE_WINDOW_SECONDS:
-            started, attempts, blocked = now, 0, 0.0
-        attempts += 1
-        if attempts >= PAIRING_MAX_FAILURES_PER_SOURCE:
-            blocked = started + PAIRING_RATE_WINDOW_SECONDS
-        _rate_write(conn, key, started, attempts, blocked)
-        conn.commit()
-    except sqlite3.Error as exc:
-        conn.rollback()
-        logger.warning("Pairing failure counter update failed: %s", exc)
     finally:
         conn.close()
 
@@ -273,20 +268,22 @@ def _normalize_pairing_code(code: str) -> str:
 
 def create_pairing_code(
     role: str,
-    owner_id: Optional[str] = None,
     ttl_seconds: int = PAIRING_TTL_SECONDS,
 ) -> str:
     """Create a one-use pairing code. Only its hash is persisted.
 
     Intended to be called from ``python -m server.tools.create_device_pairing_code``
-    on the server machine — never from an HTTP endpoint.
+    on the server machine — never from an HTTP endpoint. The owner always comes
+    from ``AARIYA_OWNER_ID``; no caller can supply one.
     """
     role = (role or "").strip().lower()
     if role not in PAIRING_ROLES:
         raise DeviceAuthError(f"role must be one of {sorted(PAIRING_ROLES)}")
-    owner = (owner_id or configured_owner_id()).strip()
+    owner = configured_owner_id()
     if not owner:
-        raise DeviceAuthError("AARIYA_OWNER_ID is not configured")
+        raise DeviceAuthError(
+            "AARIYA_OWNER_ID is not configured"
+        )
     if ttl_seconds <= 0:
         raise DeviceAuthError("ttl_seconds must be positive")
 
@@ -348,6 +345,18 @@ def enroll_device(
             raise DeviceAuthError("pairing code already used")
         if row["expires_at"] <= now:
             raise DeviceAuthError("pairing code expired")
+
+        canonical_owner = configured_owner_id()
+        if (
+            not canonical_owner
+            or not hmac.compare_digest(
+                row["owner_id"],
+                canonical_owner,
+            )
+        ):
+            raise DeviceAuthError(
+                "pairing code owner does not match configured owner"
+            )
 
         consumed = conn.execute(
             "UPDATE aariya_pairing_codes SET consumed_at = ? "
@@ -411,6 +420,19 @@ def authenticate_credential(credential: str) -> DevicePrincipal:
             raise DeviceAuthError("unknown device credential")
         if row["revoked_at"] is not None:
             raise DeviceAuthError("device revoked")
+
+        canonical_owner = configured_owner_id()
+        if (
+            not canonical_owner
+            or not hmac.compare_digest(
+                row["owner_id"],
+                canonical_owner,
+            )
+        ):
+            raise DeviceAuthError(
+                "device owner does not match configured owner"
+            )
+
         conn.execute(
             "UPDATE aariya_personal_devices SET last_seen_at = ? WHERE device_id = ?",
             (now, row["device_id"]),
@@ -470,11 +492,28 @@ def issue_ws_ticket(
     conn = get_db_connection()
     try:
         device = conn.execute(
-            "SELECT revoked_at FROM aariya_personal_devices WHERE device_id = ?",
+            "SELECT owner_id, revoked_at FROM aariya_personal_devices "
+            "WHERE device_id = ?",
             (principal.device_id,),
         ).fetchone()
         if device is None or device["revoked_at"] is not None:
             raise DeviceAuthError("device revoked")
+
+        canonical_owner = configured_owner_id()
+        if (
+            not canonical_owner
+            or not hmac.compare_digest(
+                principal.owner_id,
+                canonical_owner,
+            )
+            or not hmac.compare_digest(
+                device["owner_id"],
+                canonical_owner,
+            )
+        ):
+            raise DeviceAuthError(
+                "device owner does not match configured owner"
+            )
         # Opportunistic cleanup: expired tickets are useless and cheap to drop.
         conn.execute("DELETE FROM aariya_ws_tickets WHERE expires_at <= ?", (now,))
         conn.execute(
@@ -530,6 +569,22 @@ def redeem_ws_ticket(ticket: str, path: str) -> DevicePrincipal:
             raise DeviceAuthError("unknown device")
         if device["revoked_at"] is not None:
             raise DeviceAuthError("device revoked")
+
+        canonical_owner = configured_owner_id()
+        if (
+            not canonical_owner
+            or not hmac.compare_digest(
+                row["owner_id"],
+                canonical_owner,
+            )
+            or not hmac.compare_digest(
+                device["owner_id"],
+                canonical_owner,
+            )
+        ):
+            raise DeviceAuthError(
+                "device owner does not match configured owner"
+            )
 
         consumed = conn.execute(
             "UPDATE aariya_ws_tickets SET consumed_at = ? "

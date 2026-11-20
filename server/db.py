@@ -257,6 +257,19 @@ def init_db():
             attempts INTEGER NOT NULL DEFAULT 0,
             blocked_until REAL NOT NULL DEFAULT 0
         );
+
+        -- Single-use nonces for trusted server-to-server (HMAC) requests.
+        -- Replay protection is persistent: a correctly signed request cannot
+        -- be resent with the same nonce, even after a restart.
+        CREATE TABLE IF NOT EXISTS aariya_service_nonces (
+            service_id TEXT NOT NULL,
+            nonce_hash TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            expires_at REAL NOT NULL,
+            PRIMARY KEY (service_id, nonce_hash)
+        );
+        CREATE INDEX IF NOT EXISTS idx_aariya_service_nonces_expiry
+            ON aariya_service_nonces(expires_at);
     """)
     conn.commit()
     conn.close()

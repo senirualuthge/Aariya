@@ -193,9 +193,9 @@ class TestSDKInit:
         from server.routers.sdk_api import _sdk_sessions
         session_id = resp.json()["session_id"]
         stored = _sdk_sessions[session_id]
-        assert stored["capabilities"]["voice"] is True
-        assert stored["capabilities"]["avatar"] is True
-        assert stored["capabilities"]["memory"] is True
+        # Patch 2.2: capabilities are exactly what the client reported; the
+        # server no longer invents a default feature set.
+        assert stored["capabilities"] == {}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

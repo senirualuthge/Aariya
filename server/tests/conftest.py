@@ -32,6 +32,14 @@ def _hermetic_device_auth(monkeypatch):
     monkeypatch.delenv("AARIYA_OWNER_ID", raising=False)
     monkeypatch.delenv("AARIYA_DEVICE_AUTH_REQUIRED", raising=False)
     monkeypatch.delenv("AARIYA_ALLOW_INSECURE_DEVICE_AUTH", raising=False)
+    monkeypatch.delenv("AARIYA_SERVICE_AUTH_KEYS", raising=False)
+    monkeypatch.delenv("SDK_API_KEY", raising=False)
+    # Never inherit a real pairing key from the developer's .env; tests that
+    # exercise pairing use this disposable, non-production value.
+    monkeypatch.setenv(
+        "AARIYA_PAIRING_RATE_KEY",
+        "test-only-pairing-rate-key-0123456789abcdef",
+    )
     yield
 
 

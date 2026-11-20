@@ -2,6 +2,7 @@
 
   POST   /api/auth/device/enroll      redeem a one-use pairing code
   POST   /api/auth/ws-ticket          issue a path-bound WS ticket
+  GET    /api/auth/mode               authentication mode only (no identity)
   GET    /api/auth/me                 authenticated owner + device identity
   GET    /api/auth/devices            trusted devices for this owner
   DELETE /api/auth/devices/{device_id} revoke one device
@@ -19,15 +20,15 @@ from server.systems.security.device_auth import (
     DeviceAuthError,
     DevicePrincipal,
     PairingRateLimited,
-    check_pairing_rate_limit,
     clear_pairing_failures,
+    device_auth_enabled,
     enroll_device,
     issue_ws_ticket,
     list_devices,
-    record_pairing_failure,
     require_dashboard_device,
     require_device,
     require_secure_http,
+    reserve_pairing_attempt,
     revoke_device_and_disconnect,
 )
 
@@ -55,13 +56,20 @@ def enroll(body: EnrollDeviceRequest, request: Request):
     require_secure_http(request)
     source = token_auth._effective_client_host(request)
     try:
-        check_pairing_rate_limit(source)
+        reserve_pairing_attempt(source)
     except PairingRateLimited as exc:
         raise HTTPException(
             status_code=429,
             detail="Too many pairing attempts; try again later",
-            headers={"Retry-After": str(exc.retry_after)},
+            headers={
+                "Retry-After": str(exc.retry_after),
+            },
         )
+    except DeviceAuthError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Pairing protection is not configured",
+        ) from exc
 
     try:
         principal, credential = enroll_device(
@@ -70,7 +78,6 @@ def enroll(body: EnrollDeviceRequest, request: Request):
             platform=body.platform,
         )
     except DeviceAuthError:
-        record_pairing_failure(source)
         raise HTTPException(
             status_code=400,
             detail="invalid, expired, or already used pairing code",
@@ -100,6 +107,16 @@ def create_ws_ticket(
         "ticket": ticket,
         "path": request.path,
         "expires_in": TICKET_TTL_SECONDS,
+    }
+
+
+@router.get("/mode")
+def auth_mode():
+    """Return only the authentication mode required by the server."""
+    enabled = device_auth_enabled()
+    return {
+        "mode": "device" if enabled else "legacy",
+        "device_auth_enabled": enabled,
     }
 
 

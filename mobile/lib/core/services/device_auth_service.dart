@@ -157,14 +157,63 @@ class DeviceAuthService {
     );
   }
 
+  /// Ask the server whether it requires device authentication.
+  ///
+  /// The response deliberately exposes only the mode: no owner, device list or
+  /// pairing information.
+  Future<bool> deviceAuthEnabledOnServer() async {
+    final response = await http
+        .get(
+          Uri.parse(
+            '${ServerConfig.instance.httpBase}/api/auth/mode',
+          ),
+        )
+        .timeout(_timeout);
+
+    if (response.statusCode != 200) {
+      throw DeviceAuthException(
+        'Could not verify server authentication mode '
+        '(${response.statusCode}).',
+      );
+    }
+
+    final body =
+        jsonDecode(response.body) as Map<String, dynamic>;
+
+    final enabled = body['device_auth_enabled'];
+
+    if (enabled is! bool) {
+      throw const DeviceAuthException(
+        'Invalid authentication-mode response.',
+      );
+    }
+
+    return enabled;
+  }
+
   /// Request a single-use ticket for one WebSocket path.
   ///
   /// Returns null when the phone is not paired, so an existing (legacy) server
   /// keeps working during migration. Throws [DeviceAuthException] with
-  /// `needsPairing: true` when the credential was revoked.
+  /// `needsPairing: true` when the credential was revoked, or when the server
+  /// requires device auth and this phone has not been paired.
   Future<String?> createWebSocketTicket(String path) async {
     final credential = await _credential();
-    if (credential == null) return null;
+
+    if (credential == null) {
+      final strictMode = await deviceAuthEnabledOnServer();
+
+      if (strictMode) {
+        needsPairing.value = true;
+
+        throw const DeviceAuthException(
+          'Pair this phone before connecting to Aariya.',
+          needsPairing: true,
+        );
+      }
+
+      return null;
+    }
 
     final response = await _post(
       '/api/auth/ws-ticket',

@@ -17,14 +17,25 @@ from pydantic import BaseModel, Field, ValidationError
 
 from server.db import get_db_connection
 from server.infrastructure.signal_bus import Signal, get_signal_bus, IngestBus
-from server.systems.security.device_auth import device_auth_enabled, require_device
+from server.systems.security.device_auth import (
+    device_auth_enabled,
+    require_dashboard_device,
+    require_device,
+    require_personal_device,
+)
+from server.systems.security.service_auth import (
+    require_service_signature,
+)
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 
 @router.post("/signal")
-async def ingest_signal(signal: Signal,
-                        bus: IngestBus = Depends(get_signal_bus)):
+async def ingest_signal(
+    signal: Signal,
+    bus: IngestBus = Depends(get_signal_bus),
+    _device=Depends(require_personal_device),
+):
     """Ingest a new signal from an external client."""
     try:
         await bus.emit(signal)
@@ -34,7 +45,11 @@ async def ingest_signal(signal: Signal,
 
 
 @router.get("/signals", response_model=List[dict])
-async def get_signals(limit: int = 100, offset: int = 0):
+async def get_signals(
+    limit: int = 100,
+    offset: int = 0,
+    _dashboard=Depends(require_dashboard_device),
+):
     """Historical signals from the database, newest first."""
     conn = get_db_connection()
     try:
@@ -148,9 +163,16 @@ class ExternalSignal(BaseModel):
     timestamp: float = Field(default_factory=time.time)
 
 
-@api_signals_router.post("/ingest")
-async def ingest_external_signal(sig: ExternalSignal,
-                                 bus: IngestBus = Depends(get_signal_bus)):
+@api_signals_router.post(
+    "/ingest",
+    dependencies=[
+        Depends(require_service_signature)
+    ],
+)
+async def ingest_external_signal(
+    sig: ExternalSignal,
+    bus: IngestBus = Depends(get_signal_bus),
+):
     """Ingest an external signal. A malformed `news.alert` fails 422; a valid one
     is normalised and persisted (and reaches the news feed via the mirror)."""
     src = sig.source.system if isinstance(sig.source, IngestSource) else str(sig.source)
