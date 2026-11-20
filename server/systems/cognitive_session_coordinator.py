@@ -194,7 +194,12 @@ class CognitiveSessionCoordinator:
                         input_data,
                         on_token=on_token,
                     )
-                    state = session.brain.get_state()
+                    # Snapshot BEFORE releasing the lock. The caller broadcasts
+                    # this state after the lock is free, and the next queued
+                    # turn (often another surface) mutates the live BrainState
+                    # in place — returning the live object would let that turn
+                    # overwrite the frame this handler is still preparing.
+                    state = session.brain.get_state().model_copy(deep=True)
                     return output, state
                 finally:
                     session.turn_started = None
@@ -215,7 +220,8 @@ class CognitiveSessionCoordinator:
                 if queued:
                     self._lock_waits += 1
                     self._lock_wait_seconds += time.monotonic() - queued_at
-                return session.brain.get_state()
+                # Same reasoning as process_turn: never hand out the live state.
+                return session.brain.get_state().model_copy(deep=True)
         finally:
             if queued:
                 session.waiting_turns -= 1

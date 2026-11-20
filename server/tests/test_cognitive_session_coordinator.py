@@ -54,6 +54,11 @@ class _TrackingBrain:
     # When set, each turn's BrainState is labelled with the turn it came from,
     # so a test can prove WHICH turn's completed state frame it received.
     label_state = False
+    # When set with label_state, each turn mutates the SAME BrainState object
+    # in place (as BrainV2 does live) instead of replacing it, so a caller
+    # holding an earlier snapshot sees the mutation unless the coordinator
+    # handed out a copy.
+    mutate_state_in_place = False
 
     def __init__(self, user_id: str):
         self.user_id = user_id
@@ -74,6 +79,7 @@ class _TrackingBrain:
             cls.max_concurrent = 0
             cls.hold = None
             cls.label_state = False
+            cls.mutate_state_in_place = False
         cls.turn_started.clear()
 
     async def process(self, input_model, on_token=None):
@@ -103,11 +109,16 @@ class _TrackingBrain:
                 _TrackingBrain.turns.append((self.user_id, text))
                 _TrackingBrain.events.append(("end", text))
             if _TrackingBrain.label_state:
-                self.state = BrainState(
-                    valence=round(0.1 * self.turn_count, 2),
-                    arousal=0.5,
-                    emotion=f"after:{text}",
-                )
+                if _TrackingBrain.mutate_state_in_place:
+                    self.state.valence = round(0.1 * self.turn_count, 2)
+                    self.state.arousal = 0.5
+                    self.state.emotion = f"after:{text}"
+                else:
+                    self.state = BrainState(
+                        valence=round(0.1 * self.turn_count, 2),
+                        arousal=0.5,
+                        emotion=f"after:{text}",
+                    )
             return MultimodalOutput(
                 text=f"reply to {input_model.text}",
                 expression="calm",
@@ -212,10 +223,72 @@ def test_simultaneous_turns_for_one_user_are_serialized():
             coordinator.process_turn("alice", MultimodalInput(text="laptop")),
         )
         assert {out_a.text, out_b.text} == {"reply to phone", "reply to laptop"}
-        assert state_a is state_b  # same live brain state, not two snapshots
+        # Each caller gets its own snapshot of the same live state, so a later
+        # turn cannot rewrite the frame the other surface is broadcasting.
+        assert state_a is not state_b
+        assert state_a == state_b
         assert _TrackingBrain.created_for == ["alice"]
         assert _TrackingBrain.max_concurrent == 1, "turns for one user overlapped"
         assert len(_TrackingBrain.turns) == 2
+
+    asyncio.run(scenario())
+
+
+def test_completed_state_snapshot_is_not_mutated_by_a_later_turn():
+    """The state returned from a turn is a snapshot, not a window into the live
+    brain.
+
+    The double mutates one shared BrainState in place, exactly as BrainV2 does.
+    Without the coordinator's copy, the frame surface A is still preparing to
+    broadcast would show surface B's turn — the race this pins down.
+    """
+
+    async def scenario():
+        coordinator = CognitiveSessionCoordinator()
+        _TrackingBrain.label_state = True
+        _TrackingBrain.mutate_state_in_place = True
+
+        _, phone_state = await coordinator.process_turn(
+            "alice", MultimodalInput(text="phone")
+        )
+        _, laptop_state = await coordinator.process_turn(
+            "alice", MultimodalInput(text="laptop")
+        )
+
+        assert laptop_state.emotion == "after:laptop"
+        assert phone_state.emotion == "after:phone", (
+            "a later turn rewrote an earlier surface's state frame"
+        )
+        assert phone_state.valence == 0.1
+        assert phone_state is not laptop_state
+
+        # Mutating a returned snapshot must not reach the live brain either.
+        phone_state.emotion = "tampered"
+        phone_state.valence = 0.99
+        live = await coordinator.get_state("alice")
+        assert live.emotion == "after:laptop"
+        assert live.valence == 0.2
+        assert live is not laptop_state
+        assert live == laptop_state
+
+    asyncio.run(scenario())
+
+
+def test_get_state_returns_a_fresh_snapshot_each_call():
+    async def scenario():
+        coordinator = CognitiveSessionCoordinator()
+        _, turn_state = await coordinator.process_turn(
+            "alice", MultimodalInput(text="hello")
+        )
+        turn_state.emotion = "tampered"
+
+        first = await coordinator.get_state("alice")
+        second = await coordinator.get_state("alice")
+
+        assert first.emotion == "calm", "snapshot leaked into the live brain"
+        assert first is not turn_state
+        assert first is not second
+        assert first == second
 
     asyncio.run(scenario())
 
