@@ -17,6 +17,7 @@ class ServerConfig extends ChangeNotifier {
 
   static const String _kHostKey = 'server_host';
   static const String _kPortKey = 'server_port';
+  static const String _kSecureKey = 'server_secure';
   static const String _kClientIdKey = 'client_id';
 
   static const String _defaultHost = String.fromEnvironment(
@@ -27,9 +28,14 @@ class ServerConfig extends ChangeNotifier {
     'SERVER_PORT',
     defaultValue: 8000,
   );
+  static const bool _defaultSecure = bool.fromEnvironment(
+    'SERVER_SECURE',
+    defaultValue: false,
+  );
 
   String _host = _defaultHost;
   int _port = _defaultPort;
+  bool _secure = _defaultSecure;
   bool _loaded = false;
   String _clientId = '';
 
@@ -47,11 +53,15 @@ class ServerConfig extends ChangeNotifier {
     return _clientId;
   }
 
-  /// `ws://host:port`
-  String get wsBase => 'ws://$_host:$_port';
+  /// Non-loopback device authentication requires TLS; enable this when the
+  /// phone reaches Aariya through an HTTPS/WSS reverse proxy.
+  bool get secure => _secure;
 
-  /// `http://host:port`
-  String get httpBase => 'http://$_host:$_port';
+  /// `ws://host:port` or `wss://host:port`
+  String get wsBase => '${_secure ? 'wss' : 'ws'}://$_host:$_port';
+
+  /// `http://host:port` or `https://host:port`
+  String get httpBase => '${_secure ? 'https' : 'http'}://$_host:$_port';
 
   static String _newClientId() {
     final rng = Random.secure();
@@ -67,8 +77,10 @@ class ServerConfig extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final host = prefs.getString(_kHostKey);
       final port = prefs.getInt(_kPortKey);
+      final secure = prefs.getBool(_kSecureKey);
       if (host != null && host.trim().isNotEmpty) _host = host.trim();
       if (port != null && port > 0) _port = port;
+      if (secure != null) _secure = secure;
 
       final storedId = prefs.getString(_kClientIdKey);
       if (storedId != null && storedId.trim().isNotEmpty) {
@@ -91,20 +103,23 @@ class ServerConfig extends ChangeNotifier {
   ///
   /// Returns `true` on success. Callers should [WebSocketService.connect]
   /// afterwards to point existing channels at the new host.
-  Future<bool> save(String host, int port) async {
+  Future<bool> save(String host, int port, {bool? secure}) async {
     final h = host.trim();
     if (h.isEmpty) return false;
     if (port <= 0 || port > 65535) return false;
 
-    final changed = h != _host || port != _port;
+    final useTls = secure ?? _secure;
+    final changed = h != _host || port != _port || useTls != _secure;
     _host = h;
     _port = port;
+    _secure = useTls;
     _loaded = true;
 
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kHostKey, h);
       await prefs.setInt(_kPortKey, port);
+      await prefs.setBool(_kSecureKey, useTls);
     } catch (e) {
       debugPrint('[ServerConfig] save failed: $e');
       return false;

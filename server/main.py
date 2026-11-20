@@ -1,3 +1,15 @@
+# Load .env before importing modules that read configuration at import time
+# (security/auth.py reads REQUIRE_WS_AUTH then). Skipped under pytest so the
+# test suite stays hermetic and legacy-mode tests are not switched to device
+# auth by a developer's local .env.
+import sys as _sys
+if "pytest" not in _sys.modules:
+    try:
+        from dotenv import load_dotenv as _load_dotenv
+        _load_dotenv()
+    except Exception:  # python-dotenv is optional
+        pass
+
 import asyncio
 import json
 import logging
@@ -49,7 +61,11 @@ from server.routers.gev_router import router as gev_router
 from server.infrastructure.agent_watcher import get_watcher
 from server.systems.security.mobile_authority import is_mobile_allowed, denied_frame
 from server.systems.security.dashboard_authority import execute_authority_command
-from server.systems.security.auth import verify_ws_token, verify_message_signature
+from server.systems.security.auth import verify_message_signature
+from server.systems.security.device_auth import (
+    accept_personal_websocket,
+    authenticate_personal_websocket,
+)
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(level=LOG_LEVEL)
@@ -301,6 +317,8 @@ app.include_router(emotion_predictor_router)  # Provides /api/emotion/predictor 
 app.include_router(analytics_ws_router)       # Provides /ws/mobile/analytics (mobile telemetry stream)
 app.include_router(prediction_router)         # Provides /api/prediction/* (unified prediction engine)
 app.include_router(system_health_router)      # Provides /api/system/health (System Health tab snapshot)
+from server.routers.device_auth_router import router as device_auth_router
+app.include_router(device_auth_router)        # Provides /api/auth/* (device pairing + WS tickets)
 app.include_router(compliance_router)         # Provides /api/compliance/* (consent matrix + governance + GDPR)
 app.include_router(events_router)              # Provides /api/events/latest (real event-log ring for mobile)
 from server.routers.synoptics_ws import router as synoptics_router
@@ -345,13 +363,14 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
     the Unity client (which targets /ws/brain) and the React dashboard
     (which targets /ws/dashboard/stream) both work without change.
     """
-    if not await verify_ws_token(websocket):
+    principal = await authenticate_personal_websocket(websocket)
+    if principal is None:
         return
-    await websocket.accept()
-    # Resolve the tenant from the handshake (set by the frontend's userIdentity
-    # provider). Falls back to 'user_default' only when a legacy client connects
-    # without the query param — the fallback is not the primary path.
-    user_id = websocket.query_params.get("user_id") or "user_default"
+    await accept_personal_websocket(websocket, principal)
+    # Device-auth mode: the owner comes from the server-side device record, not
+    # from ?user_id=. The legacy path keeps the historical fallback until
+    # devices are paired (see device_auth.device_auth_enabled).
+    user_id = principal.owner_id
 
     session_manager.add_surface("main", user_id, websocket)
     signal_bus.emit("session", {"endpoint": endpoint_name, "user_id": user_id}, "info")
@@ -591,9 +610,10 @@ async def security_stream_ws(websocket: WebSocket):
     Continuously runs the security swarm in the background (every 2s)
     so the dashboard receives live telemetry regardless of user chat input.
     """
-    if not await verify_ws_token(websocket):
+    principal = await authenticate_personal_websocket(websocket, "/api/security/stream")
+    if principal is None:
         return
-    await websocket.accept()
+    await accept_personal_websocket(websocket, principal)
     swarm = get_swarm_system()
     
     try:
@@ -634,24 +654,24 @@ async def websocket_mobile_chat(websocket: WebSocket):
                { type: 'text.stream', chunk }
                { type: 'state.update', state }
     """
-    if not await verify_ws_token(websocket):
+    principal = await authenticate_personal_websocket(websocket, "/ws/mobile")
+    if principal is None:
         return
-    await websocket.accept()
-    # Multi-user: the phone supplies ?user_id=<id>; fall back to 'user_default'
-    # only for legacy clients that omit it.
-    user_id = websocket.query_params.get("user_id") or "user_default"
+    await accept_personal_websocket(websocket, principal)
+    # The phone's owner is resolved server-side once it is paired.
+    user_id = principal.owner_id
     session_manager.add_surface("mobile", user_id, websocket)
     signal_bus.emit("session", {"endpoint": "mobile", "user_id": user_id}, "info")
 
     # Mobile gateway telemetry: this chat socket counts as a connected client.
-    # `client_id` is the phone's stable per-install id, shared with its control
-    # and analytics sockets, so all three channels collapse into ONE device.
+    # Group channels by the AUTHENTICATED device id once paired, so a client
+    # cannot claim another phone's telemetry by inventing a client_id.
     _mobile_client_key = None
     try:
         from server.systems.agent.mobile_gateway_agent import get_mobile_gateway
         _mobile_gateway = get_mobile_gateway()
         _mobile_client_key = _mobile_gateway.on_client_connected(
-            websocket.query_params.get("client_id")
+            principal.device_id or None
         )
     except Exception:
         _mobile_gateway = None
@@ -762,21 +782,21 @@ async def websocket_mobile_chat(websocket: WebSocket):
 
 @app.websocket("/ws/mobile/control")
 async def websocket_mobile_control(websocket: WebSocket):
-    if not await verify_ws_token(websocket):
+    principal = await authenticate_personal_websocket(websocket, "/ws/mobile/control")
+    if principal is None:
         return
-    await websocket.accept()
+    await accept_personal_websocket(websocket, principal)
     session_id = str(uuid4())
     logger.info(f"Mobile Control connected: {session_id}")
 
     # Mobile gateway telemetry: control sockets count as connected clients.
-    # Sharing the phone's `client_id` with its chat socket keeps one phone
-    # counted as one device instead of one per channel.
+    # The authenticated device id keeps one phone counted as one device.
     _control_client_key = None
     try:
         from server.systems.agent.mobile_gateway_agent import get_mobile_gateway
         _control_gateway = get_mobile_gateway()
         _control_client_key = _control_gateway.on_client_connected(
-            websocket.query_params.get("client_id")
+            principal.device_id or None
         )
     except Exception:
         _control_gateway = None
@@ -844,11 +864,11 @@ async def websocket_mobile_control(websocket: WebSocket):
 
 @app.websocket("/ws/brain_metrics")
 async def websocket_brain_metrics(websocket: WebSocket):
-    if not await verify_ws_token(websocket):
+    principal = await authenticate_personal_websocket(websocket, "/ws/brain_metrics")
+    if principal is None:
         return
-    await websocket.accept()
-    # Dashboard metrics link — carry the tenant from the handshake when present.
-    user_id = websocket.query_params.get("user_id") or "user_default"
+    await accept_personal_websocket(websocket, principal)
+    user_id = principal.owner_id
     session_manager.add_surface("dashboard", user_id, websocket)
     logger.info(f"Dashboard metrics link established for {user_id}")
     

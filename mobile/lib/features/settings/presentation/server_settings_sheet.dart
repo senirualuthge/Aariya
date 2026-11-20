@@ -29,6 +29,7 @@ class _ServerSettingsSheetState extends State<ServerSettingsSheet> {
   late final TextEditingController _hostCtrl;
   late final TextEditingController _portCtrl;
   bool _saving = false;
+  late bool _secure;
 
   @override
   void initState() {
@@ -36,6 +37,7 @@ class _ServerSettingsSheetState extends State<ServerSettingsSheet> {
     final cfg = ServerConfig.instance;
     _hostCtrl = TextEditingController(text: cfg.host);
     _portCtrl = TextEditingController(text: cfg.port.toString());
+    _secure = cfg.secure;
   }
 
   @override
@@ -49,7 +51,11 @@ class _ServerSettingsSheetState extends State<ServerSettingsSheet> {
     setState(() => _saving = true);
 
     final port = int.tryParse(_portCtrl.text.trim()) ?? 0;
-    final ok = await ServerConfig.instance.save(_hostCtrl.text, port);
+    final ok = await ServerConfig.instance.save(
+      _hostCtrl.text,
+      port,
+      secure: _secure,
+    );
 
     if (!mounted) return;
     setState(() => _saving = false);
@@ -120,6 +126,22 @@ class _ServerSettingsSheetState extends State<ServerSettingsSheet> {
               label: 'Port',
               hint: '8000',
               icon: Icons.numbers_outlined,
+            ),
+          ),
+          SwitchListTile(
+            value: _secure,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _secure = value),
+            contentPadding: EdgeInsets.zero,
+            activeThumbColor: Colors.cyanAccent,
+            title: const Text(
+              'HTTPS / WSS',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            subtitle: const Text(
+              'Required off-loopback for device authentication',
+              style: TextStyle(color: Colors.white30, fontSize: 11),
             ),
           ),
           const SizedBox(height: 20),

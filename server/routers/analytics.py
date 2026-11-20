@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 import json
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from server.db import get_db_connection
+from server.systems.security.device_auth import personal_owner
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -21,7 +22,7 @@ def _now_iso() -> str:
 
 
 @router.get("/overview")
-async def get_overview(user_id: str = "user_default", limit: int = 20):
+async def get_overview(user_id: str = Depends(personal_owner), limit: int = 20):
     """Session summary + trust-relevant totals, computed from the real
     `sessions` table (no separate users table exists)."""
     conn = get_db_connection()
@@ -57,7 +58,7 @@ async def get_overview(user_id: str = "user_default", limit: int = 20):
 
 
 @router.get("/personality")
-async def get_personality_history(user_id: str = "user_default", limit: int = 10):
+async def get_personality_history(user_id: str = Depends(personal_owner), limit: int = 10):
     """Historical personality snapshots. Reads the v1 column table first;
     falls back to the v2 JSON-snapshot table the live personality system
     actually writes (`server.systems.personality`), expanding its real
@@ -143,7 +144,7 @@ def _core_axis_means() -> dict:
 
 
 @router.get("/personality/trajectory")
-async def get_personality_trajectory(user_id: str = "user_default", limit: int = 50):
+async def get_personality_trajectory(user_id: str = Depends(personal_owner), limit: int = 50):
     """Per-session personality trajectory built from the REAL snapshot table the
     live personality system writes (`personality_snapshots_v2`).
 
@@ -202,7 +203,7 @@ async def get_personality_trajectory(user_id: str = "user_default", limit: int =
 
 
 @router.get("/memories")
-async def get_memories(user_id: str = "user_default", limit: int = 50):
+async def get_memories(user_id: str = Depends(personal_owner), limit: int = 50):
     """Significant memories for the Timeline tab — real columns of the
     `memories` table (text/valence/trust/significance/created_at)."""
     conn = get_db_connection()

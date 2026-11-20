@@ -27,7 +27,8 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { authHeaders } from '../utils/authToken';
+import { personalAuthHeaders } from '../utils/deviceAuth';
+import DevicePairingCard from './DevicePairingCard';
 
 // ── Status palette ────────────────────────────────────────────────────────────
 const STATUS_COLOR = {
@@ -332,6 +333,9 @@ export default function SystemHealthTab() {
           color={devFpsColor} sub="this browser's render rate"
         />
       </div>
+
+      {/* ── Trusted device identity ── */}
+      <DevicePairingCard />
 
       {/* ── GEV Health ── */}
       <GevHealthPanel apiBase={apiBase} />
@@ -714,7 +718,9 @@ function GevHealthPanel({ apiBase }) {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${apiBase}/api/system/health`, { headers: authHeaders() });
+      const res = await fetch(`${apiBase}/api/system/health`, {
+        headers: await personalAuthHeaders(),
+      });
       if (!res.ok) return;
       const data = await res.json();
       const gevCheck = (data.checks || []).find((c) => c.name === 'gev');

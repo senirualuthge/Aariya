@@ -26,7 +26,10 @@ from fastapi.responses import JSONResponse
 
 from ..infrastructure.agent_watcher import get_watcher
 from ..infrastructure.agent_registry import get_registry
-from ..systems.security.auth import verify_ws_token
+from ..systems.security.device_auth import (
+    accept_personal_websocket,
+    authenticate_personal_websocket,
+)
 
 logger = logging.getLogger("aariya.agents_router")
 router = APIRouter(prefix="/api/agents", tags=["Agent Registry"])
@@ -100,10 +103,10 @@ async def agent_registry_ws(websocket: WebSocket):
     On change:   sends diff + updated agent list
     Client can send: {"action": "scan"} | {"action": "ack_all"} | {"action": "ack", "id": "..."}
     """
-    if not await verify_ws_token(websocket):
+    principal = await authenticate_personal_websocket(websocket, "/api/agents/ws")
+    if principal is None:
         return
-
-    await websocket.accept()
+    await accept_personal_websocket(websocket, principal)
     watcher = get_watcher()
     registry = get_registry()
 

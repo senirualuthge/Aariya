@@ -19,7 +19,7 @@ import { BRAIN_RAG_EVENT } from '../systems/brainClient';
 import { subscribeMetrics, sendMetricsCommand } from '../systems/metricsClient';
 import { isBuildSummaryFresh, BUILD_WARN_MAX_AGE_HOURS } from '../utils/buildFreshness.js';
 import { apiBase, apiWsBase } from '../utils/apiHost';
-import { wsUrlWithToken } from '../utils/authToken';
+import { DeviceAuthError, openAuthenticatedWebSocket } from '../utils/deviceAuth';
 import { getUserId } from '../systems/userIdentity';
 import { panForSlot } from '../systems/spatialAudio';
 import { schedulePredictorPoll, startUptimeTicker } from '../utils/backgroundPolls';
@@ -185,12 +185,30 @@ function useSecurityStream(enabled = true) {
 
     unmountedRef.current = false;
 
-    function connect() {
+    async function connect() {
       if (unmountedRef.current) return;
-      // Connect to the dedicated 2-second background polling endpoint
-      const ws = new WebSocket(
-        wsUrlWithToken(`${apiWsBase()}/api/security/stream`)
-      );
+      // Connect to the dedicated 2-second background polling endpoint with a
+      // one-use ticket rather than a long-lived credential in the URL.
+      let ws;
+      try {
+        ws = await openAuthenticatedWebSocket(
+          `${apiWsBase()}/api/security/stream`,
+          '/api/security/stream',
+        );
+      } catch (err) {
+        if (err instanceof DeviceAuthError) {
+          console.warn('[Analytics] security stream needs pairing:', err.message);
+          return;
+        }
+        if (!unmountedRef.current) {
+          retryRef.current = setTimeout(connect, 5000);
+        }
+        return;
+      }
+      if (unmountedRef.current) {
+        ws.close();
+        return;
+      }
       wsRef.current = ws;
 
       ws.onmessage = (e) => {

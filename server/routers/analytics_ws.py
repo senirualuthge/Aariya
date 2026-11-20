@@ -20,7 +20,10 @@ from server.infrastructure.observability import logger
 from server.infrastructure.session_manager import manager
 from server.infrastructure.cpu_meter import cpu_percent
 from server.systems.agent.mobile_analytics_agent import get_mobile_analytics
-from server.systems.security.auth import verify_ws_token
+from server.systems.security.device_auth import (
+    accept_personal_websocket,
+    authenticate_personal_websocket,
+)
 
 router = APIRouter()
 
@@ -88,15 +91,15 @@ def _get_brain_snapshot() -> dict:
 # ── WebSocket endpoint ─────────────────────────────────────────────────────────
 @router.websocket("/ws/mobile/analytics")
 async def analytics_ws(websocket: WebSocket) -> None:
-    if not await verify_ws_token(websocket):
+    principal = await authenticate_personal_websocket(websocket, "/ws/mobile/analytics")
+    if principal is None:
         return
 
-    await websocket.accept()
+    await accept_personal_websocket(websocket, principal)
     manager.analytics_clients.add(websocket)
     agent = get_mobile_analytics()
-    # Same per-install `client_id` as the phone's chat/control sockets, so the
-    # analytics channel is attributed to that device rather than counted alone.
-    client_key = agent.on_client_connected(websocket.query_params.get("client_id"))
+    # Attributed by the authenticated device id, not a client-supplied value.
+    client_key = agent.on_client_connected(principal.device_id or None)
     logger.info("Mobile Analytics client connected")
 
     try:

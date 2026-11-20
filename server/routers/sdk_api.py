@@ -14,11 +14,12 @@ All endpoints are session-scoped and respect kill-switch gating.
 
 import time
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from server.systems.trust_system import get_trust_system
 from server.systems.contradiction_detector import get_contradiction_detector
+from server.systems.security.device_auth import personal_owner
 from server.systems.kill_switches import get_kill_switches, FeatureFlag
 from server.systems.audit_logger import get_audit_logger, AuditEventType
 
@@ -121,7 +122,7 @@ async def sdk_shutdown(session_id: str = Query(...)):
 # ── Conversation API (Gap 17) ─────────────────────────────────────────────────
 
 @router.post("/conversation/input")
-async def conversation_input(req: ConversationInputRequest, user_id: str = Query("user_default")):
+async def conversation_input(req: ConversationInputRequest, user_id: str = Depends(personal_owner)):
     """Submit user text for AI processing (Gap 17)."""
     ts = get_trust_system()
     trust = ts.get_trust_score(user_id)
@@ -137,7 +138,7 @@ async def conversation_input(req: ConversationInputRequest, user_id: str = Query
 
 
 @router.get("/conversation/response")
-async def conversation_response(session_id: str = Query(""), user_id: str = Query("user_default")):
+async def conversation_response(session_id: str = Query(""), user_id: str = Depends(personal_owner)):
     """Get the latest AI response for a session (Gap 17)."""
     audit = get_audit_logger()
     events = audit.get_events(event_type="brain.response", session_id=session_id, limit=1)
@@ -156,7 +157,7 @@ async def conversation_response(session_id: str = Query(""), user_id: str = Quer
 # ── Trust endpoints ───────────────────────────────────────────────────────────
 
 @router.get("/trust/state")
-async def trust_state(user_id: str = Query("user_default")):
+async def trust_state(user_id: str = Depends(personal_owner)):
     """Get current trust state for a user (Gap 18: real trend)."""
     ts = get_trust_system()
     trust = ts.get_trust_score(user_id)
@@ -194,7 +195,7 @@ async def trust_state(user_id: str = Query("user_default")):
 
 
 @router.post("/trust/update")
-async def trust_update(req: TrustUpdateRequest, user_id: str = Query("user_default")):
+async def trust_update(req: TrustUpdateRequest, user_id: str = Depends(personal_owner)):
     """Update trust score with delta and reason."""
     ts = get_trust_system()
     ks = get_kill_switches()
@@ -230,7 +231,7 @@ async def trust_update(req: TrustUpdateRequest, user_id: str = Query("user_defau
 # ── Emotion endpoints ─────────────────────────────────────────────────────────
 
 @router.get("/emotion/contradiction")
-async def emotion_contradiction(user_id: str = Query("user_default")):
+async def emotion_contradiction(user_id: str = Depends(personal_owner)):
     """Get contradiction metrics for a user."""
     cd = get_contradiction_detector()
     from server.infrastructure.redis_manager import get_redis
@@ -252,7 +253,7 @@ async def emotion_contradiction(user_id: str = Query("user_default")):
 # ── Memory endpoints (trust-gated) ───────────────────────────────────────────
 
 @router.post("/memory/write")
-async def memory_write(req: MemoryWriteRequest, user_id: str = Query("user_default")):
+async def memory_write(req: MemoryWriteRequest, user_id: str = Depends(personal_owner)):
     """Write a memory entry (trust-gated, TTL-enforced, Gap 12).
 
     Voice-session memory was removed with the voice pipeline; SDK memory
@@ -263,7 +264,7 @@ async def memory_write(req: MemoryWriteRequest, user_id: str = Query("user_defau
 
 @router.get("/memory/read")
 async def memory_read(
-    user_id: str = Query("user_default"),
+    user_id: str = Depends(personal_owner),
     memory_type: Optional[str] = Query(None),
     limit: int = Query(10, le=50),
 ):
@@ -272,7 +273,7 @@ async def memory_read(
 
 
 @router.delete("/memory/delete")
-async def memory_delete(req: MemoryDeleteRequest, user_id: str = Query("user_default")):
+async def memory_delete(req: MemoryDeleteRequest, user_id: str = Depends(personal_owner)):
     """Delete memory entries (Gap 20)."""
     raise HTTPException(status_code=501, detail="Memory backend removed with voice pipeline")
 
@@ -396,7 +397,7 @@ async def language_supported():
 # ── Full system snapshot ──────────────────────────────────────────────────────
 
 @router.get("/snapshot")
-async def full_snapshot(user_id: str = Query("user_default")):
+async def full_snapshot(user_id: str = Depends(personal_owner)):
     """Full SDK system snapshot for dashboard/synoptic."""
     ts = get_trust_system()
     ks = get_kill_switches()

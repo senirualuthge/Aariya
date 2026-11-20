@@ -205,6 +205,49 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_rl_transitions_user_ts
             ON rl_transitions (user_id, ts);
+
+        -- ── PERSONAL DEVICE AUTHENTICATION (Patch 2/3) ─────────────────────
+        -- Trusted personal devices. The long-lived credential is stored only
+        -- as a SHA-256 hash; the plaintext exists on the device alone.
+        CREATE TABLE IF NOT EXISTS aariya_personal_devices (
+            device_id TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            device_role TEXT NOT NULL
+                CHECK (device_role IN ('mobile', 'dashboard')),
+            label TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            credential_hash TEXT NOT NULL UNIQUE,
+            created_at REAL NOT NULL,
+            last_seen_at REAL NOT NULL,
+            revoked_at REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_personal_devices_owner
+            ON aariya_personal_devices(owner_id);
+
+        -- One-use, short-lived pairing codes (created by the local CLI, never
+        -- by an unauthenticated web endpoint). Only the hash is persisted.
+        CREATE TABLE IF NOT EXISTS aariya_pairing_codes (
+            code_hash TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            device_role TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            expires_at REAL NOT NULL,
+            consumed_at REAL
+        );
+
+        -- One-use, path-bound, short-lived WebSocket tickets. The device
+        -- credential itself is never sent over a WebSocket URL.
+        CREATE TABLE IF NOT EXISTS aariya_ws_tickets (
+            ticket_hash TEXT PRIMARY KEY,
+            device_id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            expires_at REAL NOT NULL,
+            consumed_at REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_aariya_ws_ticket_expiry
+            ON aariya_ws_tickets(expires_at);
     """)
     conn.commit()
     conn.close()

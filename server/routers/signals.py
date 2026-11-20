@@ -10,13 +10,14 @@ POST /ingest/device   → upsert the device registry (`devices` table).
 import json
 import time
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 
 from server.db import get_db_connection
 from server.infrastructure.signal_bus import Signal, get_signal_bus, IngestBus
+from server.systems.security.device_auth import device_auth_enabled, require_device
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -57,8 +58,10 @@ async def get_signals(limit: int = 100, offset: int = 0):
 
 
 class DeviceRegistration(BaseModel):
-    device_id: str
-    user_id: str = "user_default"
+    # Legacy fields: accepted for old clients, but IGNORED once device auth is
+    # enabled — the server takes both ids from the authenticated device.
+    device_id: Optional[str] = None
+    user_id: Optional[str] = None
     platform: str = "unknown"
     model: str = ""
     os_version: str = ""
@@ -66,8 +69,22 @@ class DeviceRegistration(BaseModel):
 
 
 @router.post("/device")
-async def register_device(device: DeviceRegistration):
-    """Track or update a device connecting to the system."""
+async def register_device(device: DeviceRegistration, request: Request):
+    """Track or update a device connecting to the system.
+
+    With AARIYA_OWNER_ID configured, the device and owner come from the
+    credential, so a client cannot register or reassign another device.
+    """
+    if device_auth_enabled():
+        principal = require_device(request)
+        device_id = principal.device_id
+        user_id = principal.owner_id
+    else:
+        if not device.device_id:
+            raise HTTPException(status_code=400, detail="device_id required")
+        device_id = device.device_id
+        user_id = device.user_id or "user_default"
+
     now = time.time()
     conn = get_db_connection()
     try:
@@ -82,7 +99,7 @@ async def register_device(device: DeviceRegistration):
                 os_version = excluded.os_version,
                 app_version = excluded.app_version,
                 last_seen = excluded.last_seen
-        """, (device.device_id, device.user_id, device.platform, device.model,
+        """, (device_id, user_id, device.platform, device.model,
               device.os_version, device.app_version, now, now))
         conn.commit()
         return {"ok": True}

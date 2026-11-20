@@ -10,7 +10,7 @@
 // each message out to subscribers that match it.
 import { eventBus } from '../core/EventBus';
 import { apiWsBase } from '../utils/apiHost';
-import { wsUrlWithToken } from '../utils/authToken';
+import { DeviceAuthError, openAuthenticatedWebSocket } from '../utils/deviceAuth';
 
 const METRICS_WS_URL = `${apiWsBase()}/ws/brain_metrics`;
 const RECONNECT_DELAY_MS = 4000;
@@ -22,6 +22,10 @@ const subscribers = new Set();          // { predicate: fn(msg) -> bool, handler
 let sharedWs = null;
 let reconnectTimer = null;
 let refCount = 0;
+let connecting = false;
+// A rejected device credential is terminal until the user pairs again; do not
+// hammer the server with reconnects every few seconds.
+let authBlocked = false;
 
 function dispatch(msg) {
   if (!msg || typeof msg !== 'object') return;
@@ -35,11 +39,29 @@ function dispatch(msg) {
   });
 }
 
-function connect() {
-  if (sharedWs || refCount === 0) return;
-  const ws = new WebSocket(wsUrlWithToken(METRICS_WS_URL));
+async function connect() {
+  if (sharedWs || connecting || refCount === 0 || authBlocked) return;
+  connecting = true;
+  let ws;
+  try {
+    ws = await openAuthenticatedWebSocket(METRICS_WS_URL, '/ws/brain_metrics');
+  } catch (err) {
+    connecting = false;
+    if (err instanceof DeviceAuthError) {
+      authBlocked = true;
+      console.warn('[metricsClient] device pairing required:', err.message);
+      dispatch({ type: '__conn', connected: false, authRequired: true });
+      return;
+    }
+    if (refCount > 0) reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+    return;
+  }
+  connecting = false;
+  if (refCount === 0) {
+    ws.close();
+    return;
+  }
   sharedWs = ws;
-
   ws.onopen = () => {
     dispatch({ type: '__conn', connected: true });
     ws.send(JSON.stringify({ type: 'ping' }));
@@ -54,9 +76,17 @@ function connect() {
   ws.onclose = () => {
     dispatch({ type: '__conn', connected: false });
     sharedWs = null;
-    if (refCount > 0) reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+    if (refCount > 0 && !authBlocked) {
+      reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+    }
   };
   ws.onerror = () => ws.close();
+}
+
+/** Offer a retry after the user pairs. */
+export function resetMetricsAuth() {
+  authBlocked = false;
+  if (!sharedWs) connect();
 }
 
 /**

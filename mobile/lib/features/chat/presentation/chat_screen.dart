@@ -3,12 +3,14 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/state/chat_controller.dart';
 import '../../../core/services/connection_monitor.dart';
+import '../../../core/services/device_auth_service.dart';
 import '../../../core/services/server_config.dart';
 import '../../../core/services/websocket_service.dart';
 import '../../companion/presentation/companion_presence.dart';
 import '../../voice/presentation/voice_conversation_overlay.dart';
 import 'control_panel.dart';
 import '../../settings/presentation/server_settings_sheet.dart';
+import '../../settings/presentation/device_pairing_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -159,6 +161,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           IconButton(
+            icon: const Icon(Icons.phonelink_lock, color: Colors.cyanAccent),
+            tooltip: 'Trusted Device',
+            onPressed: () => DevicePairingScreen.show(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.cyanAccent),
             tooltip: 'Server Settings',
             onPressed: () => ServerSettingsSheet.show(context),
@@ -282,13 +289,48 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
 
-          // Disconnected Banner
+          // Disconnected / device-trust banner. A revoked credential is not a
+          // transient outage, so it replaces the auto-reconnect message.
           ValueListenableBuilder<bool>(
             valueListenable: WebSocketService.instance.isConnected,
             builder: (context, connected, child) {
-              if (connected) return const SizedBox.shrink();
+              return ValueListenableBuilder<bool>(
+                valueListenable: DeviceAuthService.instance.needsPairing,
+                builder: (context, needsPairing, _) {
+                  if (connected && !needsPairing) {
+                    return const SizedBox.shrink();
+                  }
+                  if (needsPairing) {
+                    return Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        color: Colors.redAccent.withValues(alpha: 0.95),
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.gpp_bad_outlined, color: Colors.white, size: 16),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                'This phone is no longer trusted',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => DevicePairingScreen.show(context),
+                              style: TextButton.styleFrom(foregroundColor: Colors.white),
+                              child: const Text('PAIR'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
 
-              return Positioned(
+                  return Positioned(
                 top: 0,
                 left: 0,
                 right: 0,
@@ -325,6 +367,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     ],
                   ),
                 ),
+              );
+                },
               );
             },
           ),

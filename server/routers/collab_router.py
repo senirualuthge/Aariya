@@ -22,8 +22,16 @@ WebSocket:
 import asyncio
 import json
 import logging
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+
+from server.systems.security.device_auth import (
+    DevicePrincipal,
+    accept_personal_websocket,
+    authenticate_personal_websocket,
+    personal_actor,
+    personal_owner,
+)
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("aariya.collab_router")
@@ -74,23 +82,32 @@ class MergeBody(BaseModel):
     workspaces: List[dict]
 
 
+def _actor_name(actor: Optional[DevicePrincipal], requested: str) -> str:
+    """Strict mode stamps the authenticated device, not a caller-chosen name."""
+    return actor.label if actor is not None else (requested or "guest")
+
+
 @router.get("/workspaces")
-async def workspaces():
+async def workspaces(_owner: str = Depends(personal_owner)):
     from server.systems.collaboration.shared_workspace import get_workspace_store
 
     return {"ok": True, "workspaces": get_workspace_store().list()}
 
 
 @router.post("/{name}")
-async def create_workspace(name: str, body: ParticipantBody):
+async def create_workspace(
+    name: str,
+    body: ParticipantBody,
+    actor: Optional[DevicePrincipal] = Depends(personal_actor),
+):
     from server.systems.collaboration.shared_workspace import get_workspace_store
 
-    ws = get_workspace_store().create(name, body.participant or "owner")
+    ws = get_workspace_store().create(name, _actor_name(actor, body.participant))
     return {"ok": True, "workspace": get_workspace_store().summary(ws)}
 
 
 @router.get("/{name}")
-async def workspace_state(name: str):
+async def workspace_state(name: str, _owner: str = Depends(personal_owner)):
     from server.systems.collaboration.shared_workspace import get_workspace_store
 
     ws = get_workspace_store().get(name)
@@ -119,10 +136,14 @@ def _slug_of(name: str) -> str:
 
 
 @router.post("/{name}/join")
-async def join(name: str, body: ParticipantBody):
+async def join(
+    name: str,
+    body: ParticipantBody,
+    actor: Optional[DevicePrincipal] = Depends(personal_actor),
+):
     return await _mutate(
         name,
-        lambda: get_store().join(name, body.participant),
+        lambda: get_store().join(name, _actor_name(actor, body.participant)),
         "collab.join",
     )
 
@@ -134,26 +155,39 @@ def get_store():
 
 
 @router.post("/{name}/heartbeat")
-async def heartbeat(name: str, body: ParticipantBody):
-    ok = get_store().heartbeat(name, body.participant)
+async def heartbeat(
+    name: str,
+    body: ParticipantBody,
+    actor: Optional[DevicePrincipal] = Depends(personal_actor),
+):
+    ok = get_store().heartbeat(name, _actor_name(actor, body.participant))
     if not ok:
         raise HTTPException(status_code=404, detail="not a participant")
     return {"ok": True}
 
 
 @router.post("/{name}/leave")
-async def leave(name: str, body: ParticipantBody):
-    ok = get_store().leave(name, body.participant)
+async def leave(
+    name: str,
+    body: ParticipantBody,
+    actor: Optional[DevicePrincipal] = Depends(personal_actor),
+):
+    who = _actor_name(actor, body.participant)
+    ok = get_store().leave(name, who)
     if not ok:
         raise HTTPException(status_code=404, detail="not a participant")
     await _broadcast(_slug_of(name), {"type": "collab.leave",
-                                      "participant": body.participant})
+                                      "participant": who})
     return {"ok": True}
 
 
 @router.post("/{name}/notes")
-async def post_note(name: str, body: NoteBody):
-    note = get_store().post_note(name, body.author, body.text)
+async def post_note(
+    name: str,
+    body: NoteBody,
+    actor: Optional[DevicePrincipal] = Depends(personal_actor),
+):
+    note = get_store().post_note(name, _actor_name(actor, body.author), body.text)
     if note is None:
         raise HTTPException(status_code=404, detail="no such workspace")
     await _broadcast(_slug_of(name), {"type": "collab.note", "data": note})
@@ -161,8 +195,12 @@ async def post_note(name: str, body: NoteBody):
 
 
 @router.post("/{name}/tasks")
-async def add_task(name: str, body: TaskBody):
-    task = get_store().add_task(name, body.author, body.text)
+async def add_task(
+    name: str,
+    body: TaskBody,
+    actor: Optional[DevicePrincipal] = Depends(personal_actor),
+):
+    task = get_store().add_task(name, _actor_name(actor, body.author), body.text)
     if task is None:
         raise HTTPException(status_code=404, detail="no such workspace")
     await _broadcast(_slug_of(name), {"type": "collab.task", "data": task})
@@ -170,7 +208,12 @@ async def add_task(name: str, body: TaskBody):
 
 
 @router.patch("/{name}/tasks/{task_id}")
-async def patch_task(name: str, task_id: str, body: TaskPatch):
+async def patch_task(
+    name: str,
+    task_id: str,
+    body: TaskPatch,
+    _owner: str = Depends(personal_owner),
+):
     task = get_store().update_task(name, task_id, status=body.status)
     if task is None:
         raise HTTPException(status_code=404, detail="no such task")
@@ -179,7 +222,11 @@ async def patch_task(name: str, task_id: str, body: TaskPatch):
 
 
 @router.post("/{name}/merge")
-async def merge_envelope(name: str, body: MergeBody):
+async def merge_envelope(
+    name: str,
+    body: MergeBody,
+    _owner: str = Depends(personal_owner),
+):
     counts = get_store().import_envelope(body.workspaces)
     await _broadcast(_slug_of(name), {"type": "collab.merge", "counts": counts})
     return {"ok": True, **counts}
@@ -199,13 +246,20 @@ async def collab_room(ws: WebSocket, name: str, participant: str = "guest"):
     so presence survives disconnects until an explicit leave."""
     from server.systems.collaboration.shared_workspace import get_workspace_store
 
+    principal = await authenticate_personal_websocket(ws, ws.url.path)
+    if principal is None:
+        return
+
     store = get_workspace_store()
     slug = _slug_of(name)
     if store.get(slug) is None:
         await ws.close(code=4404)
         return
 
-    await ws.accept()
+    await accept_personal_websocket(ws, principal)
+    if principal.authenticated:
+        # Presence is bound to the authenticated device, not a query string.
+        participant = principal.label or principal.device_id
     _room(slug).add(ws)
     joined = store.join(slug, participant)
     if joined:

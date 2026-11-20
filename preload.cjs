@@ -6,5 +6,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openAnalytics: () => ipcRenderer.send('open-analytics'),
     // Panel persistence - uses main-process fs for crash-safe storage
     savePanelState: (state) => ipcRenderer.invoke('save-panel-state', state),
-    loadPanelState: () => ipcRenderer.invoke('load-panel-state')
+    loadPanelState: () => ipcRenderer.invoke('load-panel-state'),
+    // Device credential (OS-encrypted in the main process; never localStorage)
+    getDeviceCredential: () => ipcRenderer.invoke('auth:get-device-credential'),
+    storeDeviceCredential: (credential) =>
+        ipcRenderer.invoke('auth:store-device-credential', credential),
+    clearDeviceCredential: () => ipcRenderer.invoke('auth:clear-device-credential')
 });

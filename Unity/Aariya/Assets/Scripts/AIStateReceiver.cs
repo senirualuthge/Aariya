@@ -1,6 +1,8 @@
 using UnityEngine;
 using System;
 using System.Text;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,6 +29,16 @@ public class AIStateReceiver : MonoBehaviour
     // BUG #7 (Unity-side): endpoint is now /ws/brain (fixed in main.py too)
     public string wsUrl = "ws://localhost:8000/ws/brain";
 
+    [Header("Device Authentication (Patch 2/3)")]
+    // A paired dashboard device credential. Leave empty for a legacy server
+    // without AARIYA_OWNER_ID. Prefer the AARIYA_DEVICE_CREDENTIAL environment
+    // variable over committing a credential into the scene; Unity/PlayerPrefs
+    // is not secure storage.
+    public string httpBase = "http://localhost:8000";
+    public string deviceCredential = "";
+
+    private static readonly HttpClient Http = new HttpClient();
+
     [Header("Smoothing Settings")]
     public float lerpSpeed = 5.0f;
 
@@ -49,6 +61,20 @@ public class AIStateReceiver : MonoBehaviour
         ws = new ClientWebSocket();
         try
         {
+            if (string.IsNullOrEmpty(deviceCredential))
+            {
+                deviceCredential = Environment.GetEnvironmentVariable(
+                    "AARIYA_DEVICE_CREDENTIAL") ?? "";
+            }
+
+            // One-use, path-bound ticket; the long-lived credential never goes
+            // into the WebSocket URL.
+            string ticket = await RequestTicket("/ws/brain");
+            if (!string.IsNullOrEmpty(ticket))
+            {
+                ws.Options.AddSubProtocol("aariya.v1");
+                ws.Options.AddSubProtocol("aariya-ticket." + ticket);
+            }
             Debug.Log($"[Aariya] Connecting to {wsUrl}");
             await ws.ConnectAsync(new Uri(wsUrl), CancellationToken.None);
             Debug.Log("[Aariya] Connected to Python Brain!");
@@ -65,6 +91,37 @@ public class AIStateReceiver : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogError($"[Aariya] WebSocket failed: {e.Message}");
+        }
+    }
+
+    async Task<string> RequestTicket(string path)
+    {
+        if (string.IsNullOrEmpty(deviceCredential)) return "";
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post, httpBase + "/api/auth/ws-ticket");
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", deviceCredential);
+            request.Content = new StringContent(
+                "{\"path\":\"" + path + "\"}",
+                Encoding.UTF8, "application/json");
+
+            using var response = await Http.SendAsync(request);
+            string body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                Debug.LogError(
+                    $"[Aariya] WS ticket refused ({(int)response.StatusCode}): {body}");
+                return "";
+            }
+            var json = JObject.Parse(body);
+            return json["ticket"]?.Value<string>() ?? "";
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[Aariya] WS ticket request failed: {e.Message}");
+            return "";
         }
     }
 

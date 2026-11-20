@@ -24,9 +24,12 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from server.systems.security.device_auth import (
+    device_auth_enabled, personal_owner, require_device,
+)
 from server.infrastructure.observability import logger
 
 router = APIRouter(prefix="/api/compliance", tags=["compliance"])
@@ -56,6 +59,17 @@ class FeedbackRequest(BaseModel):
     note: str = ""
     action: str = ""     # "clear" → user says it's fine: clear the red-line
 
+
+
+def _bound_user_id(body_user_id: str, request_ctx: Request) -> str:
+    """Identity for a consent mutation.
+
+    With device auth enabled the credential decides; a body can never change
+    another person's consent. Legacy mode keeps the historical body value.
+    """
+    if device_auth_enabled():
+        return require_device(request_ctx).owner_id
+    return body_user_id or "user_default"
 
 async def _emit_event(severity: str, title: str, payload: Dict[str, Any] | None = None) -> None:
     """Push a REAL event into the dashboard Event Log (GOVERNANCE chip).
@@ -94,7 +108,7 @@ class ConsentRevocationRequest(BaseModel):
 
 
 @router.get("/export-user-data", response_model=DataExportResponse)
-async def export_user_data(user_id: str = Query(..., description="User ID to export data for")):
+async def export_user_data(user_id: str = Depends(personal_owner)):
     """
     Export all user data in JSON format (GDPR Article 20).
     """
@@ -134,7 +148,7 @@ async def export_user_data(user_id: str = Query(..., description="User ID to exp
 
 
 @router.delete("/delete-user-data")
-async def delete_user_data(user_id: str = Query(..., description="User ID to delete data for")):
+async def delete_user_data(user_id: str = Depends(personal_owner)):
     """
     Delete all user data (GDPR Article 17 - Right to be Forgotten).
     """
@@ -174,7 +188,7 @@ async def delete_user_data(user_id: str = Query(..., description="User ID to del
 
 
 @router.get("/personality-profile", response_model=PersonalityProfileResponse)
-async def get_personality_profile(user_id: str = Query(..., description="User ID")):
+async def get_personality_profile(user_id: str = Depends(personal_owner)):
     """
     Get personality profile with transparency (EU AI Act Article 13).
     """
@@ -219,14 +233,15 @@ async def get_personality_profile(user_id: str = Query(..., description="User ID
 # ── Companion governance: consent matrix ──────────────────────────────────────
 
 @router.get("/consent-status")
-async def consent_status(user_id: str = Query("user_default")):
+async def consent_status(user_id: str = Depends(personal_owner)):
     """Current consent matrix + age band + freeze + recent safety events."""
     from server.systems.governance.consent_store import ConsentStore
     return ConsentStore(user_id).status()
 
 
 @router.post("/consent")
-async def set_consent(req: ConsentUpdateRequest):
+async def set_consent(req: ConsentUpdateRequest, request_ctx: Request):
+    req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Set granular consent toggles — REAL feature-flag enforcement follows."""
     from server.systems.governance.consent_store import ConsentStore, CONSENT_CATEGORIES
     store = ConsentStore(req.user_id)
@@ -252,7 +267,8 @@ async def set_consent(req: ConsentUpdateRequest):
 
 
 @router.post("/revoke-consent")
-async def revoke_consent(request: ConsentRevocationRequest):
+async def revoke_consent(request: ConsentRevocationRequest, request_ctx: Request):
+    request.user_id = _bound_user_id(request.user_id, request_ctx)
     """Revoke consent for specific data processing activities (enforced)."""
     from server.systems.governance.consent_store import ConsentStore
     store = ConsentStore(request.user_id)
@@ -285,7 +301,8 @@ async def revoke_consent(request: ConsentRevocationRequest):
 # ── Companion governance: age band ────────────────────────────────────────────
 
 @router.post("/age-band")
-async def set_age_band(req: AgeBandRequest):
+async def set_age_band(req: AgeBandRequest, request_ctx: Request):
+    req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Age policy is locked to 18+ — any request for a lower band is rejected.
     This endpoint only ever reports the locked 18+ state."""
     from server.systems.governance.consent_store import ConsentStore, VALID_AGE_BANDS
@@ -309,7 +326,8 @@ async def set_age_band(req: AgeBandRequest):
 # ── Companion governance: personality controls ────────────────────────────────
 
 @router.post("/personality/freeze")
-async def freeze_personality(req: FreezeRequest):
+async def freeze_personality(req: FreezeRequest, request_ctx: Request):
+    req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Pause all personality drift (sticky until unfrozen)."""
     from server.systems.governance.consent_store import ConsentStore
     store = ConsentStore(req.user_id)
@@ -319,7 +337,8 @@ async def freeze_personality(req: FreezeRequest):
 
 
 @router.post("/personality/unfreeze")
-async def unfreeze_personality(req: FreezeRequest):
+async def unfreeze_personality(req: FreezeRequest, request_ctx: Request):
+    req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Resume organic personality drift."""
     from server.systems.governance.consent_store import ConsentStore
     store = ConsentStore(req.user_id)
@@ -329,7 +348,8 @@ async def unfreeze_personality(req: FreezeRequest):
 
 
 @router.post("/personality/reset")
-async def reset_personality(req: FreezeRequest):
+async def reset_personality(req: FreezeRequest, request_ctx: Request):
+    req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Restore the default persona (drops evolution file; next turn = baseline)."""
     from server.systems.governance.consent_store import ConsentStore
     store = ConsentStore(req.user_id)
@@ -343,7 +363,7 @@ async def reset_personality(req: FreezeRequest):
 
 
 @router.get("/personality/export")
-async def export_personality(user_id: str = Query("user_default")):
+async def export_personality(user_id: str = Depends(personal_owner)):
     """Full personality bundle: live traits + evolution state + governance."""
     from server.systems.personality import PersonalitySystem
     from server.systems.governance.consent_store import ConsentStore
@@ -373,7 +393,7 @@ async def export_personality(user_id: str = Query("user_default")):
 # router was never mounted before, so nothing depended on the old shape.
 
 @router.get("/health")
-async def companion_health(user_id: str = Query("user_default")):
+async def companion_health(user_id: str = Depends(personal_owner)):
     """Stability Index, Over-Attachment Risk, reviewer scores + trends.
 
     Values come from the persisted per-turn snapshots the brain writes after
@@ -399,7 +419,8 @@ async def companion_health(user_id: str = Query("user_default")):
 
 
 @router.post("/feedback")
-async def submit_feedback(req: FeedbackRequest):
+async def submit_feedback(req: FeedbackRequest, request_ctx: Request):
+    req.user_id = _bound_user_id(req.user_id, request_ctx)
     """Transparency Satisfaction feedback — the user's direct voice.
 
     Red-line (*AI Girl 2* §4): discomfort=True immediately flips the brain's

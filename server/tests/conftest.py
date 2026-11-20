@@ -24,6 +24,16 @@ def offline_llm(monkeypatch):
     monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:1/v1")
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_device_auth(monkeypatch):
+    """Tests default to legacy auth even when the developer's .env enables
+    device authentication. Strict-mode tests opt in explicitly with
+    monkeypatch.setenv inside the test/fixture."""
+    monkeypatch.delenv("AARIYA_OWNER_ID", raising=False)
+    monkeypatch.delenv("AARIYA_ALLOW_INSECURE_DEVICE_AUTH", raising=False)
+    yield
+
+
 @pytest.fixture()
 def isolated_db(tmp_path, monkeypatch):
     """Redirect server.db to a throwaway SQLite file and initialize it.

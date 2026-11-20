@@ -16,10 +16,11 @@ configured servers and the registry keeps only its built-in tools.
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from server.systems.llm_router import get_mcp_registry
+from server.systems.security.device_auth import personal_owner
 from server.systems.mcp_client import load_server_configs, sync_remote_tools
 
 logger = logging.getLogger("aariya.tools.router")
@@ -36,14 +37,14 @@ class IngestRequest(BaseModel):
 
 
 @router.get("/tools")
-async def list_tools():
+async def list_tools(_owner: str = Depends(personal_owner)):
     """All callable tools across builtin + connected MCP servers."""
     reg = get_mcp_registry()
     return {"tools": reg.list_tools(), "count": len(reg.list_tools())}
 
 
 @router.get("/tools/mcp/status")
-async def mcp_status():
+async def mcp_status(_owner: str = Depends(personal_owner)):
     configs = load_server_configs()
     reg = get_mcp_registry()
     remote = [t for t in reg.list_tools() if t.get("source", "").startswith("mcp:")]
@@ -58,30 +59,39 @@ async def mcp_status():
 
 
 @router.post("/tools/mcp/sync")
-async def mcp_sync():
+async def mcp_sync(_owner: str = Depends(personal_owner)):
     """Discover tools from the configured MCP servers right now."""
     summary = await sync_remote_tools()
     return {"ok": True, **summary}
 
 
 @router.post("/tools/call")
-async def call_tool(req: ToolCallRequest):
+async def call_tool(
+    req: ToolCallRequest,
+    _owner: str = Depends(personal_owner),
+):
     result = await get_mcp_registry().call(req.name, req.arguments)
     return result
 
 
 @router.get("/knowledge/graph")
-async def knowledge_query(entity: str):
+async def knowledge_query(
+    entity: str,
+    _owner: str = Depends(personal_owner),
+):
     from server.systems.agent.graph_feeder import query_entity
     facts = query_entity(entity)
     return {"entity": entity, "facts": facts, "count": len(facts)}
 
 
 @router.post("/knowledge/ingest")
-async def knowledge_ingest(req: IngestRequest):
+async def knowledge_ingest(
+    req: IngestRequest,
+    owner: str = Depends(personal_owner),
+):
     """Fold the system's current real signals into the persistent graph."""
     from server.systems.agent.graph_feeder import ingest_real_signals
-    added = ingest_real_signals(req.user_id)
+    added = ingest_real_signals(owner)
     return {"ok": True, "added": added}
 
 
@@ -91,7 +101,10 @@ class CodeIndexRequest(BaseModel):
 
 
 @router.post("/knowledge/code-index")
-async def knowledge_code_index(req: CodeIndexRequest):
+async def knowledge_code_index(
+    req: CodeIndexRequest,
+    _owner: str = Depends(personal_owner),
+):
     """AST-parse real Python sources under an allowed root (AccessFIles §70)
     and fold the module/class/function structure into the graph."""
     import asyncio
@@ -108,7 +121,10 @@ async def knowledge_code_index(req: CodeIndexRequest):
 
 
 @router.get("/knowledge/symbol")
-async def knowledge_symbol(symbol: str):
+async def knowledge_symbol(
+    symbol: str,
+    _owner: str = Depends(personal_owner),
+):
     """Where does this symbol live? (defines/imports/inherits edges)"""
     from server.systems.agent.code_indexer import symbol_usages
     return symbol_usages(symbol)

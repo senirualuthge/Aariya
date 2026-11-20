@@ -14,7 +14,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 import { apiWsBase } from '../utils/apiHost';
-import { wsUrlWithToken } from '../utils/authToken';
+import { DeviceAuthError, openAuthenticatedWebSocket } from '../utils/deviceAuth';
 
 // Centralised config from Vite env or fallback to apiWsBase
 const WS_URL = import.meta.env.VITE_AGENT_WS_URL || `${apiWsBase()}/api/agents/ws`;
@@ -32,6 +32,8 @@ let sharedWs = null;
 let sharedReconnectTimer = null;
 let sharedWatchdogTimer = null;
 let sharedRefCount = 0;
+let sharedConnecting = false;
+let sharedAuthBlocked = false;
 
 function dispatchToListeners(msg) {
   listeners.forEach((cb) => {
@@ -49,9 +51,30 @@ function resetSharedWatchdog() {
   }, PING_WATCHDOG_MS);
 }
 
-function connectShared() {
-  if (sharedWs || sharedRefCount === 0) return;
-  const ws = new WebSocket(wsUrlWithToken(WS_URL));
+async function connectShared() {
+  if (sharedWs || sharedConnecting || sharedRefCount === 0 || sharedAuthBlocked) return;
+  sharedConnecting = true;
+  let ws;
+  try {
+    ws = await openAuthenticatedWebSocket(WS_URL, '/api/agents/ws');
+  } catch (err) {
+    sharedConnecting = false;
+    if (err instanceof DeviceAuthError) {
+      sharedAuthBlocked = true;
+      console.warn('[useAgentRegistry] device pairing required:', err.message);
+      dispatchToListeners({ type: 'shared_auth_required' });
+      return;
+    }
+    if (sharedRefCount > 0) {
+      sharedReconnectTimer = setTimeout(connectShared, RECONNECT_DELAY_MS);
+    }
+    return;
+  }
+  sharedConnecting = false;
+  if (sharedRefCount === 0) {
+    ws.close();
+    return;
+  }
   sharedWs = ws;
 
   ws.onopen = () => {
@@ -71,7 +94,7 @@ function connectShared() {
   ws.onclose = () => {
     clearTimeout(sharedWatchdogTimer);
     sharedWs = null;
-    if (sharedRefCount > 0) {
+    if (sharedRefCount > 0 && !sharedAuthBlocked) {
       sharedReconnectTimer = setTimeout(connectShared, RECONNECT_DELAY_MS);
     }
   };

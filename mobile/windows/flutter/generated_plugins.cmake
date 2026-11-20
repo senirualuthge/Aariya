@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   battery_plus
+  flutter_secure_storage_windows
   flutter_webrtc
   permission_handler_windows
   record_windows

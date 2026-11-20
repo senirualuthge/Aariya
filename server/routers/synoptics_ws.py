@@ -22,7 +22,10 @@ import asyncio
 import json
 import time
 
-from server.systems.security.auth import verify_ws_token
+from server.systems.security.device_auth import (
+    accept_personal_websocket,
+    authenticate_personal_websocket,
+)
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -36,10 +39,11 @@ _subscribers: List[WebSocket] = []
 @router.websocket("/ws/synoptics")
 async def synoptics_websocket(ws: WebSocket):
     """Stream synoptics_update frames to a client (e.g. ghost/orbit overlay)."""
-    if not await verify_ws_token(ws):
+    principal = await authenticate_personal_websocket(ws, "/ws/synoptics")
+    if principal is None:
         return
 
-    await ws.accept()
+    await accept_personal_websocket(ws, principal)
     _subscribers.append(ws)
     try:
         while True:

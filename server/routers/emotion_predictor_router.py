@@ -26,8 +26,9 @@ Mount in main.py:
 
 import asyncio
 import logging
+from fastapi import APIRouter, Request
 
-from fastapi import APIRouter
+from server.systems.security.device_auth import device_auth_enabled, require_device
 
 logger = logging.getLogger("aariya.emotion_predictor_api")
 router = APIRouter(prefix="/api/emotion", tags=["Emotion Predictor"])
@@ -80,7 +81,15 @@ def _status_payload(user_id: str, window: int) -> dict:
 
 
 @router.get("/predictor")
-async def predictor_status(user_id: str = "user_default", window: int = 40):
+async def predictor_status(
+    user_id: str = "user_default",
+    window: int = 40,
+    request: Request = None,  # type: ignore[assignment]
+):
+    # In device-auth mode the identity comes from the credential, not the query
+    # (direct Python callers pass user_id explicitly and have no request).
+    if device_auth_enabled() and request is not None:
+        user_id = require_device(request).owner_id
     """Training status + latest forecast for the emotion predictor."""
     window = max(MIN_WINDOW, min(window, MAX_WINDOW))
     try:

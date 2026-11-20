@@ -3,8 +3,7 @@ import useStore from '../store';
 import { brainClient, BRAIN_THOUGHT_EVENT } from './brainClient';
 import { eventBus } from '../core/EventBus';
 import { apiBase, apiWsBase } from '../utils/apiHost';
-import { wsUrlWithToken } from '../utils/authToken';
-import { getUserId } from './userIdentity';
+import { openAuthenticatedWebSocket } from '../utils/deviceAuth';
 
 /**
  * VoiceSystem — lives for the whole session.
@@ -70,6 +69,41 @@ function VoiceSystem() {
     // lines, so you can watch her think even when she isn't speaking.
     const unsubThoughts = eventBus.subscribe(BRAIN_THOUGHT_EVENT, addThought);
 
+    // Helper: keep the live strip's plan-status chip in sync with the daemon's
+    // inner-world snapshot (the authoritative plan state). Clears the chip when
+    // no plans remain so a stale "AWAITING APPROVAL" never lingers.
+    function updatePlanStatusFromState(state) {
+      if (!state || typeof state !== 'object') return;
+      const plans = state.plans || [];
+      const awaiting = plans.find((p) => p.status === 'awaiting_approval');
+      const running = plans.find((p) => p.status === 'running');
+      const latest = plans[0];
+      const goal = (state.active_goal || {}).description || 'a goal';
+      if (awaiting) {
+        setPlanStatus({
+          plan_id: awaiting.id,
+          goal,
+          status: 'awaiting_approval',
+          risk_level: awaiting.risk_level,
+        });
+      } else if (running) {
+        setPlanStatus({
+          plan_id: running.id,
+          goal,
+          status: 'running',
+          risk_level: running.risk_level,
+        });
+      } else if (latest) {
+        setPlanStatus({
+          plan_id: latest.id,
+          goal,
+          status: latest.status,
+        });
+      } else {
+        setPlanStatus(null);
+      }
+    }
+
     // Hydrate the Mind panel from persisted state on load (goals, plans,
     // awaiting-approval card, insight feed, audit trail). Also seed the live
     // strip's plan-status chip so it isn't empty on first paint.
@@ -85,11 +119,18 @@ function VoiceSystem() {
 
     // Carry the active user id on the handshake so the backend binds this
     // session to the real tenant instead of the hardcoded 'user_default'.
-    ws.current = new WebSocket(
-      wsUrlWithToken(
-        `${apiWsBase()}/ws/dashboard/stream?user_id=${encodeURIComponent(getUserId())}`
-      )
-    );
+    // Each private socket asks for a one-use ticket first; the credential is
+    // never placed in the URL. A refused ticket means "pair again", not retry.
+    const connectDashboard = async () => {
+      try {
+        ws.current = await openAuthenticatedWebSocket(
+          `${apiWsBase()}/ws/dashboard/stream`,
+          '/ws/dashboard/stream',
+        );
+      } catch (err) {
+        console.warn('[VoiceSystem] dashboard socket authentication failed', err);
+        return;
+      }
 
     ws.current.onopen = () => {
       registerSender((msg) => {
@@ -248,48 +289,24 @@ function VoiceSystem() {
           break;
       }
     };
-
-    // Helper: keep the live strip's plan-status chip in sync with the daemon's
-    // inner-world snapshot (the authoritative plan state). Clears the chip when
-    // no plans remain so a stale "AWAITING APPROVAL" never lingers.
-    function updatePlanStatusFromState(state) {
-      if (!state || typeof state !== 'object') return;
-      const plans = state.plans || [];
-      const awaiting = plans.find((p) => p.status === 'awaiting_approval');
-      const running = plans.find((p) => p.status === 'running');
-      const latest = plans[0];
-      const goal = (state.active_goal || {}).description || 'a goal';
-      if (awaiting) {
-        setPlanStatus({
-          plan_id: awaiting.id,
-          goal,
-          status: 'awaiting_approval',
-          risk_level: awaiting.risk_level,
-        });
-      } else if (running) {
-        setPlanStatus({
-          plan_id: running.id,
-          goal,
-          status: 'running',
-          risk_level: running.risk_level,
-        });
-      } else if (latest) {
-        setPlanStatus({
-          plan_id: latest.id,
-          goal,
-          status: latest.status,
-        });
-      } else {
-        setPlanStatus(null);
-      }
-    }
+    };
+    connectDashboard();
 
     // Dedicated high-frequency synoptics frame stream (Agents Swarm Visualize
     // §238). The dashboard stream carries `state.update` with the full synoptic
     // dict; this second channel feeds the predictive ghost/orbit overlays the
     // per-frame `state[] / prediction / anomalies / features` contract without
     // waiting for a full brain round-trip.
-    synWs.current = new WebSocket(wsUrlWithToken(`${apiWsBase()}/ws/synoptics`));
+    const connectSynoptics = async () => {
+      try {
+        synWs.current = await openAuthenticatedWebSocket(
+          `${apiWsBase()}/ws/synoptics`,
+          '/ws/synoptics',
+        );
+      } catch (err) {
+        console.warn('[VoiceSystem] synoptics socket authentication failed', err);
+        return;
+      }
     synWs.current.onopen = () => {
       synWs.current.send(JSON.stringify({ subscribe: true }));
     };
@@ -359,10 +376,12 @@ function VoiceSystem() {
         synoptic_frame_ts: frame.timestamp,
       }));
     };
-    synWs.current.onerror = () => {
-      // Optional overlay stream — fail silently; state.update still covers it.
-      synWs.current?.close();
+      synWs.current.onerror = () => {
+        // Optional overlay stream — fail silently; state.update still covers it.
+        synWs.current?.close();
+      };
     };
+    connectSynoptics();
 
     return () => {
       registerSender(null);

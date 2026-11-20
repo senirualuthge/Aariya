@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'ack_outbox.dart';
+import 'device_auth_service.dart';
 import 'server_config.dart';
 
 /// Multi-channel WebSocket client for the Aariya mobile app.
@@ -72,6 +73,9 @@ class WebSocketService {
   static const Duration _maxBackoff = Duration(seconds: 30);
   Timer? _reconnectTimer;
   int _reconnectAttempt = 0;
+  // A revoked/missing credential is terminal for this session: reconnecting
+  // would only be refused again, so wait for the user to pair.
+  bool _authBlocked = false;
 
   // ── Connection management ───────────────────────────────────────────────────
 
@@ -79,7 +83,7 @@ class WebSocketService {
   ///
   /// Idempotent — repeated calls while connected/connecting return the same
   /// pending future instead of clobbering the active connection.
-  Future<void> connect([String? url]) {
+  Future<void> connect([String? url]) async {
     if (_disposed) return Future.error(StateError('WebSocketService disposed'));
     if (isConnected.value || _connectFuture != null) {
       return _connectFuture ?? Future.value();
@@ -87,15 +91,28 @@ class WebSocketService {
 
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _authBlocked = false;
 
     final completer = Completer<void>();
     _connectFuture = completer.future;
 
     try {
       final baseUri = _resolveBase(url);
-      _openChat(_channelUrl(baseUri, '/ws/mobile'));
-      _openControl(_channelUrl(baseUri, '/ws/mobile/control'));
-      _openAnalytics(_channelUrl(baseUri, '/ws/mobile/analytics'));
+      await Future.wait([
+        _openChat(_channelUrl(baseUri, '/ws/mobile')),
+        _openControl(_channelUrl(baseUri, '/ws/mobile/control')),
+        _openAnalytics(_channelUrl(baseUri, '/ws/mobile/analytics')),
+      ]);
+    } on DeviceAuthException catch (e) {
+      debugPrint('[WS] authentication failed: ${e.message}');
+      _authBlocked = e.needsPairing;
+      isConnected.value = false;
+      if (_authBlocked) DeviceAuthService.instance.needsPairing.value = true;
+      _connectFuture = null;
+      // Complete rather than leaving the future pending: bootstrap callers
+      // must not hang while the user re-pairs the device.
+      if (!completer.isCompleted) completer.complete();
+      return completer.future;
     } catch (e) {
       debugPrint('[WS] connect failed: $e');
       isConnected.value = false;
@@ -137,24 +154,22 @@ class WebSocketService {
     return Uri.parse(ServerConfig.instance.wsBase);
   }
 
-  /// URL for one channel, tagged with the phone's stable [ServerConfig.clientId].
-  ///
-  /// All three channels carry the same id so the backend counts this phone as
-  /// ONE device — without it the backend can only see sockets, and a single
-  /// phone's chat + control pair showed up as "2 devices connected".
+  /// URL for one channel. Once paired, the backend knows this phone's device id
+  /// from the ticket, so no client-supplied identity belongs in the URL.
   String _channelUrl(Uri baseUri, String path) {
-    final clientId = ServerConfig.instance.clientId;
     return Uri(
       scheme: 'ws',
       host: baseUri.host,
       port: baseUri.port,
       path: path,
-      queryParameters: clientId.isEmpty ? null : {'client_id': clientId},
     ).toString();
   }
 
-  void _openChat(String url) {
-    final channel = WebSocketChannel.connect(Uri.parse(url));
+  Future<void> _openChat(String url) async {
+    final channel = await DeviceAuthService.instance.openAuthenticatedChannel(
+      Uri.parse(url),
+      '/ws/mobile',
+    );
     _chatChannel = channel;
     _observeConnectFailure(channel);
     _subscribeChannel(channel, _messagesController, onError: () {
@@ -188,8 +203,11 @@ class WebSocketService {
     _subscribeChannel(channel, _messagesController);
   }
 
-  void _openControl(String url) {
-    final channel = WebSocketChannel.connect(Uri.parse(url));
+  Future<void> _openControl(String url) async {
+    final channel = await DeviceAuthService.instance.openAuthenticatedChannel(
+      Uri.parse(url),
+      '/ws/mobile/control',
+    );
     _controlChannel = channel;
     _observeConnectFailure(channel);
     _subscribeChannel(channel, _messagesController, onError: () {
@@ -199,8 +217,11 @@ class WebSocketService {
     });
   }
 
-  void _openAnalytics(String url) {
-    final channel = WebSocketChannel.connect(Uri.parse(url));
+  Future<void> _openAnalytics(String url) async {
+    final channel = await DeviceAuthService.instance.openAuthenticatedChannel(
+      Uri.parse(url),
+      '/ws/mobile/analytics',
+    );
     _analyticsChannel = channel;
     _observeConnectFailure(channel);
     _subscribeChannel(channel, _analyticsController);
@@ -264,6 +285,7 @@ class WebSocketService {
   /// Reconnects with exponential backoff if a live channel dropped.
   void _scheduleReconnect() {
     if (_disposed) return;
+    if (_authBlocked || DeviceAuthService.instance.needsPairing.value) return;
     if (_reconnectTimer != null) return;
 
     final attempt = _reconnectAttempt++;

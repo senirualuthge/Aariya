@@ -1,5 +1,5 @@
 /* global process */
-import { app, BrowserWindow, session, ipcMain } from 'electron';
+import { app, BrowserWindow, session, ipcMain, safeStorage } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -201,6 +201,65 @@ ipcMain.on('open-analytics', () => {
     analyticsWindow.on('closed', () => {
         analyticsWindow = null;
     });
+});
+
+// ── Device credential storage (Patch 2/3) ─────────────────────────────────
+// The long-lived device credential must never live in renderer localStorage.
+// safeStorage encrypts it with the OS keychain/keystore; the renderer reaches
+// it only through the three narrow IPC calls below, and every call is refused
+// unless it comes from the app's own UI origin.
+function isTrustedIpcSender(event) {
+    try {
+        return new URL(event.senderFrame?.url || '').origin === DEV_SERVER_ORIGIN;
+    } catch {
+        return false;
+    }
+}
+
+function getDeviceCredentialPath() {
+    return path.join(app.getPath('userData'), 'device-credential.bin');
+}
+
+ipcMain.handle('auth:store-device-credential', (event, credential) => {
+    if (!isTrustedIpcSender(event)) return false;
+    if (typeof credential !== 'string' || !credential.trim()) return false;
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    try {
+        fs.writeFileSync(
+            getDeviceCredentialPath(),
+            safeStorage.encryptString(credential.trim()),
+            { mode: 0o600 },
+        );
+        return true;
+    } catch (err) {
+        console.error('[DeviceAuth] Failed to store credential:', err);
+        return false;
+    }
+});
+
+ipcMain.handle('auth:get-device-credential', (event) => {
+    if (!isTrustedIpcSender(event)) return null;
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    try {
+        const file = getDeviceCredentialPath();
+        if (!fs.existsSync(file)) return null;
+        return safeStorage.decryptString(fs.readFileSync(file));
+    } catch (err) {
+        console.error('[DeviceAuth] Failed to read credential:', err);
+        return null;
+    }
+});
+
+ipcMain.handle('auth:clear-device-credential', (event) => {
+    if (!isTrustedIpcSender(event)) return false;
+    try {
+        const file = getDeviceCredentialPath();
+        if (fs.existsSync(file)) fs.unlinkSync(file);
+        return true;
+    } catch (err) {
+        console.error('[DeviceAuth] Failed to clear credential:', err);
+        return false;
+    }
 });
 
 app.whenReady().then(async () => {

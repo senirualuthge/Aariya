@@ -62,7 +62,10 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from server.systems.gev.gev_client import get_gev_client, BoundingBox
 from server.systems.gev.gev_agent import get_gev_agent
 from server.systems.world_model.world_state import get_world_state
-from server.systems.security.auth import verify_ws_token
+from server.systems.security.device_auth import (
+    accept_personal_websocket,
+    authenticate_personal_websocket,
+)
 
 logger = logging.getLogger("aariya.gev_router")
 router = APIRouter(prefix="/api/gev", tags=["GEV Intelligence"])
@@ -435,9 +438,10 @@ async def gev_stream(ws: WebSocket):
     (if the agent's cache is stale), then streams periodic refreshes
     only while clients are connected.
     """
-    if not await verify_ws_token(ws):
+    principal = await authenticate_personal_websocket(ws, "/api/gev/stream")
+    if principal is None:
         return
-    await ws.accept()
+    await accept_personal_websocket(ws, principal)
     _ws_clients.add(ws)
     logger.info("[GEV WS] client connected (%d total)", len(_ws_clients))
 
@@ -489,9 +493,10 @@ async def gev_diff_stream(ws: WebSocket):
     ⚡ Bandwidth-efficient: only sends items that were added, removed,
     or updated since the last snapshot, rather than the full payload.
     """
-    if not await verify_ws_token(ws):
+    principal = await authenticate_personal_websocket(ws, "/api/gev/stream-diff")
+    if principal is None:
         return
-    await ws.accept()
+    await accept_personal_websocket(ws, principal)
     _ws_diff_clients.add(ws)
     logger.info("[GEV WS-DIFF] client connected (%d total)", len(_ws_diff_clients))
 
