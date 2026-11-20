@@ -26,6 +26,12 @@ Snapshot sections:
   mobile    — mobile app performance + health, folded from the three live
               mobile swarm agents (gateway / analytics / dashboard WS). The
               panel shows this section only while the app is connected.
+  cognitive_sessions — live coordination counters from the shared
+              cognitive-session coordinator (sessions held in this process,
+              cumulative idle evictions, turns that queued behind another
+              turn for the same user, total queue wait) plus per-user rows:
+              idle age, whether that user's turn lock is held, how long the
+              running turn has taken, and how many turns are queued.
   history   — rolling window of CPU / RAM / mobile-client samples so the
               frontend can render sparklines without keeping its own store.
 
@@ -62,6 +68,45 @@ HISTORY_LEN = 60
 HEAVY_EVERY_N_TICKS = 10
 # How often the auto-discovered function list is refreshed from the registry.
 FUNCTIONS_REFRESH_SECONDS = 15.0
+
+# Cognitive-turn pressure defaults (System Health warnings). A turn longer
+# than the turn threshold, or more queued turns than the queue threshold,
+# means surfaces are contending for that brain. Both are overridable via
+# AARIYA_TURN_WARN_SECONDS / AARIYA_QUEUE_WARN_TURNS and resolved per call.
+DEFAULT_TURN_WARN_SECONDS = 30.0
+DEFAULT_QUEUE_WARN_TURNS = 2
+
+
+def _env_positive_number(name: str, default, cast):
+    """Read a positive number from the environment, falling back loudly."""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = cast(raw.strip())
+    except (TypeError, ValueError):
+        logger.warning(
+            "[system_health] invalid %s=%r — using %s", name, raw, default
+        )
+        return default
+    if value <= 0:
+        logger.warning("[system_health] %s must be > 0 — using %s", name, default)
+        return default
+    return value
+
+
+def turn_warn_seconds() -> float:
+    """Long-turn warning threshold (AARIYA_TURN_WARN_SECONDS, default 30s)."""
+    return float(_env_positive_number(
+        "AARIYA_TURN_WARN_SECONDS", DEFAULT_TURN_WARN_SECONDS, float
+    ))
+
+
+def queue_warn_turns() -> int:
+    """Queued-turn warning threshold (AARIYA_QUEUE_WARN_TURNS, default 2)."""
+    return int(_env_positive_number(
+        "AARIYA_QUEUE_WARN_TURNS", DEFAULT_QUEUE_WARN_TURNS, int
+    ))
 
 # Health thresholds used by the score + status derivation.
 CPU_WARN = 80.0
@@ -284,6 +329,61 @@ def _probe_runtime_telemetry() -> dict:
         return _unknown("not loaded")
 
 
+def _probe_cognitive_sessions() -> dict:
+    """Flag long-running turns and growing turn queues per user.
+
+    Surfaces as its own `checks` row (warn) so the dashboard shows WHY the
+    score dropped, and feeds the explicit penalties in `_compute_score`.
+    """
+    try:
+        from server.systems.cognitive_session_coordinator import cognitive_sessions
+        turn_warn = turn_warn_seconds()
+        queue_warn = queue_warn_turns()
+        stats = cognitive_sessions.stats()
+        users = stats.get("users") or []
+        long_turns = [
+            {
+                "user_id": row.get("user_id"),
+                "seconds": row.get("turn_elapsed_seconds"),
+            }
+            for row in users
+            if (row.get("turn_elapsed_seconds") or 0.0) >= turn_warn
+        ]
+        queued = [
+            {
+                "user_id": row.get("user_id"),
+                "waiting_turns": row.get("waiting_turns"),
+            }
+            for row in users
+            if (row.get("waiting_turns") or 0) >= queue_warn
+        ]
+        meta = {
+            "sessions": int(stats.get("sessions", 0)),
+            "long_turns": long_turns,
+            "queued_users": queued,
+        }
+        if long_turns or queued:
+            parts = []
+            if long_turns:
+                worst = max(float(t["seconds"]) for t in long_turns)
+                parts.append(
+                    f"{len(long_turns)} turn(s) over {turn_warn:.0f}s "
+                    f"(longest {worst:.1f}s)"
+                )
+            if queued:
+                worst_q = max(int(q["waiting_turns"]) for q in queued)
+                parts.append(
+                    f"{len(queued)} user(s) with queued turns (max {worst_q})"
+                )
+            return _warn("; ".join(parts), meta=meta)
+        return _ok(
+            f"{meta['sessions']} session(s), no long turns or queues",
+            meta=meta,
+        )
+    except Exception:
+        return _unknown("coordinator not loaded")
+
+
 def _probe_gev() -> dict:
     """GEV health: on-demand agent status, last fetch age, and server reachability."""
     try:
@@ -342,6 +442,7 @@ PROBES: dict[str, Callable[[], dict]] = {
     "meta_cognition": _probe_meta_cognition,
     "runtime_telemetry": _probe_runtime_telemetry,
     "gev": _probe_gev,
+    "cognitive_sessions": _probe_cognitive_sessions,
 }
 
 #: Human-friendly labels for the probe names (frontend falls back to the name).
@@ -362,6 +463,7 @@ PROBE_LABELS: dict[str, str] = {
     "meta_cognition": "Meta-Cognition",
     "runtime_telemetry": "Runtime Telemetry",
     "gev": "GEV (God's Eye View)",
+    "cognitive_sessions": "Cognitive Sessions",
 }
 
 
@@ -579,9 +681,37 @@ def _collect_mobile() -> dict:
     return out
 
 
+def _collect_cognitive_sessions() -> dict:
+    """Coordination counters from this process's cognitive session coordinator.
+
+    Sessions held in memory, cumulative idle evictions, and how often a turn
+    had to queue behind another turn for the same user (plus the total wait).
+    A rising lock-wait count means phones/dashboards are contending for one
+    user's brain — expected occasionally, but worth seeing when it spikes.
+    """
+    try:
+        from server.systems.cognitive_session_coordinator import cognitive_sessions
+        return cognitive_sessions.stats()
+    except Exception as exc:  # never break the health frame
+        return {
+            "sessions": 0,
+            "idle_evictions": 0,
+            "lock_waits": 0,
+            "lock_wait_seconds_total": 0.0,
+            "users": [],
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+
 # ── Health score ──────────────────────────────────────────────────────────────
 
-def _compute_score(server: dict, disks: list[dict], checks: list[dict], mobile: dict) -> int:
+def _compute_score(
+    server: dict,
+    disks: list[dict],
+    checks: list[dict],
+    mobile: dict,
+    cognitive: Optional[dict] = None,
+) -> int:
     score = 100.0
 
     cpu = server.get("cpu_percent") or 0.0
@@ -601,6 +731,22 @@ def _compute_score(server: dict, disks: list[dict], checks: list[dict], mobile: 
 
     if not mobile.get("connected") and mobile.get("last_activity_ts"):
         score -= 2.0  # was connected before, now silent
+
+    # Cognitive-turn pressure: a turn running past the warning threshold, or
+    # turns piling up behind one user's lock, means a surface is (or several
+    # are) waiting on that brain. Graded and capped so one stuck turn cannot
+    # dominate the whole score.
+    cognitive_penalty = 0.0
+    turn_warn = turn_warn_seconds()
+    queue_warn = queue_warn_turns()
+    for row in (cognitive or {}).get("users") or []:
+        elapsed = float(row.get("turn_elapsed_seconds") or 0.0)
+        if elapsed > turn_warn:
+            cognitive_penalty += min(6.0, (elapsed - turn_warn) / 15.0)
+        waiting = int(row.get("waiting_turns") or 0)
+        if waiting >= queue_warn:
+            cognitive_penalty += min(5.0, 2.0 + (waiting - queue_warn))
+    score -= min(15.0, cognitive_penalty)
 
     return max(0, min(100, round(score)))
 
@@ -695,6 +841,7 @@ class SystemHealthMonitor:
         functions = self._functions_cache
 
         mobile = _collect_mobile()
+        cognitive = _collect_cognitive_sessions()
 
         # Rolling history for sparklines (locked — shared with REST callers).
         with self._lock:
@@ -708,7 +855,8 @@ class SystemHealthMonitor:
                 "checks": checks,
                 "functions": functions,
                 "mobile": mobile,
-                "score": _compute_score(server, disks, checks, mobile),
+                "cognitive_sessions": cognitive,
+                "score": _compute_score(server, disks, checks, mobile, cognitive),
                 "history": {
                     "cpu": list(self._history_cpu),
                     "ram": list(self._history_ram),

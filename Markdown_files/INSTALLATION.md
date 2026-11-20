@@ -136,8 +136,11 @@ For production deployment:
 
 5. **Start server with production settings:**
    ```bash
-   uvicorn server.main:app --host 0.0.0.0 --port 8000 --workers 4
+   uvicorn server.main:app --host 0.0.0.0 --port 8000 --workers 1
    ```
+   > Cognitive sessions are single-process: the server refuses to boot with
+   > more than one worker (`--workers` / `WEB_CONCURRENCY`). Keep one worker
+   > until the Redis-backed distributed coordinator is implemented.
 
 ## Testing
 

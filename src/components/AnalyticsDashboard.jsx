@@ -19,6 +19,7 @@ import { BRAIN_RAG_EVENT } from '../systems/brainClient';
 import { subscribeMetrics, sendMetricsCommand } from '../systems/metricsClient';
 import { isBuildSummaryFresh, BUILD_WARN_MAX_AGE_HOURS } from '../utils/buildFreshness.js';
 import { apiBase, apiWsBase } from '../utils/apiHost';
+import { wsUrlWithToken } from '../utils/authToken';
 import { getUserId } from '../systems/userIdentity';
 import { panForSlot } from '../systems/spatialAudio';
 import { schedulePredictorPoll, startUptimeTicker } from '../utils/backgroundPolls';
@@ -187,7 +188,9 @@ function useSecurityStream(enabled = true) {
     function connect() {
       if (unmountedRef.current) return;
       // Connect to the dedicated 2-second background polling endpoint
-      const ws = new WebSocket(`${apiWsBase()}/api/security/stream`);
+      const ws = new WebSocket(
+        wsUrlWithToken(`${apiWsBase()}/api/security/stream`)
+      );
       wsRef.current = ws;
 
       ws.onmessage = (e) => {

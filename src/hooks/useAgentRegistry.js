@@ -14,6 +14,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 import { apiWsBase } from '../utils/apiHost';
+import { wsUrlWithToken } from '../utils/authToken';
 
 // Centralised config from Vite env or fallback to apiWsBase
 const WS_URL = import.meta.env.VITE_AGENT_WS_URL || `${apiWsBase()}/api/agents/ws`;
@@ -50,7 +51,7 @@ function resetSharedWatchdog() {
 
 function connectShared() {
   if (sharedWs || sharedRefCount === 0) return;
-  const ws = new WebSocket(WS_URL);
+  const ws = new WebSocket(wsUrlWithToken(WS_URL));
   sharedWs = ws;
 
   ws.onopen = () => {

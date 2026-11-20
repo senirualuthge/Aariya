@@ -3,6 +3,7 @@ import useStore from '../store';
 import { brainClient, BRAIN_THOUGHT_EVENT } from './brainClient';
 import { eventBus } from '../core/EventBus';
 import { apiBase, apiWsBase } from '../utils/apiHost';
+import { wsUrlWithToken } from '../utils/authToken';
 import { getUserId } from './userIdentity';
 
 /**
@@ -85,7 +86,9 @@ function VoiceSystem() {
     // Carry the active user id on the handshake so the backend binds this
     // session to the real tenant instead of the hardcoded 'user_default'.
     ws.current = new WebSocket(
-      `${apiWsBase()}/ws/dashboard/stream?user_id=${encodeURIComponent(getUserId())}`
+      wsUrlWithToken(
+        `${apiWsBase()}/ws/dashboard/stream?user_id=${encodeURIComponent(getUserId())}`
+      )
     );
 
     ws.current.onopen = () => {
@@ -286,7 +289,7 @@ function VoiceSystem() {
     // dict; this second channel feeds the predictive ghost/orbit overlays the
     // per-frame `state[] / prediction / anomalies / features` contract without
     // waiting for a full brain round-trip.
-    synWs.current = new WebSocket(`${apiWsBase()}/ws/synoptics`);
+    synWs.current = new WebSocket(wsUrlWithToken(`${apiWsBase()}/ws/synoptics`));
     synWs.current.onopen = () => {
       synWs.current.send(JSON.stringify({ subscribe: true }));
     };

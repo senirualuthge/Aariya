@@ -79,7 +79,12 @@ class _StubMemoryHierarchy:
 
 @pytest.fixture(autouse=True)
 def _hermetic_backend(monkeypatch, isolated_db):
-    monkeypatch.setattr(server_main, "BrainV2", _FakeBrain)
+    # Brains are built lazily by the shared cognitive-session coordinator (not
+    # on socket connect), so the double is installed there.
+    from server.systems import cognitive_session_coordinator as cognitive_coordinator
+
+    monkeypatch.setattr(cognitive_coordinator, "BrainV2", _FakeBrain)
+    cognitive_coordinator.cognitive_sessions._sessions.clear()
     monkeypatch.setattr(server_main, "get_daemon", lambda *a, **k: _NoopDaemon())
     monkeypatch.setattr(server_main, "get_watcher", lambda *a, **k: _NoopWatcher())
     monkeypatch.setattr(

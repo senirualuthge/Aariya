@@ -10,6 +10,7 @@
 // each message out to subscribers that match it.
 import { eventBus } from '../core/EventBus';
 import { apiWsBase } from '../utils/apiHost';
+import { wsUrlWithToken } from '../utils/authToken';
 
 const METRICS_WS_URL = `${apiWsBase()}/ws/brain_metrics`;
 const RECONNECT_DELAY_MS = 4000;
@@ -36,7 +37,7 @@ function dispatch(msg) {
 
 function connect() {
   if (sharedWs || refCount === 0) return;
-  const ws = new WebSocket(METRICS_WS_URL);
+  const ws = new WebSocket(wsUrlWithToken(METRICS_WS_URL));
   sharedWs = ws;
 
   ws.onopen = () => {

@@ -12,9 +12,12 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from server.protocol import BrainState, MultimodalInput, MultimodalOutput
+from server.protocol import BrainState, MultimodalInput
 from server.db import get_db_connection, init_db
-from server.systems.brain_v2 import BrainV2
+from server.systems.cognitive_session_coordinator import (
+    assert_single_worker,
+    cognitive_sessions,
+)
 from server.infrastructure.session_manager import SessionManager
 from server.infrastructure.signal_bus import SignalBus
 from server.systems.signal_bus import bus as admin_signal_bus
@@ -91,8 +94,25 @@ _gap_detect_lock = asyncio.Lock()
 # --- BUG #18 FIX: use lifespan context manager instead of deprecated @app.on_event ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail fast on a multi-worker launch: each worker would hold its own
+    # coordinator + brain per user. One worker is required until distributed
+    # (Redis-backed) coordination exists.
+    assert_single_worker()
+
     logger.info("Aariya Brain FIXV4 Starting Up...")
     init_db()
+
+    # ── IDLE COGNITIVE SESSION EVICTION ──────────────────────────────────────
+    # A long-lived process must not keep one BrainV2 per user that ever
+    # connected. Sessions idle past the TTL are dropped by a background sweep;
+    # the next turn rebuilds that brain from the persistent memory/personality
+    # stores (the same recovery path as a restart).
+    session_sweeper = asyncio.create_task(
+        cognitive_sessions.eviction_loop(
+            idle_seconds=float(os.getenv("AARIYA_SESSION_IDLE_TTL_SECONDS", "1800")),
+            interval_seconds=float(os.getenv("AARIYA_SESSION_SWEEP_INTERVAL_SECONDS", "60")),
+        )
+    )
 
     # Apply SQL migrations (trust/contradiction/episodic/pattern/audit tables
     # etc.) to the analytics store. Never ran before — every module querying
@@ -207,6 +227,13 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_brief_broadcaster())
 
     yield
+
+    # Stop idle-session eviction before tearing the rest down.
+    session_sweeper.cancel()
+    try:
+        await session_sweeper
+    except asyncio.CancelledError:
+        pass
 
     await daemon.stop()
     watcher.stop()
@@ -325,7 +352,6 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
     # provider). Falls back to 'user_default' only when a legacy client connects
     # without the query param — the fallback is not the primary path.
     user_id = websocket.query_params.get("user_id") or "user_default"
-    brain = BrainV2(user_id)
 
     session_manager.add_surface("main", user_id, websocket)
     signal_bus.emit("session", {"endpoint": endpoint_name, "user_id": user_id}, "info")
@@ -391,7 +417,14 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
                     "timestamp": time.time(),
                 }))
 
-            output: MultimodalOutput = await brain.process(input_model, on_token=_stream_token)
+            # One brain per user for the whole process: a concurrent phone turn
+            # and this dashboard turn share the same cognitive session (turns
+            # are serialized by the coordinator), instead of racing two brains.
+            output, brain_state = await cognitive_sessions.process_turn(
+                user_id,
+                input_model,
+                on_token=_stream_token,
+            )
 
             # B4: label the reply with the REAL diarized speaker it is addressed
             # to (None when Meeting Mode is off / nothing has been diarized) so
@@ -421,7 +454,7 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
                     "timestamp": time.time(),
                 })
 
-            await session_manager.broadcast_state(user_id, brain.get_state())
+            await session_manager.broadcast_state(user_id, brain_state)
             signal_bus.emit("response", {"user_id": user_id}, "info")
 
             # Avatar motion bridge (AI Girl 2 §"AVATAR RENDERER"): broadcast the
@@ -430,7 +463,7 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
             # avatar + any web embodiment consume the same live motion state.
             # These are measured values from this turn — never synthetic.
             try:
-                _te = (brain.get_state().synoptic or {}).get("trait_engine") or {}
+                _te = (brain_state.synoptic or {}).get("trait_engine") or {}
                 if _te.get("avatar"):
                     await session_manager.broadcast({
                         "type": "avatar.update",
@@ -449,7 +482,7 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
             # dashboard's Event Log renders these as live events — trust /
             # emotion / reply length are measured this turn, never fabricated.
             try:
-                _bs = brain.get_state()
+                _bs = brain_state
                 await admin_signal_bus.emit_signal(
                     "telemetry", "info", "BRAIN",
                     {
@@ -470,13 +503,13 @@ async def _run_cognitive_loop(websocket: WebSocket, endpoint_name: str):
                     build_synoptics_frame,
                     broadcast_synoptics_frame,
                 )
-                frame = build_synoptics_frame(brain.get_state().synoptic)
+                frame = build_synoptics_frame(brain_state.synoptic)
                 await broadcast_synoptics_frame(frame)
             except Exception:
                 pass
 
             # Feed the real brain state to the 24/7 autonomy daemon
-            daemon.record_snapshot(brain.get_state())
+            daemon.record_snapshot(brain_state)
 
             # Non-blocking knowledge-gap detection after each real response
             if input_model.text and output.text:
@@ -607,7 +640,6 @@ async def websocket_mobile_chat(websocket: WebSocket):
     # Multi-user: the phone supplies ?user_id=<id>; fall back to 'user_default'
     # only for legacy clients that omit it.
     user_id = websocket.query_params.get("user_id") or "user_default"
-    brain = BrainV2(user_id)
     session_manager.add_surface("mobile", user_id, websocket)
     signal_bus.emit("session", {"endpoint": "mobile", "user_id": user_id}, "info")
 
@@ -650,11 +682,16 @@ async def websocket_mobile_chat(websocket: WebSocket):
                 metadata={"mode": message.get("mode", "voice")}
             )
 
-            output: MultimodalOutput = await brain.process(input_model)
+            # Same per-user cognitive session as /ws/brain — a phone turn and a
+            # computer turn for the same person never run two brains.
+            output, brain_state = await cognitive_sessions.process_turn(
+                user_id,
+                input_model,
+            )
 
             # Feed the 24/7 autonomy daemon (silence reset + brain snapshot)
             get_daemon().on_user_message(user_id)
-            get_daemon().record_snapshot(brain.get_state())
+            get_daemon().record_snapshot(brain_state)
 
             # Reply in mobile protocol format
             await websocket.send_text(json.dumps({
@@ -671,7 +708,7 @@ async def websocket_mobile_chat(websocket: WebSocket):
             # socket still receives its own frame (it's registered under the
             # "mobile" surface). broadcast_state uses model_dump(mode="json")
             # (BUG #5 FIX) so the datetime timestamp serializes to an ISO string.
-            await session_manager.broadcast_state(user_id, brain.get_state())
+            await session_manager.broadcast_state(user_id, brain_state)
 
             # Broadcast kill-switch / feature-flag state so mobile stays in sync.
             try:
@@ -682,7 +719,7 @@ async def websocket_mobile_chat(websocket: WebSocket):
 
             # Real event log: real mobile turn telemetry (no synthetic data).
             try:
-                _bs = brain.get_state()
+                _bs = brain_state
                 await admin_signal_bus.emit_signal(
                     "telemetry", "info", "MOBILE",
                     {

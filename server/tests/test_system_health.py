@@ -9,12 +9,17 @@ mobile telemetry, health score, probe registry).
 import pytest
 
 from server.systems.system_health import (
+    DEFAULT_QUEUE_WARN_TURNS,
+    DEFAULT_TURN_WARN_SECONDS,
     PROBES,
     SystemHealthMonitor,
     get_system_health,
     _collect_functions,
     _collect_mobile,
     _compute_score,
+    _probe_cognitive_sessions,
+    queue_warn_turns,
+    turn_warn_seconds,
     _ok,
     _warn,
     _down,
@@ -35,13 +40,53 @@ def _fresh_monitor():
 def test_snapshot_has_all_sections():
     snap = get_system_health().collect()
 
-    assert set(snap) >= {"ts", "server", "checks", "functions", "mobile", "score", "history"}
+    assert set(snap) >= {
+        "ts", "server", "checks", "functions", "mobile",
+        "cognitive_sessions", "score", "history",
+    }
     assert isinstance(snap["ts"], float)
     assert isinstance(snap["score"], int) and 0 <= snap["score"] <= 100
     assert isinstance(snap["checks"], list)
     assert isinstance(snap["functions"], list)
     assert isinstance(snap["mobile"], dict)
     assert set(snap["history"]) >= {"cpu", "ram", "mobile_clients"}
+
+
+def test_cognitive_sessions_section_exposes_coordinator_counters():
+    section = get_system_health().collect()["cognitive_sessions"]
+
+    assert set(section) >= {
+        "sessions", "idle_evictions", "lock_waits",
+        "lock_wait_seconds_total", "users",
+    }
+    assert isinstance(section["users"], list)
+    assert isinstance(section["sessions"], int) and section["sessions"] >= 0
+    assert isinstance(section["idle_evictions"], int) and section["idle_evictions"] >= 0
+    assert isinstance(section["lock_waits"], int) and section["lock_waits"] >= 0
+    assert isinstance(section["lock_wait_seconds_total"], float)
+    assert section["lock_wait_seconds_total"] >= 0
+
+
+def test_cognitive_sessions_section_lists_per_user_lock_state():
+    from server.systems.cognitive_session_coordinator import (
+        CognitiveSession,
+        cognitive_sessions,
+    )
+
+    session = CognitiveSession(user_id="health-probe", brain=object())
+    cognitive_sessions._sessions["health-probe"] = session
+    try:
+        section = get_system_health().collect()["cognitive_sessions"]
+        assert section["sessions"] >= 1
+        row = next(
+            r for r in section["users"] if r["user_id"] == "health-probe"
+        )
+        assert row["turn_in_flight"] is False
+        assert row["turn_elapsed_seconds"] is None
+        assert row["waiting_turns"] == 0
+        assert row["idle_seconds"] >= 0
+    finally:
+        cognitive_sessions._sessions.pop("health-probe", None)
 
 
 def test_server_perf_shape():
@@ -184,6 +229,118 @@ def test_phone_device_metrics_absent_when_never_reported():
         assert mobile["device_last_ts"] is None
     finally:
         gateway.on_client_disconnected()
+
+
+def test_cognitive_sessions_probe_warns_on_long_turn_and_queue(monkeypatch):
+    from types import SimpleNamespace
+    from server.systems import cognitive_session_coordinator as cc
+
+    stub = SimpleNamespace(stats=lambda: {
+        "sessions": 2,
+        "idle_evictions": 0,
+        "lock_waits": 3,
+        "lock_wait_seconds_total": 1.5,
+        "users": [
+            {"user_id": "alice", "idle_seconds": 0.0,
+             "turn_in_flight": True,
+             "turn_elapsed_seconds": turn_warn_seconds() + 12.5,
+             "waiting_turns": 1},
+            {"user_id": "bob", "idle_seconds": 1.0,
+             "turn_in_flight": False, "turn_elapsed_seconds": None,
+             "waiting_turns": queue_warn_turns() + 2},
+        ],
+    })
+    monkeypatch.setattr(cc, "cognitive_sessions", stub)
+
+    result = _probe_cognitive_sessions()
+    assert result["status"] == "warn"
+    assert "turn(s) over" in result["detail"]
+    assert "queued turns" in result["detail"]
+    assert result["meta"]["long_turns"][0]["user_id"] == "alice"
+    assert result["meta"]["queued_users"][0]["user_id"] == "bob"
+
+
+def test_cognitive_sessions_probe_is_ok_when_idle(monkeypatch):
+    from types import SimpleNamespace
+    from server.systems import cognitive_session_coordinator as cc
+
+    stub = SimpleNamespace(stats=lambda: {
+        "sessions": 1,
+        "users": [{"user_id": "alice", "idle_seconds": 2.0,
+                   "turn_in_flight": False, "turn_elapsed_seconds": None,
+                   "waiting_turns": 0}],
+    })
+    monkeypatch.setattr(cc, "cognitive_sessions", stub)
+
+    result = _probe_cognitive_sessions()
+    assert result["status"] == "ok"
+
+
+def test_turn_and_queue_thresholds_are_configurable(monkeypatch):
+    monkeypatch.setenv("AARIYA_TURN_WARN_SECONDS", "5")
+    monkeypatch.setenv("AARIYA_QUEUE_WARN_TURNS", "4")
+
+    assert turn_warn_seconds() == 5.0
+    assert queue_warn_turns() == 4
+
+
+def test_invalid_thresholds_fall_back_to_defaults(monkeypatch):
+    monkeypatch.setenv("AARIYA_TURN_WARN_SECONDS", "not-a-number")
+    monkeypatch.setenv("AARIYA_QUEUE_WARN_TURNS", "-3")
+
+    assert turn_warn_seconds() == DEFAULT_TURN_WARN_SECONDS
+    assert queue_warn_turns() == DEFAULT_QUEUE_WARN_TURNS
+
+
+def test_configured_turn_threshold_drives_probe_warning(monkeypatch):
+    from types import SimpleNamespace
+    from server.systems import cognitive_session_coordinator as cc
+
+    monkeypatch.setenv("AARIYA_TURN_WARN_SECONDS", "5")
+    stub = SimpleNamespace(stats=lambda: {
+        "sessions": 1,
+        "users": [{
+            "user_id": "alice", "idle_seconds": 0.0,
+            "turn_in_flight": True, "turn_elapsed_seconds": 6.0,
+            "waiting_turns": 0,
+        }],
+    })
+    monkeypatch.setattr(cc, "cognitive_sessions", stub)
+
+    result = _probe_cognitive_sessions()
+    assert result["status"] == "warn"
+    assert "over 5s" in result["detail"]
+
+
+def test_score_penalizes_long_turns_and_queues():
+    server = {"cpu_percent": 5.0, "ram_percent": 20.0}
+    mobile = {"connected": True}
+
+    base = _compute_score(server, [], [], mobile, {"users": []})
+    long_turn = _compute_score(
+        server, [], [], mobile,
+        {"users": [{"turn_elapsed_seconds": turn_warn_seconds() * 2,
+                    "waiting_turns": 0}]},
+    )
+    queue = _compute_score(
+        server, [], [], mobile,
+        {"users": [{"turn_elapsed_seconds": 0,
+                    "waiting_turns": queue_warn_turns() + 3}]},
+    )
+
+    assert base == 100
+    assert long_turn < base
+    assert queue < base
+
+    # The cognitive penalty is capped so it cannot dominate the whole score.
+    flooded = _compute_score(
+        server, [], [], mobile,
+        {"users": [
+            {"turn_elapsed_seconds": turn_warn_seconds() * 100, "waiting_turns": 50}
+            for _ in range(20)
+        ]},
+    )
+    assert flooded >= 85
 
 
 def test_score_bounds_and_penalties():

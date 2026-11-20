@@ -13,11 +13,20 @@ Provides:
                                     status) for status bars / badges
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from server.systems.security.auth import require_health_auth
 from server.systems.system_health import get_system_health
 
-router = APIRouter(prefix="/api/system", tags=["system-health"])
+# Both routes expose operational detail (including per-user session/lock state
+# on the full snapshot), so they share the health auth guard: loopback is fine
+# in dev, remote callers need a bearer token, and REQUIRE_WS_AUTH=1 requires a
+# token everywhere.
+router = APIRouter(
+    prefix="/api/system",
+    tags=["system-health"],
+    dependencies=[Depends(require_health_auth)],
+)
 
 
 @router.get("/health")

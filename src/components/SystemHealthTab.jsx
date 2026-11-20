@@ -27,6 +27,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { authHeaders } from '../utils/authToken';
 
 // ── Status palette ────────────────────────────────────────────────────────────
 const STATUS_COLOR = {
@@ -713,7 +714,7 @@ function GevHealthPanel({ apiBase }) {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${apiBase}/api/system/health`);
+      const res = await fetch(`${apiBase}/api/system/health`, { headers: authHeaders() });
       if (!res.ok) return;
       const data = await res.json();
       const gevCheck = (data.checks || []).find((c) => c.name === 'gev');

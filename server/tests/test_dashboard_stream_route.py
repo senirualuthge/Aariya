@@ -25,12 +25,13 @@ from fastapi.testclient import TestClient
 
 from server import main as server_main
 from server.protocol import BrainState, MultimodalOutput
+from server.systems import cognitive_session_coordinator as cognitive_coordinator
 
 
 class _FakeBrain:
-    """Canned brain — the control-command path never reaches it, but the
-    handler constructs a BrainV2 on connect, so a stand-in keeps the test
-    hermetic (no RAG / chromadb / dev-DB writes)."""
+    """Canned brain — the control-command path never reaches it, but a turn on
+    the socket would build a BrainV2 through the session coordinator, so a
+    stand-in keeps the test hermetic (no RAG / chromadb / dev-DB writes)."""
 
     def __init__(self, user_id: str):
         self.user_id = user_id
@@ -53,9 +54,16 @@ class _NoopDaemon:
 @pytest.fixture(autouse=True)
 def _hermetic_backend(monkeypatch, isolated_db):
     """No real brain / daemon — the test never touches RAG, chromadb, or dev
-    data, and nothing else in the app's lifespan starts."""
-    monkeypatch.setattr(server_main, "BrainV2", _FakeBrain)
+    data, and nothing else in the app's lifespan starts.
+
+    Brains are built by the shared cognitive-session coordinator, so the
+    double is installed there and its per-user registry is cleared.
+    """
+    monkeypatch.setattr(cognitive_coordinator, "BrainV2", _FakeBrain)
+    cognitive_coordinator.cognitive_sessions._sessions.clear()
     monkeypatch.setattr(server_main, "get_daemon", lambda *a, **k: _NoopDaemon())
+    yield
+    cognitive_coordinator.cognitive_sessions._sessions.clear()
 
 
 def _dashboard_roundtrip(payload, listen_ms=1500):

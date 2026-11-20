@@ -3,6 +3,7 @@ import useStore from '../store';
 import DraggablePanel from './DraggablePanel';
 import { subscribeMetrics } from '../systems/metricsClient';
 import { apiBase } from '../utils/apiHost';
+import { authHeaders } from '../utils/authToken';
 
 const ProgressBar = ({ label, value, color, min = 0, max = 100 }) => {
     const pct = ((value - min) / (max - min)) * 100;
@@ -31,7 +32,7 @@ export default function BrainMonitor() {
     useEffect(() => {
         let cancelled = false;
         const load = () => {
-            fetch(`${apiBase()}/api/system/health`)
+            fetch(`${apiBase()}/api/system/health`, { headers: authHeaders() })
                 .then(r => r.ok ? r.json() : null)
                 .then(d => { if (!cancelled && d) setHealth(d); })
                 .catch(() => {});

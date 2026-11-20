@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 
 from server import main as server_main
 from server.protocol import BrainState, MultimodalOutput
+from server.systems import cognitive_session_coordinator as cognitive_coordinator
 
 
 class _FakeBrain:
@@ -76,10 +77,18 @@ class _NoopWatcher:
 def _hermetic_backend(monkeypatch, isolated_db):
     """Swap the brain for a deterministic double and no-op the lifespan
     singletons (daemon + watcher) so the integration test never touches the
-    network, the dev database, or the file watcher."""
-    monkeypatch.setattr(server_main, "BrainV2", _FakeBrain)
+    network, the dev database, or the file watcher.
+
+    Brains are now built by the shared cognitive-session coordinator, not by
+    server.main, so the double is installed there; the per-user registry is
+    cleared so no session leaks between tests.
+    """
+    monkeypatch.setattr(cognitive_coordinator, "BrainV2", _FakeBrain)
+    cognitive_coordinator.cognitive_sessions._sessions.clear()
     monkeypatch.setattr(server_main, "get_daemon", lambda *a, **k: _NoopDaemon())
     monkeypatch.setattr(server_main, "get_watcher", lambda *a, **k: _NoopWatcher())
+    yield
+    cognitive_coordinator.cognitive_sessions._sessions.clear()
 
 
 def _read_until(ws, label, want, timeout=15.0):

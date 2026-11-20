@@ -4,6 +4,7 @@ import DraggablePanel from './DraggablePanel';
 import PresenceChip from './PresenceChip';
 import GEVPanel from './GEVPanel';
 import { apiBase } from '../utils/apiHost';
+import { authHeaders } from '../utils/authToken';
 import { isCaptureAllowed, setCaptureEnabled, onCaptureChange } from '../utils/privacySwitches';
 
 // ── Mood palette — aurora-tinted per emotion ─────────────────────────────────
@@ -166,7 +167,7 @@ export default function Overlay() {
 
   // Check voice availability
   useEffect(() => {
-    fetch(`${apiBase()}/api/system/health`)
+    fetch(`${apiBase()}/api/system/health`, { headers: authHeaders() })
       .then(res => res.json())
       .then(data => {
         const checks  = Array.isArray(data?.checks) ? data.checks : [];
