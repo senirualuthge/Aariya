@@ -4,7 +4,6 @@ Run only with a genuine recorded speech file and a designated test owner.
 """
 from __future__ import annotations
 
-import asyncio
 import os
 from pathlib import Path
 

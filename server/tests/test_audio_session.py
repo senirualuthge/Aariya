@@ -133,21 +133,21 @@ def test_audio_session_process_utterance():
 
     mock_transcription = {"text": "What time is it?"}
     mock_output = MultimodalOutput(text="It is time to build.", expression="happy")
-    mock_brain_state = BrainState(user_id="u1", trust=0.8, emotion="joy")
+    mock_brain_state = BrainState(trust=0.8, emotion="joy")
     fake_tts_pcm = b"\x02\x00" * 1920
 
     async def _run():
         with patch("server.realtime.audio_session.speech_recognition.transcribe", AsyncMock(return_value=mock_transcription)) as mock_transcribe:
             with patch("server.realtime.audio_session.cognitive_sessions.process_turn", AsyncMock(return_value=(mock_output, mock_brain_state))) as mock_process_turn:
                 with patch("server.realtime.audio_session.speech_generation.generate", AsyncMock(return_value=fake_tts_pcm)) as mock_gen:
-                    with patch("server.realtime.webrtc_server.enqueue_reply_audio", AsyncMock(return_value=2)) as mock_enqueue:
+                    with patch("server.realtime.webrtc_server.enqueue_reply_audio", AsyncMock(return_value=True)) as mock_enqueue:
                         result = await process_utterance(utterance)
 
                         assert result is not None
                         assert result["user_text"] == "What time is it?"
                         assert result["reply_text"] == "It is time to build."
                         assert result["audio_bytes"] == len(fake_tts_pcm)
-                        assert result["queued_frames"] == 2
+                        assert result["audio_queued"] is True
 
                         mock_transcribe.assert_awaited_once_with(utterance.pcm, sample_rate=utterance.sample_rate)
                         mock_process_turn.assert_awaited_once()

@@ -57,13 +57,13 @@ async def process_utterance(utterance: CapturedUtterance) -> Optional[dict[str, 
 
     from server.realtime.webrtc_server import enqueue_reply_audio
 
-    queued_count = await enqueue_reply_audio(utterance.session_id, pcm)
+    queued = await enqueue_reply_audio(utterance.session_id, pcm)
 
     return {
         "user_text": text,
         "reply_text": reply_text,
         "audio_bytes": len(pcm),
-        "queued_frames": queued_count,
+        "audio_queued": queued,
     }
 
 
