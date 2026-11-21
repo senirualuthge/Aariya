@@ -153,7 +153,7 @@ def get_utterance_sink() -> Optional[UtteranceSink]:
 
 
 async def _default_utterance_sink(utterance: CapturedUtterance) -> None:
-    """Record the capture in the real event log. No transcription is invented."""
+    """Record the capture in the real event log and route to audio_session."""
     await emit_real_event(
         "VOICE",
         "info",
@@ -166,6 +166,12 @@ async def _default_utterance_sink(utterance: CapturedUtterance) -> None:
             "sample_rate": utterance.sample_rate,
         },
     )
+    try:
+        from server.realtime.audio_session import audio_session_service
+
+        await audio_session_service.process_utterance(utterance)
+    except Exception:
+        logger.exception("Audio session utterance processing failed")
 
 
 async def _deliver(utterance: CapturedUtterance) -> None:
@@ -179,12 +185,11 @@ async def _deliver(utterance: CapturedUtterance) -> None:
 # ── Outbound track ───────────────────────────────────────────────────────────
 
 class AudioReplyTrack(MediaStreamTrack):
-    """Outgoing audio track.
+    """Outgoing audio track with queued playback and pacing.
 
-    With no reply pipeline in this tree there is nothing genuine to play, so the
-    track emits real silence at a real 20 ms cadence. It exists so the SDP answer
-    contains a sendrecv audio section and the phone's renderer stays healthy; it
-    does not pretend to speak.
+    Emits queued audio frames at a 20 ms cadence (s16 mono). When the queue is
+    empty, emits real silence so the WebRTC stream and the phone's audio renderer
+    remain active and synchronized.
     """
 
     kind = "audio"
@@ -193,9 +198,26 @@ class AudioReplyTrack(MediaStreamTrack):
         super().__init__()
         self._sample_rate = sample_rate
         self._samples = int(AUDIO_PTIME * sample_rate)
-        self._silence = b"\x00" * (self._samples * 2)
+        self._frame_bytes = self._samples * 2
+        self._silence = b"\x00" * self._frame_bytes
         self._timestamp = 0
         self._start: Optional[float] = None
+        self._queue: asyncio.Queue[bytes] = asyncio.Queue()
+        self._buffer = bytearray()
+
+    def enqueue_pcm(self, pcm: bytes) -> None:
+        """Enqueue PCM s16 mono audio for playback."""
+        if pcm:
+            self._queue.put_nowait(pcm)
+
+    def clear(self) -> None:
+        """Drop all queued and buffered audio immediately (interrupt / barge-in)."""
+        self._buffer.clear()
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
     async def recv(self) -> AudioFrame:
         if self._start is None:
@@ -207,8 +229,24 @@ class AudioReplyTrack(MediaStreamTrack):
             if wait > 0:
                 await asyncio.sleep(wait)
 
+        while len(self._buffer) < self._frame_bytes and not self._queue.empty():
+            try:
+                chunk = self._queue.get_nowait()
+                self._buffer.extend(chunk)
+            except asyncio.QueueEmpty:
+                break
+
+        if len(self._buffer) >= self._frame_bytes:
+            data = bytes(self._buffer[: self._frame_bytes])
+            del self._buffer[: self._frame_bytes]
+        elif self._buffer:
+            data = bytes(self._buffer) + b"\x00" * (self._frame_bytes - len(self._buffer))
+            self._buffer.clear()
+        else:
+            data = self._silence
+
         frame = AudioFrame(format="s16", layout="mono", samples=self._samples)
-        frame.planes[0].update(self._silence)
+        frame.planes[0].update(data)
         frame.sample_rate = self._sample_rate
         frame.time_base = fractions.Fraction(1, self._sample_rate)
         return frame
@@ -379,11 +417,34 @@ class VoiceSession:
 _sessions: Dict[str, VoiceSession] = {}
 
 
+def enqueue_reply_audio(
+    session_id: str,
+    pcm: bytes,
+    sample_rate: int = 48000,
+) -> bool:
+    """Enqueue audio playback for an active WebRTC session."""
+    session = _sessions.get(session_id)
+    if session is None or session.reply is None or session.closing:
+        return False
+    if sample_rate != session.reply._sample_rate:
+        pcm_resampled = voice_vad.resample_int16(
+            np.frombuffer(pcm, dtype=np.int16),
+            sample_rate,
+            session.reply._sample_rate,
+        )
+        pcm = np.clip(np.rint(pcm_resampled), -32768, 32767).astype(np.int16).tobytes()
+    session.reply.enqueue_pcm(pcm)
+    return True
+
+
 async def close_session(session: VoiceSession, reason: str) -> None:
     if session.closing:
         return
     session.closing = True
     _sessions.pop(session.session_id, None)
+
+    if session.reply is not None:
+        session.reply.clear()
 
     if session.watchdog is not None:
         session.watchdog.cancel()
@@ -577,6 +638,8 @@ async def interrupt(
     for session in sessions:
         if session.consumer is not None:
             discarded += session.consumer.interrupt()
+        if session.reply is not None:
+            session.reply.clear()
 
     return {
         "status": "interrupted",
