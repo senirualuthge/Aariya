@@ -136,3 +136,26 @@ def test_enqueue_reply_audio_helper():
             await close_session(session, "test cleanup")
 
     asyncio.run(_run())
+
+
+def test_get_active_session_rejects_closed_session():
+    assert webrtc_server.get_active_session("does_not_exist") is None
+
+
+def test_get_active_session_returns_live_session():
+    mock_peer = MagicMock()
+    session = VoiceSession(
+        session_id="rtc_active_test",
+        device_id="device_1",
+        owner_id="owner_1",
+        device_label="phone",
+        peer=mock_peer,
+        reply=AudioReplyTrack(),
+        created_at=time.time(),
+    )
+    webrtc_server._sessions[session.session_id] = session
+    try:
+        assert webrtc_server.get_active_session(session.session_id) is session
+    finally:
+        webrtc_server._sessions.pop(session.session_id, None)
+

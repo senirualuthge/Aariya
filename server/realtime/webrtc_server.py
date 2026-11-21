@@ -47,6 +47,7 @@ from pydantic import BaseModel, Field
 
 from server.systems.security.device_auth import (
     DevicePrincipal,
+    is_device_active,
     require_mobile_device,
 )
 from server.systems.signal_bus import emit_real_event
@@ -72,6 +73,7 @@ MAX_SESSIONS_PER_DEVICE = int(os.getenv("AARIYA_WEBRTC_MAX_SESSIONS_PER_DEVICE",
 NEGOTIATION_TIMEOUT_SECONDS = float(
     os.getenv("AARIYA_WEBRTC_NEGOTIATION_TIMEOUT", "60")
 )
+DEVICE_AUTH_CHECK_INTERVAL = 5.0
 
 # Server-side STUN only — no shared TURN username/password in this codebase.
 ICE_SERVERS = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
@@ -411,7 +413,9 @@ class InboundAudioConsumer:
             started_at=started,
             ended_at=time.time(),
         )
-        asyncio.create_task(_deliver(utterance))
+        task = asyncio.create_task(_deliver(utterance))
+        self._session.processing_tasks.add(task)
+        task.add_done_callback(self._session.processing_tasks.discard)
 
     def interrupt(self) -> int:
         """Drop buffered speech (barge-in). Returns discarding frame count."""
@@ -449,6 +453,8 @@ class VoiceSession:
     consumer: Optional[InboundAudioConsumer] = None
     watchdog: Optional[asyncio.Task] = None
     closing: bool = False
+    processing_tasks: set = field(default_factory=set)
+    authorization_watchdog: Optional[asyncio.Task] = None
 
     def interrupt(self) -> int:
         discarded = self.reply.interrupt()
@@ -459,6 +465,14 @@ class VoiceSession:
 
 #: The server runs a single asyncio loop, so plain dict mutation is safe here.
 _sessions: Dict[str, VoiceSession] = {}
+
+
+def get_active_session(session_id: str) -> Optional[VoiceSession]:
+    """Return an active session without exposing the session registry."""
+    session = _sessions.get(session_id)
+    if session is None or session.closing:
+        return None
+    return session
 
 
 async def enqueue_reply_audio(
@@ -477,11 +491,47 @@ async def enqueue_reply_audio(
     return session.reply.enqueue_pcm(pcm)
 
 
+async def _device_authorization_watchdog(session: VoiceSession) -> None:
+    try:
+        while not session.closing:
+            await asyncio.sleep(DEVICE_AUTH_CHECK_INTERVAL)
+            if not is_device_active(session.device_id, session.owner_id):
+                logger.warning(
+                    "Closing WebRTC session after device revocation session=%s device=%s",
+                    session.session_id, session.device_id,
+                )
+                await close_session(session, "device revoked or authorization unavailable")
+                return
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("WebRTC authorization watchdog failed session=%s", session.session_id)
+
+
 async def close_session(session: VoiceSession, reason: str) -> None:
     if session.closing:
         return
     session.closing = True
     _sessions.pop(session.session_id, None)
+
+    # Cancel pending audio-processing tasks
+    current_task = asyncio.current_task()
+    pending = [
+        task for task in list(session.processing_tasks)
+        if task is not current_task and not task.done()
+    ]
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+    session.processing_tasks.clear()
+
+    # Cancel authorization watchdog
+    if session.authorization_watchdog is not None:
+        task = session.authorization_watchdog
+        session.authorization_watchdog = None
+        if task is not current_task:
+            task.cancel()
 
     if session.reply is not None:
         session.reply.clear()
@@ -646,6 +696,9 @@ async def offer(
         ) from exc
 
     session.watchdog = asyncio.create_task(_negotiation_watchdog(session))
+    session.authorization_watchdog = asyncio.create_task(
+        _device_authorization_watchdog(session)
+    )
 
     logger.info(
         "WebRTC session %s negotiated for device %s",

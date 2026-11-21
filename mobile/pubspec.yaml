@@ -29,6 +29,7 @@ dependencies:
   # Animation is handled natively via Flutter's AnimationController.
 
   flutter_webrtc: ^1.6.0
+  connectivity_plus: ^6.1.0
 
   # HTTP client for WebRTC SDP negotiation with the Python backend
   http: ^1.2.0

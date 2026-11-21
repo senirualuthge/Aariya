@@ -16,6 +16,8 @@ mixin VoiceOverlayControllers on State<VoiceConversationOverlay> {
   bool _isMicMuted = false;
   bool _isCameraEnabled = false;
   bool _cameraInitialising = false;
+  bool _webRtcActive = false;
+  bool _webRtcStarting = false;
 
   // ─── Controllers ───────────────────────────────────────────────────────────
   CameraController? _cameraController;
@@ -129,9 +131,46 @@ mixin VoiceOverlayControllers on State<VoiceConversationOverlay> {
     );
   }
 
+  Future<void> _startWebRtcVoice() async {
+    if (_webRtcStarting || _webRtcActive || !mounted) return;
+    _webRtcStarting = true;
+    try {
+      await widget.speechToText.stop();
+      if (!mounted || _isInBackground || _isMicMuted) return;
+      await WebRTCService.instance.start();
+      if (!mounted) {
+        await WebRTCService.instance.stop();
+        return;
+      }
+      _isListening = false;
+      setState(() {
+        _webRtcActive = true;
+        _state = VoiceState.listening;
+        _currentText = 'Listening...';
+      });
+      debugPrint('[VoiceOverlay] WebRTC microphone active');
+    } catch (error, stackTrace) {
+      debugPrint('[VoiceOverlay] WebRTC unavailable: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      setState(() {
+        _webRtcActive = false;
+        _currentText = 'Using device speech recognition';
+      });
+      _scheduleListenRestart(delay: 300);
+    } finally {
+      _webRtcStarting = false;
+    }
+  }
+
   void _triggerInterrupt() {
     debugPrint('[VAD] Interrupting AI mid-response');
-    widget.chatController.sendInterrupt();
+    if (_webRtcActive) {
+      unawaited(WebRTCService.instance.interrupt());
+    } else {
+      widget.chatController.sendInterrupt();
+    }
+    if (!mounted) return;
     setState(() {
       _state = VoiceState.listening;
       _currentText = 'Listening...';
@@ -177,6 +216,12 @@ mixin VoiceOverlayControllers on State<VoiceConversationOverlay> {
 
   void _toggleMic() {
     setState(() => _isMicMuted = !_isMicMuted);
+
+    if (_webRtcActive) {
+      unawaited(WebRTCService.instance.setMicrophoneEnabled(!_isMicMuted));
+      if (_isMicMuted) unawaited(WebRTCService.instance.interrupt());
+      return;
+    }
 
     if (_isMicMuted) {
       _restartTimer?.cancel();
@@ -252,6 +297,7 @@ mixin VoiceOverlayControllers on State<VoiceConversationOverlay> {
     widget.chatController.stopSpeaking();
     widget.speechToText.stop();
     unawaited(_stopAnalyser());
+    unawaited(WebRTCService.instance.stop());
     Navigator.of(context).pop();
   }
 

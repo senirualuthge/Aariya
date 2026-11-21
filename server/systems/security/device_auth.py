@@ -937,3 +937,23 @@ async def accept_personal_websocket(
         await websocket.close(code=4001, reason="Device revoked")
         return False
     return True
+
+
+def is_device_active(device_id: str, owner_id: str) -> bool:
+    """Return whether a device is currently registered, active, and owned by owner_id."""
+    if not device_id or not owner_id:
+        return False
+    conn = get_db_connection()
+    try:
+        row = conn.execute(
+            "SELECT owner_id, revoked_at FROM aariya_personal_devices WHERE device_id = ?",
+            (device_id,),
+        ).fetchone()
+        if row is None or row["revoked_at"] is not None:
+            return False
+        return hmac.compare_digest(str(row["owner_id"]), owner_id)
+    except Exception:
+        logger.exception("Device authorization check failed")
+        return False
+    finally:
+        conn.close()

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
@@ -31,6 +32,8 @@ class WebRTCService {
   int _lifecycleGeneration = 0;
 
   String? _lastServerIp;
+  String? sessionId;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   static const int _maxReconnectAttempts = 5;
   static const Duration _requestTimeout = Duration(seconds: 20);
@@ -42,6 +45,14 @@ class WebRTCService {
     if (_isInit) return;
 
     await audioRenderer.initialize();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+      if (_intentionalClose || _recovering) return;
+      if (results.isNotEmpty && results.first != ConnectivityResult.none) {
+        if (pc == null || connectionState.value == 'failed' || connectionState.value == 'disconnected') {
+          unawaited(_recoverConnection());
+        }
+      }
+    });
     _isInit = true;
   }
 
@@ -65,11 +76,12 @@ class WebRTCService {
   }
 
   Future<void> start([String? serverIp]) async {
-    _intentionalClose = false;
-    _reconnectAttempts = 0;
-    _lifecycleGeneration++;
-
     _lastServerIp = serverIp ?? ServerConfig.instance.host;
+    if (!_recovering) {
+      _intentionalClose = false;
+      _reconnectAttempts = 0;
+      _lifecycleGeneration++;
+    }
 
     await _startInternal(_lifecycleGeneration);
   }
@@ -231,6 +243,7 @@ class WebRTCService {
 
       final answerSdp = decoded['sdp'];
       final answerType = decoded['type'];
+      final returnedSessionId = decoded['session_id'];
 
       if (answerSdp is! String ||
           answerSdp.isEmpty ||
@@ -240,6 +253,13 @@ class WebRTCService {
           'The server returned an incomplete WebRTC answer.',
         );
       }
+
+      if (returnedSessionId is! String || returnedSessionId.isEmpty) {
+        throw const FormatException(
+          'The server did not return a valid WebRTC session ID.',
+        );
+      }
+      sessionId = returnedSessionId;
 
       if (_intentionalClose || generation != _lifecycleGeneration) {
         return;
@@ -460,6 +480,7 @@ class WebRTCService {
   }
 
   Future<void> _cleanupConnection() async {
+    sessionId = null;
     final stream = localStream;
     localStream = null;
 
@@ -501,8 +522,43 @@ class WebRTCService {
     }
   }
 
+  Future<void> setMicrophoneEnabled(bool enabled) async {
+    final stream = localStream;
+    if (stream == null) return;
+    for (final track in stream.getAudioTracks()) {
+      track.enabled = enabled;
+    }
+  }
+
+  Future<void> interrupt() async {
+    final id = sessionId;
+    if (id == null || id.isEmpty) return;
+    final host = _lastServerIp ?? ServerConfig.instance.host;
+    final headers = await DeviceAuthService.instance.authenticatedHeaders();
+    final response = await http
+        .post(
+          _serverUri(host, '/interrupt'),
+          headers: headers,
+          body: jsonEncode({'session_id': id}),
+        )
+        .timeout(_requestTimeout);
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await DeviceAuthService.instance.handleUnauthorizedResponse();
+      throw const DeviceAuthException(
+        'Device authorization expired.',
+        needsPairing: true,
+      );
+    }
+    if (response.statusCode != 200) {
+      throw StateError('WebRTC interruption failed: ${response.statusCode}');
+    }
+  }
+
   Future<void> dispose() async {
     await stop();
+
+    await _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
 
     if (_isInit) {
       await audioRenderer.dispose();

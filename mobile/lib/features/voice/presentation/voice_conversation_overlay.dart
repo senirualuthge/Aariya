@@ -7,6 +7,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/audio_analyser.dart';
+import '../../../core/services/webrtc_service.dart';
 import '../../../core/state/chat_controller.dart';
 import '../../../core/services/websocket_service.dart';
 import '../../companion/presentation/companion_presence.dart';
@@ -68,7 +69,7 @@ class _VoiceConversationOverlayState extends State<VoiceConversationOverlay>
     _analyserSub = _analyser.levels.listen(_onAnalyserLevels);
 
     if (widget.startWithCamera) _toggleCamera();
-    _startListening();
+    unawaited(_startWebRtcVoice());
   }
 
   // ── Live Token Streaming ─────────────────────────────────────────────────
@@ -138,12 +139,18 @@ class _VoiceConversationOverlayState extends State<VoiceConversationOverlay>
       widget.speechToText.stop();
       unawaited(_stopAnalyser());
       _isListening = false;
+      if (_webRtcActive) {
+        unawaited(WebRTCService.instance.stop());
+        _webRtcActive = false;
+      }
       widget.chatController.stopSpeaking();
       _cameraController?.pausePreview();
     } else if (lifecycle == AppLifecycleState.resumed && _isInBackground) {
       _isInBackground = false;
       _resumeCamera();
-      _scheduleListenRestart(delay: 600);
+      if (!_isMicMuted) {
+        unawaited(_startWebRtcVoice());
+      }
     }
   }
 
