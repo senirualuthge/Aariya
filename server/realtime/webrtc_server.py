@@ -31,7 +31,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import numpy as np
 from aiortc import (
@@ -137,7 +137,7 @@ class CapturedUtterance:
     ended_at: float
 
 
-UtteranceSink = Callable[[CapturedUtterance], Awaitable[None]]
+UtteranceSink = Callable[[CapturedUtterance], Awaitable[Any]]
 
 _utterance_sink: Optional[UtteranceSink] = None
 
@@ -185,81 +185,107 @@ async def _deliver(utterance: CapturedUtterance) -> None:
 # ── Outbound track ───────────────────────────────────────────────────────────
 
 class AudioReplyTrack(MediaStreamTrack):
-    """Paced 48 kHz mono PCM audio output over WebRTC."""
+    """Outgoing audio track with queued playback and pacing.
+
+    Emits queued audio frames at a 20 ms cadence (s16 mono). When the queue is
+    empty, emits real silence so the WebRTC stream and the phone's audio renderer
+    remain active and synchronized.
+    """
 
     kind = "audio"
-    SAMPLE_RATE = 48000
-    FRAME_MS = 20
-    FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000
-    MAX_QUEUED_FRAMES = 750
 
-    def __init__(self):
+    def __init__(self, sample_rate: int = 48000):
         super().__init__()
-        self._sample_rate = self.SAMPLE_RATE
-        self._queue: asyncio.Queue[bytes] = asyncio.Queue(
-            maxsize=self.MAX_QUEUED_FRAMES
-        )
+        self._sample_rate = sample_rate
+        self._samples = int(AUDIO_PTIME * sample_rate)
+        self._frame_bytes = self._samples * 2
+        self._silence = b"\x00" * self._frame_bytes
         self._timestamp = 0
-        self._started_at = None
+        self._start: Optional[float] = None
+        self._queue: asyncio.Queue[bytes] = asyncio.Queue()
+        self._buffer = bytearray()
+        self._max_queued_bytes = sample_rate * 2 * 60
+        self._queued_bytes = 0
 
-    def enqueue_pcm(self, pcm: bytes) -> int:
-        """Queue signed 16-bit, 48 kHz, mono PCM."""
+    def enqueue_pcm(self, pcm: bytes) -> bool:
+        """Queue PCM while enforcing a 60-second audio-buffer limit."""
+        if not pcm:
+            return True
         if len(pcm) % 2:
-            raise ValueError("PCM data must contain complete int16 samples")
-        frame_bytes = self.FRAME_SAMPLES * 2
-        frames_needed = (len(pcm) + frame_bytes - 1) // frame_bytes
-        if frames_needed > self._queue.maxsize - self._queue.qsize():
-            raise RuntimeError("WebRTC audio queue is full")
-
-        count = 0
-        for offset in range(0, len(pcm), frame_bytes):
-            chunk = pcm[offset : offset + frame_bytes]
-            if len(chunk) < frame_bytes:
-                chunk += b"\x00" * (frame_bytes - len(chunk))
-            self._queue.put_nowait(chunk)
-            count += 1
-        return count
+            raise ValueError("PCM16 audio must contain complete samples")
+        if len(pcm) > self._max_queued_bytes - self._queued_bytes:
+            logger.warning("WebRTC outbound audio queue limit reached")
+            return False
+        self._queue.put_nowait(pcm)
+        self._queued_bytes += len(pcm)
+        return True
 
     def interrupt(self) -> int:
         """Clear all queued frames (barge-in). Returns count discarded."""
-        discarded = 0
-        while not self._queue.empty():
-            try:
-                self._queue.get_nowait()
-                discarded += 1
-            except asyncio.QueueEmpty:
-                break
-        return discarded
+        return self.clear()
 
     def clear(self) -> int:
-        """Alias for interrupt / cleanup."""
-        return self.interrupt()
+        """Drop all queued and buffered audio immediately (interrupt / barge-in)."""
+        discarded_bytes = len(self._buffer)
+        self._buffer.clear()
+        discarded_chunks = 0
+        while not self._queue.empty():
+            try:
+                chunk = self._queue.get_nowait()
+                discarded_bytes += len(chunk)
+                discarded_chunks += 1
+            except asyncio.QueueEmpty:
+                break
+        self._queued_bytes = 0
+        return discarded_chunks
 
     async def recv(self) -> AudioFrame:
-        if self._started_at is None:
-            self._started_at = time.time()
+        if self._start is None:
+            self._start = time.time()
             self._timestamp = 0
         else:
-            self._timestamp += self.FRAME_SAMPLES
+            self._timestamp += self._samples
             wait = (
-                self._started_at
-                + (self._timestamp / self.SAMPLE_RATE)
+                self._start
+                + (self._timestamp / self._sample_rate)
                 - time.time()
             )
             if wait > 0:
                 await asyncio.sleep(wait)
 
-        try:
-            data = self._queue.get_nowait()
-        except asyncio.QueueEmpty:
-            data = b"\x00" * (self.FRAME_SAMPLES * 2)
+        while len(self._buffer) < self._frame_bytes and not self._queue.empty():
+            try:
+                chunk = self._queue.get_nowait()
+                self._buffer.extend(chunk)
+            except asyncio.QueueEmpty:
+                break
+
+        if len(self._buffer) >= self._frame_bytes:
+            data = bytes(self._buffer[: self._frame_bytes])
+            del self._buffer[: self._frame_bytes]
+            self._queued_bytes = max(
+                0,
+                self._queued_bytes - len(data),
+            )
+        elif self._buffer:
+            data = (
+                bytes(self._buffer)
+                + b"\x00" * (self._frame_bytes - len(self._buffer))
+            )
+            self._queued_bytes = max(
+                0,
+                self._queued_bytes - len(data),
+            )
+            self._buffer.clear()
+        else:
+            data = self._silence
 
         frame = AudioFrame(
-            format="s16", layout="mono", samples=self.FRAME_SAMPLES
+            format="s16", layout="mono", samples=self._samples
         )
         frame.planes[0].update(data)
-        frame.sample_rate = self.SAMPLE_RATE
-        frame.time_base = fractions.Fraction(1, self.SAMPLE_RATE)
+        frame.sample_rate = self._sample_rate
+        frame.time_base = fractions.Fraction(1, self._sample_rate)
         return frame
 
 
@@ -323,18 +349,19 @@ class InboundAudioConsumer:
                 logger.warning("WebRTC inbound track failed: %s", exc)
                 break
 
-            try:
-                self.feed(frame)
-            except Exception:
-                logger.exception("WebRTC audio frame handling failed")
-                break
+            if isinstance(frame, AudioFrame):
+                try:
+                    self.feed(frame)
+                except Exception:
+                    logger.exception("WebRTC audio frame handling failed")
+                    break
 
     def feed(self, frame: AudioFrame) -> None:
         """Run one real audio frame through resample → VAD → utterance cut."""
         samples = frame.to_ndarray()
         if samples.ndim == 2:
             samples = samples[0]
-        source_rate = int(frame.sample_rate or 48000)
+        source_rate = frame.sample_rate or 48000
         pcm = pcm16_at_capture_rate(samples, source_rate)
         if pcm.size == 0:
             return
@@ -437,7 +464,7 @@ _sessions: Dict[str, VoiceSession] = {}
 async def enqueue_reply_audio(
     session_id: str,
     pcm: bytes,
-) -> int:
+) -> bool:
     """Send generated PCM to the correct authenticated WebRTC session."""
     session = _sessions.get(session_id)
     if session is None or session.closing:

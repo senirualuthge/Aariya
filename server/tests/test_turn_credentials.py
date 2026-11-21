@@ -46,6 +46,27 @@ def test_turn_credentials_are_expiring():
     assert int(username.split(":")[0]) == expiry
 
 
+def test_turn_credential_matches_coturn_hmac(monkeypatch):
+    secret = "test-turn-secret-key"
+    monkeypatch.setenv("TURN_SHARED_SECRET", secret)
+    monkeypatch.setenv("TURN_URLS", "turn:turn.example.com:3478")
+    result = turn_credentials.generate_turn_credentials(
+        lifetime_seconds=120
+    )
+    expected = base64.b64encode(
+        hmac.new(
+            secret.encode("utf-8"),
+            result["username"].encode("utf-8"),
+            hashlib.sha1,
+        ).digest()
+    ).decode("ascii")
+    assert result["credential"] == expected
+    assert result["credential"] != secret
+    expiry = int(result["username"].split(":")[0])
+    assert expiry > int(time.time())
+    assert expiry <= int(time.time()) + 120
+
+
 @pytest.fixture
 def strict_auth(isolated_db, monkeypatch):
     monkeypatch.setenv("AARIYA_OWNER_ID", OWNER)

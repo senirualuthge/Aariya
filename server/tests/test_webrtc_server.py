@@ -65,8 +65,7 @@ def test_audio_reply_track_plays_enqueued_audio():
     pcm_frame1 = b"\x01\x00" * 960
     pcm_frame2 = b"\x02\x00" * 960
 
-    count = track.enqueue_pcm(pcm_frame1 + pcm_frame2)
-    assert count == 2
+    assert track.enqueue_pcm(pcm_frame1 + pcm_frame2) is True
 
     async def _run():
         frame1 = await track.recv()
@@ -86,8 +85,7 @@ def test_audio_reply_track_clear_drops_audio():
     track = AudioReplyTrack()
     track.enqueue_pcm(b"\x03\x00" * 1920)
 
-    discarded = track.interrupt()
-    assert discarded == 2
+    track.clear()
 
     async def _run():
         frame = await track.recv()
@@ -97,13 +95,13 @@ def test_audio_reply_track_clear_drops_audio():
 
 
 def test_audio_reply_track_queue_full_raises():
-    track = AudioReplyTrack()
-    track._queue = asyncio.Queue(maxsize=2)
+    track = AudioReplyTrack(sample_rate=48000)
+    # Configure 60s queue limit to exactly 2 frames for testing
+    track._max_queued_bytes = 960 * 2 * 2
     # Fill queue
-    track.enqueue_pcm(b"\x01\x00" * (960 * 2))  # 2 frames
-    # Next frame should raise RuntimeError
-    with pytest.raises(RuntimeError, match="WebRTC audio queue is full"):
-        track.enqueue_pcm(b"\x01\x00" * 960)
+    assert track.enqueue_pcm(b"\x01\x00" * (960 * 2)) is True
+    # Next frame should exceed limit and return False
+    assert track.enqueue_pcm(b"\x01\x00" * 960) is False
 
 
 def test_enqueue_reply_audio_helper():
@@ -127,7 +125,7 @@ def test_enqueue_reply_audio_helper():
         try:
             data = b"\x04\x00" * 960
             enqueued = await enqueue_reply_audio("rtc_enqueue_test", data)
-            assert enqueued == 1
+            assert enqueued is True
 
             frame = await reply_track.recv()
             assert bytes(frame.planes[0]) == data

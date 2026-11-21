@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -18,21 +19,24 @@ class WebRTCService {
 
   final RTCVideoRenderer audioRenderer = RTCVideoRenderer();
 
-  final ValueNotifier<String> connectionState = ValueNotifier<String>(
-    'disconnected',
-  );
+  final ValueNotifier<String> connectionState =
+      ValueNotifier<String>('disconnected');
 
   bool _isInit = false;
   bool _starting = false;
-  String? _lastServerIp;
-
-  static const int _maxReconnectAttempts = 5;
-  int _reconnectAttempts = 0;
   bool _recovering = false;
   bool _intentionalClose = false;
 
+  int _reconnectAttempts = 0;
+  int _lifecycleGeneration = 0;
+
+  String? _lastServerIp;
+
+  static const int _maxReconnectAttempts = 5;
   static const Duration _requestTimeout = Duration(seconds: 20);
   static const Duration _iceGatheringTimeout = Duration(seconds: 15);
+  static const Duration _disconnectGracePeriod =
+      Duration(seconds: 4);
 
   Future<void> init() async {
     if (_isInit) return;
@@ -41,12 +45,11 @@ class WebRTCService {
     _isInit = true;
   }
 
-  Uri _offerUri(String host) {
+  Uri _serverUri(String host, String path) {
     final config = ServerConfig.instance;
-
     final normalizedHost = host.toLowerCase();
-    final isLoopback =
-        normalizedHost == 'localhost' ||
+
+    final isLoopback = normalizedHost == 'localhost' ||
         normalizedHost == '127.0.0.1' ||
         normalizedHost == '::1';
 
@@ -57,175 +60,53 @@ class WebRTCService {
       );
     }
 
-    return Uri.parse(
-      '${config.httpBase}/offer',
-    ).replace(host: host, port: config.port);
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchIceServers(String host) async {
-    final config = ServerConfig.instance;
-
-    final uri = Uri.parse(
-      '${config.httpBase}/api/webrtc/turn-credentials',
-    ).replace(host: host, port: config.port);
-
-    final headers = await DeviceAuthService.instance.authenticatedHeaders();
-
-    final response = await http
-        .get(uri, headers: headers)
-        .timeout(_requestTimeout);
-
-    if (response.statusCode == 401) {
-      await DeviceAuthService.instance.handleUnauthorizedResponse();
-
-      throw const DeviceAuthException(
-        'Device authorization expired. Pair this device again.',
-        needsPairing: true,
-      );
-    }
-
-    // TURN is optional. STUN-only operation is allowed when
-    // the backend explicitly reports that TURN is not configured.
-    if (response.statusCode == 503) {
-      debugPrint('[WebRTC] TURN unavailable; using STUN');
-      return [
-        {'urls': 'stun:stun.l.google.com:19302'},
-      ];
-    }
-
-    if (response.statusCode != 200) {
-      throw StateError(
-        'TURN credential request failed: ${response.statusCode}',
-      );
-    }
-
-    final body = jsonDecode(response.body);
-
-    if (body is! Map<String, dynamic>) {
-      throw const FormatException('Invalid TURN credential response');
-    }
-
-    final urls = body['urls'];
-    final username = body['username'];
-    final credential = body['credential'];
-    final ttl = body['ttl'];
-
-    if (urls is! List ||
-        urls.isEmpty ||
-        username is! String ||
-        username.isEmpty ||
-        credential is! String ||
-        credential.isEmpty ||
-        ttl is! int ||
-        ttl <= 0) {
-      throw const FormatException('Incomplete TURN credentials');
-    }
-
-    return [
-      {'urls': 'stun:stun.l.google.com:19302'},
-      {
-        'urls': urls.cast<String>(),
-        'username': username,
-        'credential': credential,
-      },
-    ];
-  }
-
-  Future<void> recoverConnection() async {
-    if (_recovering || _intentionalClose) return;
-
-    _recovering = true;
-
-    try {
-      while (_reconnectAttempts < _maxReconnectAttempts && !_intentionalClose) {
-        _reconnectAttempts++;
-
-        final delay = Duration(seconds: 1 << (_reconnectAttempts - 1));
-
-        await Future.delayed(delay);
-
-        if (_intentionalClose) return;
-
-        try {
-          await _restartConnection();
-          _reconnectAttempts = 0;
-          return;
-        } catch (error, stackTrace) {
-          debugPrint(
-            '[WebRTC] Recovery attempt '
-            '$_reconnectAttempts failed: $error\n$stackTrace',
-          );
-        }
-      }
-
-      throw StateError(
-        'WebRTC recovery failed after '
-        '$_maxReconnectAttempts attempts',
-      );
-    } finally {
-      _recovering = false;
-    }
-  }
-
-  Future<void> _restartConnection() async {
-    if (_intentionalClose) return;
-
-    // Must perform a new authenticated offer/answer negotiation.
-    // A new peer connection also obtains fresh TURN credentials.
-    await stop();
-
-    if (_intentionalClose) return;
-
-    await start(_lastServerIp);
-  }
-
-  void handleConnectionFailure() {
-    if (_intentionalClose || _recovering) return;
-
-    recoverConnection().catchError((Object error) {
-      debugPrint('[WebRTC] Recovery exhausted: $error');
-    });
-  }
-
-  void resetRecoveryState() {
-    _reconnectAttempts = 0;
-    _recovering = false;
-  }
-
-  void cancelRecovery() {
-    _intentionalClose = true;
-  }
-
-  void allowConnection() {
-    _intentionalClose = false;
-    resetRecoveryState();
+    return Uri.parse('${config.httpBase}$path')
+        .replace(host: host, port: config.port);
   }
 
   Future<void> start([String? serverIp]) async {
+    _intentionalClose = false;
+    _reconnectAttempts = 0;
+    _lifecycleGeneration++;
+
+    _lastServerIp = serverIp ?? ServerConfig.instance.host;
+
+    await _startInternal(_lifecycleGeneration);
+  }
+
+  Future<void> _startInternal(int generation) async {
     if (_starting) {
       throw StateError('A WebRTC connection attempt is already running.');
     }
 
-    final config = ServerConfig.instance;
-    final host = serverIp ?? config.host;
-    final offerUri = _offerUri(host);
-
-    // Verify authentication before acquiring local media or hardware
-    final headers = await DeviceAuthService.instance.authenticatedHeaders();
-
-    if (pc != null) {
-      await stop();
-    }
-
-    allowConnection();
-    _lastServerIp = serverIp;
     _starting = true;
     connectionState.value = 'connecting';
 
     try {
+      final host = _lastServerIp ?? ServerConfig.instance.host;
+
+      // Validate host / TLS before acquiring any hardware or credentials.
+      _serverUri(host, '/offer');
+
+      // Check device credentials before initializing mic or renderer;
+      // this lets tests assert on auth failures without native plugin calls.
+      final headers =
+          await DeviceAuthService.instance.authenticatedHeaders();
+
+      await _cleanupConnection();
       await init();
 
-      final iceServers = await _fetchIceServers(host);
+      if (_intentionalClose || generation != _lifecycleGeneration) {
+        return;
+      }
+
+      // Obtain a fresh, authenticated, short-lived TURN credential
+      // for every newly negotiated peer connection.
+      final iceServers = await _fetchIceServers(host, headers);
+
+      if (_intentionalClose || generation != _lifecycleGeneration) {
+        return;
+      }
 
       final peer = await createPeerConnection({
         'iceServers': iceServers,
@@ -235,22 +116,37 @@ class WebRTCService {
       pc = peer;
 
       peer.onConnectionState = (state) {
-        connectionState.value = state.toString().split('.').last;
-        debugPrint('[WebRTC] Connection state: $state');
+        if (!identical(pc, peer)) return;
 
-        if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-          resetRecoveryState();
+        final value = state.toString().split('.').last;
+        connectionState.value = value;
+
+        debugPrint('[WebRTC] Peer state: $value');
+
+        if (state ==
+            RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          _reconnectAttempts = 0;
+          return;
         }
 
-        if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-            state ==
-                RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
-          handleConnectionFailure();
+        if (state ==
+            RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+          _scheduleRecovery(peer);
+          return;
+        }
+
+        if (state ==
+            RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+          _checkDisconnectedPeer(peer);
         }
       };
 
       peer.onIceConnectionState = (state) {
         debugPrint('[WebRTC] ICE state: $state');
+
+        if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+          _scheduleRecovery(peer);
+        }
       };
 
       peer.onIceGatheringState = (state) {
@@ -284,8 +180,11 @@ class WebRTCService {
       });
 
       await peer.setLocalDescription(offer);
-
       await _waitForIceGathering(peer);
+
+      if (_intentionalClose || generation != _lifecycleGeneration) {
+        return;
+      }
 
       final localDescription = await peer.getLocalDescription();
 
@@ -297,7 +196,7 @@ class WebRTCService {
 
       final response = await http
           .post(
-            offerUri,
+            _serverUri(host, '/offer'),
             headers: headers,
             body: jsonEncode({
               'sdp': localDescription.sdp,
@@ -306,10 +205,11 @@ class WebRTCService {
           )
           .timeout(_requestTimeout);
 
-      if (response.statusCode == 401) {
+      if (response.statusCode == 401 || response.statusCode == 403) {
         await DeviceAuthService.instance.handleUnauthorizedResponse();
+
         throw const DeviceAuthException(
-          'The device credential was rejected. Pair this device again.',
+          'This device is no longer authorized. Pair it again.',
           needsPairing: true,
         );
       }
@@ -324,7 +224,9 @@ class WebRTCService {
       final decoded = jsonDecode(response.body);
 
       if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('Invalid WebRTC answer from the server.');
+        throw const FormatException(
+          'Invalid WebRTC answer from the server.',
+        );
       }
 
       final answerSdp = decoded['sdp'];
@@ -339,6 +241,10 @@ class WebRTCService {
         );
       }
 
+      if (_intentionalClose || generation != _lifecycleGeneration) {
+        return;
+      }
+
       await peer.setRemoteDescription(
         RTCSessionDescription(answerSdp, answerType),
       );
@@ -349,7 +255,11 @@ class WebRTCService {
       debugPrintStack(stackTrace: stackTrace);
 
       await _cleanupConnection();
-      connectionState.value = 'failed';
+
+      if (!_intentionalClose &&
+          generation == _lifecycleGeneration) {
+        connectionState.value = 'failed';
+      }
 
       rethrow;
     } finally {
@@ -357,19 +267,173 @@ class WebRTCService {
     }
   }
 
-  Future<void> _waitForIceGathering(RTCPeerConnection peer) async {
+  Future<List<Map<String, dynamic>>> _fetchIceServers(
+    String host,
+    Map<String, String> headers,
+  ) async {
+    final response = await http
+        .get(
+          _serverUri(host, '/api/webrtc/turn-credentials'),
+          headers: headers,
+        )
+        .timeout(_requestTimeout);
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await DeviceAuthService.instance.handleUnauthorizedResponse();
+
+      throw const DeviceAuthException(
+        'TURN credential request rejected. Pair this device again.',
+        needsPairing: true,
+      );
+    }
+
+    if (response.statusCode != 200) {
+      throw StateError(
+        'Could not obtain TURN credentials '
+        '(${response.statusCode}): ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Invalid TURN credential response.');
+    }
+
+    final urls = decoded['urls'];
+    final username = decoded['username'];
+    final credential = decoded['credential'];
+    final ttl = decoded['ttl'];
+
+    if (urls is! List ||
+        urls.isEmpty ||
+        urls.any((url) => url is! String || url.isEmpty) ||
+        username is! String ||
+        username.isEmpty ||
+        credential is! String ||
+        credential.isEmpty ||
+        ttl is! int ||
+        ttl <= 0) {
+      throw const FormatException(
+        'TURN credentials are incomplete or invalid.',
+      );
+    }
+
+    debugPrint('[WebRTC] Received temporary TURN credentials '
+        '(TTL: $ttl seconds).');
+
+    return [
+      {
+        'urls': urls.cast<String>(),
+        'username': username,
+        'credential': credential,
+      },
+      {
+        'urls': 'stun:stun.l.google.com:19302',
+      },
+    ];
+  }
+
+  Future<void> _checkDisconnectedPeer(
+    RTCPeerConnection peer,
+  ) async {
+    await Future.delayed(_disconnectGracePeriod);
+
+    if (_intentionalClose || !identical(pc, peer)) return;
+
+    final state = await peer.getConnectionState();
+
+    if (state ==
+            RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+        state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+      _scheduleRecovery(peer);
+    }
+  }
+
+  void _scheduleRecovery(RTCPeerConnection peer) {
+    if (_intentionalClose ||
+        _recovering ||
+        !identical(pc, peer)) {
+      return;
+    }
+
+    unawaited(_recoverConnection());
+  }
+
+  Future<void> _recoverConnection() async {
+    if (_recovering || _intentionalClose) return;
+
+    _recovering = true;
+    final generation = _lifecycleGeneration;
+
+    try {
+      while (_reconnectAttempts < _maxReconnectAttempts &&
+          !_intentionalClose &&
+          generation == _lifecycleGeneration) {
+        _reconnectAttempts++;
+
+        final seconds = 1 << (_reconnectAttempts - 1);
+        final jitterMs = math.Random().nextInt(500);
+
+        connectionState.value = 'reconnecting';
+
+        debugPrint(
+          '[WebRTC] Recovery attempt '
+          '$_reconnectAttempts/$_maxReconnectAttempts',
+        );
+
+        await Future.delayed(
+          Duration(seconds: seconds, milliseconds: jitterMs),
+        );
+
+        if (_intentionalClose ||
+            generation != _lifecycleGeneration) {
+          return;
+        }
+
+        try {
+          await _startInternal(generation);
+
+          if (connectionState.value == 'negotiating' ||
+              connectionState.value == 'connected') {
+            _reconnectAttempts = 0;
+            return;
+          }
+        } on DeviceAuthException catch (error) {
+          if (error.needsPairing) {
+            connectionState.value = 'authentication_required';
+            return;
+          }
+          debugPrint('[WebRTC] Authentication error: $error');
+        } catch (error) {
+          debugPrint('[WebRTC] Recovery attempt failed: $error');
+        }
+      }
+
+      if (!_intentionalClose &&
+          generation == _lifecycleGeneration) {
+        connectionState.value = 'failed';
+      }
+    } finally {
+      _recovering = false;
+    }
+  }
+
+  Future<void> _waitForIceGathering(
+    RTCPeerConnection peer,
+  ) async {
     final currentState = await peer.getIceGatheringState();
 
-    if (currentState == RTCIceGatheringState.RTCIceGatheringStateComplete) {
+    if (currentState ==
+        RTCIceGatheringState.RTCIceGatheringStateComplete) {
       return;
     }
 
     final completer = Completer<void>();
 
     peer.onIceGatheringState = (state) {
-      debugPrint('[WebRTC] ICE gathering state: $state');
-
-      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete &&
+      if (state ==
+              RTCIceGatheringState.RTCIceGatheringStateComplete &&
           !completer.isCompleted) {
         completer.complete();
       }
@@ -377,7 +441,8 @@ class WebRTCService {
 
     final updatedState = await peer.getIceGatheringState();
 
-    if (updatedState == RTCIceGatheringState.RTCIceGatheringStateComplete &&
+    if (updatedState ==
+            RTCIceGatheringState.RTCIceGatheringStateComplete &&
         !completer.isCompleted) {
       completer.complete();
     }
@@ -386,8 +451,10 @@ class WebRTCService {
   }
 
   Future<void> stop() async {
-    cancelRecovery();
-    _starting = false;
+    _intentionalClose = true;
+    _lifecycleGeneration++;
+    _reconnectAttempts = 0;
+
     await _cleanupConnection();
     connectionState.value = 'disconnected';
   }
@@ -430,11 +497,7 @@ class WebRTCService {
     }
 
     if (_isInit) {
-      try {
-        audioRenderer.srcObject = null;
-      } catch (error) {
-        debugPrint('[WebRTC] audioRenderer reset failed: $error');
-      }
+      audioRenderer.srcObject = null;
     }
   }
 

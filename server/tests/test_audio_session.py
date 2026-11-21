@@ -181,3 +181,42 @@ def test_audio_session_empty_transcription_returns_none():
             assert result is None
 
     asyncio.run(_run())
+
+
+def test_audio_session_does_not_generate_speech_for_empty_reply():
+    service = AudioSessionService()
+    utterance = CapturedUtterance(
+        session_id="rtc_empty_reply",
+        device_id="device_1",
+        device_label="phone",
+        owner_id="u1",
+        pcm=b"\x01\x00" * 8000,
+        sample_rate=16000,
+        duration_seconds=0.5,
+        started_at=100.0,
+        ended_at=100.5,
+    )
+
+    async def _run():
+        with patch(
+            "server.realtime.audio_session.speech_recognition.transcribe",
+            AsyncMock(return_value={"text": "Hello"}),
+        ):
+            with patch(
+                "server.realtime.audio_session.cognitive_sessions.process_turn",
+                AsyncMock(
+                    return_value=(
+                        MultimodalOutput(text="", expression="neutral"),
+                        BrainState(trust=0.5),
+                    )
+                ),
+            ):
+                with patch(
+                    "server.realtime.audio_session.speech_generation.generate",
+                    AsyncMock(),
+                ) as generate:
+                    result = await service.process_utterance(utterance)
+                    assert result is None
+                    generate.assert_not_awaited()
+
+    asyncio.run(_run())
