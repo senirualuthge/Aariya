@@ -6,9 +6,16 @@ and the recent action distribution — all read from the real checkpoint + the
 `rl_transitions` log. Nothing is synthesised; an untrained policy reports so.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-router = APIRouter(prefix="/api/rl", tags=["rl"])
+from server.systems.security.device_auth import require_personal_device
+
+# Policy status describes the owner's trained model; keep it behind a device.
+router = APIRouter(
+    prefix="/api/rl",
+    tags=["rl"],
+    dependencies=[Depends(require_personal_device)],
+)
 
 
 @router.get("/status")

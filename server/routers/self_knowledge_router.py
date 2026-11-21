@@ -15,12 +15,22 @@ Mount in main.py:
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from ..systems.security.device_auth import (
+    require_dashboard_device,
+    require_personal_device,
+)
 from ..systems.self_knowledge import get_self_knowledge
 
 logger = logging.getLogger("aariya.self_knowledge_router")
-router = APIRouter(prefix="/api/self-knowledge", tags=["Self-Knowledge"])
+# The data inventory and prompt block describe the owner's machine; refresh
+# walks the filesystem, so it stays desktop-only.
+router = APIRouter(
+    prefix="/api/self-knowledge",
+    tags=["Self-Knowledge"],
+    dependencies=[Depends(require_personal_device)],
+)
 
 
 @router.get("")
@@ -36,7 +46,7 @@ async def get_prompt_block():
 
 
 @router.post("/refresh")
-async def refresh_inventory():
+async def refresh_inventory(_dashboard=Depends(require_dashboard_device)):
     """Force a fresh filesystem scan and return the updated inventory."""
     inventory = get_self_knowledge(refresh=True).inventory_json()
     logger.info("[SelfKnowledge] inventory refreshed via API")

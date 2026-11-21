@@ -5,7 +5,9 @@
 // The long-lived device credential is obtained by redeeming a pairing code and
 // is stored:
 //   * in Electron, encrypted by the main process with safeStorage (Keychain /
-//     DPAPI / libsecret) and reached through three narrow IPC calls;
+//     DPAPI / libsecret). The renderer NEVER receives the credential: it asks
+//     the main process to perform authenticated HTTP calls and to mint
+//     one-use WebSocket tickets.
 //   * in a direct browser dev session, in MEMORY ONLY — pairing is repeated
 //     after a reload rather than silently persisting a credential in
 //     localStorage.
@@ -27,10 +29,19 @@ export class DeviceAuthError extends Error {
   }
 }
 
-function electronAuth() {
+/**
+ * The preload bridge exposes the credential broker, never the credential.
+ * A browser dev session has no bridge and falls back to memory + direct fetch.
+ */
+function electronBridge() {
   if (typeof window === 'undefined') return null;
   const api = window.electronAPI;
-  return api && typeof api.getDeviceCredential === 'function' ? api : null;
+  if (!api) return null;
+  return api;
+}
+
+function hasBroker(api) {
+  return Boolean(api && typeof api.authFetch === 'function');
 }
 
 function pairingRequired() {
@@ -39,30 +50,35 @@ function pairingRequired() {
   }
 }
 
-/** Load the credential once, from Electron safe storage when available. */
+/**
+ * Load a credential for browser-dev fetches.
+ *
+ * In Electron this always returns null: the credential stays inside the main
+ * process and callers must use `personalFetch` instead of reading it.
+ */
 export async function loadCredential() {
   if (memory.loaded) return memory.credential;
   if (memory.loading) return memory.loading;
 
   memory.loading = (async () => {
-    let value = null;
-    const api = electronAuth();
-    if (api) {
-      try {
-        value = await api.getDeviceCredential();
-      } catch {
-        value = null;
-      }
-    }
-    memory.credential = value || null;
+    // No renderer-side read path exists in Electron by design.
+    memory.credential = null;
     memory.loaded = true;
     memory.loading = null;
-    return memory.credential;
+    return null;
   })();
   return memory.loading;
 }
 
 export async function hasCredential() {
+  const api = electronBridge();
+  if (api && typeof api.hasDeviceCredential === 'function') {
+    try {
+      return Boolean(await api.hasDeviceCredential());
+    } catch {
+      return false;
+    }
+  }
   return Boolean(await loadCredential());
 }
 
@@ -102,22 +118,36 @@ export async function getServerAuthMode() {
 export async function storeCredential(credential) {
   const value = String(credential || '').trim();
   if (!value) return false;
+
+  const api = electronBridge();
+  if (api && typeof api.storeDeviceCredential === 'function') {
+    try {
+      if (await api.storeDeviceCredential(value)) {
+        // Deliberately do not retain the plaintext in renderer memory.
+        memory.credential = null;
+        memory.loaded = true;
+        return true;
+      }
+    } catch {
+      /* fall through to memory only when there is no encrypted backend */
+    }
+    if (typeof api.authFetch === 'function') {
+      // Encrypted storage is unavailable; do not silently degrade to memory.
+      memory.credential = null;
+      memory.loaded = true;
+      return false;
+    }
+  }
+
   memory.credential = value;
   memory.loaded = true;
-
-  const api = electronAuth();
-  if (!api || typeof api.storeDeviceCredential !== 'function') return false;
-  try {
-    return Boolean(await api.storeDeviceCredential(value));
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 export async function clearCredential() {
   memory.credential = null;
   memory.loaded = true;
-  const api = electronAuth();
+  const api = electronBridge();
   if (api && typeof api.clearDeviceCredential === 'function') {
     try {
       await api.clearDeviceCredential();
@@ -163,6 +193,9 @@ export async function deviceAuthHeaders(extra = {}) {
 /**
  * REST auth that prefers the paired device credential and otherwise keeps the
  * legacy shared token, so both deployment modes work during migration.
+ *
+ * Browser-dev only: Electron callers must use `personalFetch`, because the
+ * credential is never exposed to the renderer.
  */
 export async function personalAuthHeaders(extra = {}) {
   const headers = legacyAuthHeaders(extra);
@@ -177,8 +210,78 @@ async function handleAuthFailure(status) {
   pairingRequired();
 }
 
+/**
+ * Authenticated REST request.
+ *
+ * In Electron the main process attaches the credential after validating the
+ * target origin; in a browser dev session the in-memory credential is used.
+ */
+export async function personalFetch(url, options = {}) {
+  const api = electronBridge();
+  if (hasBroker(api)) {
+    const body = options.body == null
+      ? null
+      : (typeof options.body === 'string' ? options.body : JSON.stringify(options.body));
+
+    let result;
+    try {
+      result = await api.authFetch({
+        url: String(url),
+        method: String(options.method || 'GET').toUpperCase(),
+        headers: options.headers || {},
+        body,
+      });
+    } catch (error) {
+      throw new DeviceAuthError(
+        `Desktop authentication bridge failed: ${error?.message || error}`,
+        0,
+      );
+    }
+
+    if (!result || typeof result.status !== 'number') {
+      throw new DeviceAuthError('Desktop authentication bridge returned no response', 0);
+    }
+    if (result.status === 0) {
+      throw new DeviceAuthError(
+        result.error || 'Could not reach the Aariya backend',
+        0,
+      );
+    }
+    if (result.status === 401) await handleAuthFailure(401);
+
+    // 204/205 responses must not carry a body, and the Response constructor
+    // rejects one.
+    const responseBody = result.status === 204 || result.status === 205
+      ? null
+      : (result.body ?? '');
+
+    return new Response(responseBody, {
+      status: result.status,
+      headers: {
+        'Content-Type': result.contentType || 'application/json',
+      },
+    });
+  }
+
+  const headers = await personalAuthHeaders(options.headers || {});
+  return fetch(url, { ...options, headers });
+}
+
 /** Ask the backend for a single-use ticket for one WS path. */
 export async function createWsTicket(path) {
+  const api = electronBridge();
+  if (api && typeof api.createWsTicket === 'function') {
+    const result = await api.createWsTicket(path);
+    if (result?.ok) return result.ticket;
+
+    const status = typeof result?.status === 'number' ? result.status : 0;
+    if (status === 401) await handleAuthFailure(401);
+    throw new DeviceAuthError(
+      result?.detail || 'Could not obtain a WebSocket ticket',
+      status,
+    );
+  }
+
   const credential = await loadCredential();
 
   if (!credential) {
@@ -258,18 +361,12 @@ function watchForRevocation(socket) {
       /* non-JSON frames are handled by the socket owner */
     }
   });
-  socket.addEventListener('close', (event) => {
-    if (event.code === 4001) revokeLocally(socket);
-  });
 }
 
-/** Current server-side identity, for a pairing/health panel. */
+/** Device identity for UI: null when unpaired (Electron or browser dev). */
 export async function getDeviceIdentity() {
-  const credential = await loadCredential();
-  if (!credential) return null;
-  const response = await fetch(`${apiBase()}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${credential}` },
-  });
+  if (!(await hasCredential())) return null;
+  const response = await personalFetch(`${apiBase()}/api/auth/me`);
   if (!response.ok) {
     await handleAuthFailure(response.status);
     return null;

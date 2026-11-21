@@ -5,6 +5,10 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { spawn } from 'child_process';
 import { readBuildSummary } from './build-summary.js';
+import {
+    isAllowedBackendUrl,
+    stripRendererAuthorization,
+} from './src/utils/authBrokerPolicy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -205,9 +209,13 @@ ipcMain.on('open-analytics', () => {
 
 // ── Device credential storage (Patch 2/3) ─────────────────────────────────
 // The long-lived device credential must never live in renderer localStorage.
-// safeStorage encrypts it with the OS keychain/keystore; the renderer reaches
-// it only through the three narrow IPC calls below, and every call is refused
-// unless it comes from the app's own UI origin.
+// safeStorage encrypts it with the OS keychain/keystore. The renderer never
+// receives the credential itself: it asks the main process to perform
+// authenticated HTTP calls and to mint one-use WebSocket tickets. Every IPC
+// call is refused unless it comes from the app's own UI origin.
+const BACKEND_URL = process.env.AARIYA_API_BASE || 'http://127.0.0.1:8000';
+const BACKEND_ORIGIN = new URL(BACKEND_URL).origin;
+
 function isTrustedIpcSender(event) {
     try {
         return new URL(event.senderFrame?.url || '').origin === DEV_SERVER_ORIGIN;
@@ -218,6 +226,19 @@ function isTrustedIpcSender(event) {
 
 function getDeviceCredentialPath() {
     return path.join(app.getPath('userData'), 'device-credential.bin');
+}
+
+/** Main-process-only read of the OS-encrypted credential. */
+function readStoredCredential() {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    try {
+        const file = getDeviceCredentialPath();
+        if (!fs.existsSync(file)) return null;
+        return safeStorage.decryptString(fs.readFileSync(file));
+    } catch (err) {
+        console.error('[DeviceAuth] Failed to read credential:', err);
+        return null;
+    }
 }
 
 ipcMain.handle('auth:store-device-credential', (event, credential) => {
@@ -237,17 +258,9 @@ ipcMain.handle('auth:store-device-credential', (event, credential) => {
     }
 });
 
-ipcMain.handle('auth:get-device-credential', (event) => {
-    if (!isTrustedIpcSender(event)) return null;
-    if (!safeStorage.isEncryptionAvailable()) return null;
-    try {
-        const file = getDeviceCredentialPath();
-        if (!fs.existsSync(file)) return null;
-        return safeStorage.decryptString(fs.readFileSync(file));
-    } catch (err) {
-        console.error('[DeviceAuth] Failed to read credential:', err);
-        return null;
-    }
+ipcMain.handle('auth:has-device-credential', (event) => {
+    if (!isTrustedIpcSender(event)) return false;
+    return Boolean(readStoredCredential());
 });
 
 ipcMain.handle('auth:clear-device-credential', (event) => {
@@ -259,6 +272,97 @@ ipcMain.handle('auth:clear-device-credential', (event) => {
     } catch (err) {
         console.error('[DeviceAuth] Failed to clear credential:', err);
         return false;
+    }
+});
+
+/**
+ * Authenticated REST broker. The renderer never sees the credential; the main
+ * process attaches it after validating the target origin.
+ */
+ipcMain.handle('auth:api-fetch', async (event, request) => {
+    if (!isTrustedIpcSender(event)) {
+        return { ok: false, status: 0, error: 'Untrusted IPC sender' };
+    }
+
+    const url = String(request?.url || '');
+    if (!isAllowedBackendUrl(url, BACKEND_ORIGIN)) {
+        return { ok: false, status: 0, error: 'Refusing to send credentials to that origin' };
+    }
+
+    const method = String(request?.method || 'GET').toUpperCase();
+    const headers = stripRendererAuthorization(request?.headers);
+    const credential = readStoredCredential();
+    if (credential) headers.Authorization = `Bearer ${credential}`;
+
+    let body = request?.body;
+    if (body !== null && body !== undefined && typeof body !== 'string') {
+        body = JSON.stringify(body);
+    }
+
+    try {
+        const response = await fetch(url, {
+            method,
+            headers,
+            body: body === null || body === undefined ? undefined : body,
+        });
+        return {
+            ok: response.ok,
+            status: response.status,
+            body: await response.text(),
+            contentType: response.headers.get('content-type') || 'application/json',
+        };
+    } catch (err) {
+        return { ok: false, status: 0, error: String(err?.message || err) };
+    }
+});
+
+/** Mint a single-use, path-bound WebSocket ticket without exposing the credential. */
+ipcMain.handle('auth:ws-ticket', async (event, wsPath) => {
+    if (!isTrustedIpcSender(event)) {
+        return { ok: false, status: 0, detail: 'Untrusted IPC sender' };
+    }
+
+    const cleanPath = String(wsPath || '').split('?', 1)[0];
+    if (!cleanPath.startsWith('/')) {
+        return { ok: false, status: 400, detail: 'Invalid WebSocket path' };
+    }
+
+    const credential = readStoredCredential();
+    if (!credential) {
+        return {
+            ok: false,
+            status: 401,
+            detail: 'Pair this computer before connecting to Aariya',
+        };
+    }
+
+    try {
+        const response = await fetch(`${BACKEND_ORIGIN}/api/auth/ws-ticket`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${credential}`,
+            },
+            body: JSON.stringify({ path: cleanPath }),
+        });
+
+        let parsed = {};
+        try {
+            parsed = await response.json();
+        } catch {
+            parsed = {};
+        }
+
+        if (!response.ok) {
+            return {
+                ok: false,
+                status: response.status,
+                detail: parsed?.detail || 'Could not obtain a WebSocket ticket',
+            };
+        }
+        return { ok: true, status: response.status, ticket: parsed.ticket };
+    } catch (err) {
+        return { ok: false, status: 0, detail: String(err?.message || err) };
     }
 });
 

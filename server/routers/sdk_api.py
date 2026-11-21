@@ -24,11 +24,19 @@ from server.systems.security.device_auth import (
     DevicePrincipal,
     personal_owner,
     require_dashboard_device,
+    require_personal_device,
 )
 from server.systems.kill_switches import get_kill_switches, FeatureFlag
 from server.systems.audit_logger import get_audit_logger, AuditEventType
 
-router = APIRouter(prefix="/api/sdk", tags=["SDK"])
+# Every SDK surface is authenticated: the router-level guard closes capability
+# routes (avatar/language) while the per-route dashboard dependency keeps the
+# control surfaces desktop-only.
+router = APIRouter(
+    prefix="/api/sdk",
+    tags=["SDK"],
+    dependencies=[Depends(require_personal_device)],
+)
 
 
 # ── Session store (in-memory, keyed by session_id) ─────────────────────────────

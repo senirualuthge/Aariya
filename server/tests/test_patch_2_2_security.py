@@ -19,9 +19,13 @@ from fastapi.testclient import TestClient
 from server import main as server_main
 from server.db import get_db_connection
 from server.systems.security.device_auth import (
+    DeviceAuthError,
     PairingRateLimited,
+    authenticate_credential,
     create_pairing_code,
+    issue_ws_ticket,
     reserve_pairing_attempt,
+    redeem_ws_ticket,
 )
 
 OWNER = "u1"
@@ -339,3 +343,135 @@ def test_valid_signed_external_signal_is_accepted_once(isolated_db, monkeypatch)
     response = client.post("/api/signals/ingest", content=body, headers=headers)
     assert response.status_code == 200, response.text
     assert response.json()["ok"] is True
+
+
+# ── Patch 3: every personal REST surface resolves identity ───────────────────
+
+PERSONAL_SURFACES = [
+    "/api/prediction/status",
+    "/api/self-knowledge",
+    "/api/obsidian/runtime/latest",
+    "/api/obsidian/search?q=anything",
+    "/api/rl/status",
+    "/api/web-search?q=anything",
+]
+
+
+@pytest.mark.parametrize("path", PERSONAL_SURFACES)
+def test_personal_surfaces_require_a_credential_in_strict_mode(client, path):
+    response = client.get(path)
+    assert response.status_code in (401, 403), f"{path} leaked: {response.status_code}"
+
+
+@pytest.mark.parametrize("path", PERSONAL_SURFACES)
+def test_personal_surfaces_reject_forged_user_id(client, path):
+    separator = "&" if "?" in path else "?"
+    response = client.get(f"{path}{separator}user_id=someone-else")
+    assert response.status_code in (401, 403)
+
+
+def test_dashboard_only_surfaces_reject_a_mobile_device(client):
+    mobile = _pair(client, role="mobile", label="phone", platform="ios")
+    response = client.get("/api/meeting/status", headers=_auth(mobile["credential"]))
+    assert response.status_code == 403
+
+    response = client.post(
+        "/api/self-knowledge/refresh",
+        headers=_auth(mobile["credential"]),
+    )
+    assert response.status_code == 403
+
+
+def test_dashboard_device_may_read_personal_surfaces(client):
+    dashboard = _pair(client)
+    headers = _auth(dashboard["credential"])
+    for path in ("/api/meeting/status", "/api/rl/status", "/api/self-knowledge"):
+        response = client.get(path, headers=headers)
+        assert response.status_code == 200, f"{path}: {response.status_code}"
+
+
+def test_every_private_websocket_route_has_an_explicit_role_policy():
+    from starlette.routing import WebSocketRoute
+
+    from server.systems.security.device_auth import roles_for_path
+
+    unmapped = []
+    for route in server_main.app.routes:
+        if not isinstance(route, WebSocketRoute):
+            continue
+        path = route.path
+        if not roles_for_path(path):
+            unmapped.append(path)
+    assert unmapped == [], f"WebSocket paths with no device-role policy: {unmapped}"
+
+
+# ── Patch 3: device identity, revocation and ticket-binding regressions ──────
+
+def test_revoked_device_credential_is_rejected(client):
+    device = _pair(client)
+    revoke = client.delete(
+        f"/api/auth/devices/{device['device_id']}",
+        headers=_auth(device["credential"]),
+    )
+    assert revoke.status_code == 200
+    assert revoke.json()["revoked"] is True
+
+    rejected = client.get("/api/auth/me", headers=_auth(device["credential"]))
+    assert rejected.status_code == 401
+
+
+def test_websocket_ticket_cannot_be_used_on_another_path(client):
+    device = _pair(client)
+    principal = authenticate_credential(device["credential"])
+    ticket = issue_ws_ticket(principal, "/ws/synoptics")
+
+    with pytest.raises(DeviceAuthError):
+        redeem_ws_ticket(ticket, "/ws/brain")
+
+
+def test_websocket_ticket_can_only_be_redeemed_once(client):
+    device = _pair(client)
+    principal = authenticate_credential(device["credential"])
+    ticket = issue_ws_ticket(principal, "/ws/synoptics")
+
+    redeemed = redeem_ws_ticket(ticket, "/ws/synoptics")
+    assert redeemed.device_id == device["device_id"]
+
+    with pytest.raises(DeviceAuthError):
+        redeem_ws_ticket(ticket, "/ws/synoptics")
+
+
+def test_mobile_device_cannot_request_dashboard_websocket_ticket(client):
+    phone = _pair(client, role="mobile", label="phone", platform="android")
+    response = client.post(
+        "/api/auth/ws-ticket",
+        json={"path": "/ws/synoptics"},
+        headers=_auth(phone["credential"]),
+    )
+    assert response.status_code == 403
+
+
+def test_dashboard_device_cannot_request_mobile_websocket_ticket(client):
+    laptop = _pair(client, role="dashboard", label="laptop", platform="macos")
+    response = client.post(
+        "/api/auth/ws-ticket",
+        json={"path": "/ws/mobile"},
+        headers=_auth(laptop["credential"]),
+    )
+    assert response.status_code == 403
+
+
+def test_revoked_device_cannot_create_new_websocket_ticket(client):
+    device = _pair(client)
+    revoke = client.delete(
+        f"/api/auth/devices/{device['device_id']}",
+        headers=_auth(device["credential"]),
+    )
+    assert revoke.status_code == 200
+
+    response = client.post(
+        "/api/auth/ws-ticket",
+        json={"path": "/ws/synoptics"},
+        headers=_auth(device["credential"]),
+    )
+    assert response.status_code == 401

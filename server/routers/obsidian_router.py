@@ -17,7 +17,7 @@ unreadable files return empty results, never an error.
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from server.systems.rag.obsidian_indexer import (
     MEM_TYPE_DEVELOPER,
@@ -25,10 +25,16 @@ from server.systems.rag.obsidian_indexer import (
     SIMILARITY_FLOOR,
     get_obsidian_indexer,
 )
+from server.systems.security.device_auth import require_personal_device
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/obsidian", tags=["obsidian"])
+# Both vaults hold the owner's notes, so search requires a trusted device.
+router = APIRouter(
+    prefix="/api/obsidian",
+    tags=["obsidian"],
+    dependencies=[Depends(require_personal_device)],
+)
 
 
 def _search_indexed(q: str, mem_type: Optional[str], k: int) -> List[dict]:

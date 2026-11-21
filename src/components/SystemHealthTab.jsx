@@ -27,7 +27,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { personalAuthHeaders } from '../utils/deviceAuth';
+import { personalFetch } from '../utils/deviceAuth';
 import DevicePairingCard from './DevicePairingCard';
 
 // ── Status palette ────────────────────────────────────────────────────────────
@@ -718,9 +718,7 @@ function GevHealthPanel({ apiBase }) {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${apiBase}/api/system/health`, {
-        headers: await personalAuthHeaders(),
-      });
+      const res = await personalFetch(`${apiBase}/api/system/health`);
       if (!res.ok) return;
       const data = await res.json();
       const gevCheck = (data.checks || []).find((c) => c.name === 'gev');
@@ -738,7 +736,7 @@ function GevHealthPanel({ apiBase }) {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      const res = await fetch(`${apiBase}/api/gev/manual-refresh`, { method: 'POST' });
+      const res = await personalFetch(`${apiBase}/api/gev/manual-refresh`, { method: 'POST' });
       if (res.ok) {
         setLastRefreshTs(Date.now());
         // Re-fetch status after refresh

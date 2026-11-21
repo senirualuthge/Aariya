@@ -11,13 +11,20 @@ Endpoints:
   POST /api/meeting/names/add    → append a single alias
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from server.systems.meeting_mode import get_meeting_mode
+from server.systems.security.device_auth import require_dashboard_device
 
-router = APIRouter(prefix="/api/meeting", tags=["meeting"])
+# Meeting Mode manipulates desktop windows and capture state, so only the
+# dashboard device may read or change it.
+router = APIRouter(
+    prefix="/api/meeting",
+    tags=["meeting"],
+    dependencies=[Depends(require_dashboard_device)],
+)
 
 
 # ── Request models ─────────────────────────────────────────────────────────────

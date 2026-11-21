@@ -32,10 +32,6 @@ class ToolCallRequest(BaseModel):
     arguments: Optional[Dict[str, Any]] = None
 
 
-class IngestRequest(BaseModel):
-    user_id: str = "user_default"
-
-
 @router.get("/tools")
 async def list_tools(_owner: str = Depends(personal_owner)):
     """All callable tools across builtin + connected MCP servers."""
@@ -86,10 +82,13 @@ async def knowledge_query(
 
 @router.post("/knowledge/ingest")
 async def knowledge_ingest(
-    req: IngestRequest,
     owner: str = Depends(personal_owner),
 ):
-    """Fold the system's current real signals into the persistent graph."""
+    """Fold the system's current real signals into the persistent graph.
+
+    The identity comes only from the authenticated device; a body-supplied
+    ``user_id`` is never accepted.
+    """
     from server.systems.agent.graph_feeder import ingest_real_signals
     added = ingest_real_signals(owner)
     return {"ok": True, "added": added}

@@ -7,9 +7,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Panel persistence - uses main-process fs for crash-safe storage
     savePanelState: (state) => ipcRenderer.invoke('save-panel-state', state),
     loadPanelState: () => ipcRenderer.invoke('load-panel-state'),
-    // Device credential (OS-encrypted in the main process; never localStorage)
-    getDeviceCredential: () => ipcRenderer.invoke('auth:get-device-credential'),
+    // Device credential (OS-encrypted in the main process; never localStorage).
+    // The renderer never receives the credential: it delegates authenticated
+    // HTTP calls and WebSocket ticket creation to the main process.
+    hasDeviceCredential: () => ipcRenderer.invoke('auth:has-device-credential'),
     storeDeviceCredential: (credential) =>
         ipcRenderer.invoke('auth:store-device-credential', credential),
-    clearDeviceCredential: () => ipcRenderer.invoke('auth:clear-device-credential')
+    clearDeviceCredential: () => ipcRenderer.invoke('auth:clear-device-credential'),
+    authFetch: (request) => ipcRenderer.invoke('auth:api-fetch', request),
+    createWsTicket: (wsPath) => ipcRenderer.invoke('auth:ws-ticket', wsPath)
 });

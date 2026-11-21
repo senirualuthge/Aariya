@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { subscribeMetrics } from '../systems/metricsClient';
 import { apiBase } from '../utils/apiHost';
-import { personalAuthHeaders } from '../utils/deviceAuth';
+import { personalFetch } from '../utils/deviceAuth';
 
 const REST_URL = () => `${apiBase()}/api/system/health`;
 
@@ -45,7 +45,7 @@ export default function useSystemHealth() {
       if (inFlightRef.current || !mounted) return;
       inFlightRef.current = true;
       try {
-        const res = await fetch(REST_URL(), { headers: await personalAuthHeaders() });
+        const res = await personalFetch(REST_URL());
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (mounted) {

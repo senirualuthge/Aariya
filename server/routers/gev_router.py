@@ -57,7 +57,7 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
 from server.systems.gev.gev_client import get_gev_client, BoundingBox
 from server.systems.gev.gev_agent import get_gev_agent
@@ -65,10 +65,17 @@ from server.systems.world_model.world_state import get_world_state
 from server.systems.security.device_auth import (
     accept_personal_websocket,
     authenticate_personal_websocket,
+    require_dashboard_device,
 )
 
 logger = logging.getLogger("aariya.gev_router")
-router = APIRouter(prefix="/api/gev", tags=["GEV Intelligence"])
+# GEV data and the manual refresh are dashboard intelligence surfaces; every
+# REST route requires a dashboard device (legacy mode keeps the old contract).
+router = APIRouter(
+    prefix="/api/gev",
+    tags=["GEV Intelligence"],
+    dependencies=[Depends(require_dashboard_device)],
+)
 
 # ── WebSocket fan-out ─────────────────────────────────────────────────────────
 

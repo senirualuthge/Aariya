@@ -16,11 +16,19 @@ the core is model-free and always runs.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from server.systems.security.device_auth import require_personal_device
+
 logger = logging.getLogger("aariya.prediction_api")
-router = APIRouter(prefix="/api/prediction", tags=["Prediction Engine"])
+# Predictions and beliefs describe the configured owner, so every endpoint
+# needs a trusted device. Legacy mode falls back to the pre-pairing principal.
+router = APIRouter(
+    prefix="/api/prediction",
+    tags=["Prediction Engine"],
+    dependencies=[Depends(require_personal_device)],
+)
 
 from server.systems.prediction.prediction_core import (
     PredictionEngine,

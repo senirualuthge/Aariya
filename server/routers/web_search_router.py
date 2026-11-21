@@ -16,13 +16,19 @@ is unreachable the endpoint returns an explicit "Search Unavailable" row.
 import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from server.systems.agent.config import config
 from server.systems.agent.web_intelligence import web_intel
+from server.systems.security.device_auth import require_personal_device
 
 logger = logging.getLogger("aariya.web_search")
-router = APIRouter(prefix="/api/web-search", tags=["Web Search"])
+# The browser-facing search proxy must not be an open relay; require a device.
+router = APIRouter(
+    prefix="/api/web-search",
+    tags=["Web Search"],
+    dependencies=[Depends(require_personal_device)],
+)
 
 MAX_RESULTS = 10
 
