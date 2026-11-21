@@ -371,6 +371,9 @@ app.include_router(collab_ws_router)       # Provides /ws/collab/{name} rooms
 from server.realtime.webrtc_server import router as webrtc_router
 app.include_router(webrtc_router)          # Provides /offer + /interrupt (paired mobile only)
 
+from server.realtime.turn_credentials import router as turn_credentials_router
+app.include_router(turn_credentials_router)  # Provides GET /api/webrtc/turn-credentials (paired mobile only)
+
 
 # --- SHARED COGNITIVE LOOP HANDLER ---
 
