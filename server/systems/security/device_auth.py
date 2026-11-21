@@ -134,7 +134,7 @@ def _insecure_transport_allowed() -> bool:
 class PairingRateLimited(DeviceAuthError):
     """The caller exceeded the pairing-attempt budget."""
 
-    def __init__(self, retry_after: int):
+    def __init__(self, retry_after: int | float):
         super().__init__("too many pairing attempts")
         self.retry_after = max(1, int(retry_after))
 
