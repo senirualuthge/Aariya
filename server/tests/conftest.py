@@ -5,6 +5,7 @@ isolation helpers so tests never touch real LLM endpoints or dev databases.
 """
 
 import asyncio
+import inspect
 import os
 import sys
 
@@ -20,7 +21,7 @@ import server.db as server_db  # noqa: E402  (needs the path bootstrap above)
 
 def pytest_pyfunc_call(pyfuncitem):
     """Run async test functions seamlessly using asyncio.run."""
-    if asyncio.iscoroutinefunction(pyfuncitem.obj):
+    if inspect.iscoroutinefunction(pyfuncitem.obj):
         testargs = {
             arg: pyfuncitem.funcargs[arg]
             for arg in pyfuncitem._fixtureinfo.argnames

@@ -30,7 +30,9 @@ FRAME_MS = (10, 20, 30)
 
 # ── PCM helpers ────────────────────────────────────────────────────────────────
 
-def resample_int16(samples: Sequence[float], src_rate: int, dst_rate: int) -> np.ndarray:
+def resample_int16(
+    samples: Sequence[float] | np.ndarray, src_rate: int, dst_rate: int
+) -> np.ndarray:
     """Linear-interpolation resample of a float/int sample sequence.
 
     A genuine (if simple) resampler so a browser's native 44.1/48 kHz stream can
@@ -39,7 +41,7 @@ def resample_int16(samples: Sequence[float], src_rate: int, dst_rate: int) -> np
     x = np.asarray(samples, dtype=np.float32)
     if src_rate == dst_rate or x.size == 0:
         return x
-    n_dst = max(1, int(round(x.size * float(dst_rate) / float(src_rate))))
+    n_dst = max(1, round(x.size * float(dst_rate) / float(src_rate)))
     src_idx = np.linspace(0.0, x.size - 1, num=n_dst, dtype=np.float32)
     lo = np.floor(src_idx).astype(np.int64)
     hi = np.minimum(lo + 1, x.size - 1)
@@ -47,7 +49,7 @@ def resample_int16(samples: Sequence[float], src_rate: int, dst_rate: int) -> np
     return (x[lo] * (1.0 - frac) + x[hi] * frac).astype(np.float32)
 
 
-def float_to_int16(samples: Sequence[float]) -> np.ndarray:
+def float_to_int16(samples: Sequence[float] | np.ndarray) -> np.ndarray:
     """Clamp float samples in [-1, 1] to int16 (real quantisation)."""
     x = np.asarray(samples, dtype=np.float32)
     x = np.clip(x, -1.0, 1.0)
@@ -61,7 +63,7 @@ class VoiceActivityDetector:
 
     def __init__(self, sample_rate: int = 16000, frame_ms: int = 20,
                  aggressiveness: int = 2):
-        if not available:
+        if not available or _webrtcvad is None:
             raise RuntimeError("webrtcvad is not installed")
         if sample_rate not in SUPPORTED_RATES:
             raise ValueError(f"sample_rate must be one of {SUPPORTED_RATES}")

@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from server.realtime.webrtc_server import CapturedUtterance
 
 from server.protocol import MultimodalInput
 from server.systems.cognitive_session_coordinator import cognitive_sessions
@@ -12,7 +15,7 @@ from server.realtime.speech_generation import speech_generation
 logger = logging.getLogger("Aariya.AudioSession")
 
 
-async def process_utterance(utterance: Any) -> Optional[dict]:
+async def process_utterance(utterance: CapturedUtterance) -> Optional[dict[str, Any]]:
     if not getattr(utterance, "owner_id", None) or not getattr(utterance, "device_id", None):
         raise PermissionError("Authenticated device identity required")
 
