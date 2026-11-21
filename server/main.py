@@ -279,6 +279,13 @@ async def lifespan(app: FastAPI):
         get_gev_agent().stop()
     except Exception:
         pass
+    # Close any live WebRTC peer connections so aiortc's ICE/DTLS transports
+    # do not outlive the app.
+    try:
+        from server.realtime.webrtc_server import close_all_peer_connections
+        await close_all_peer_connections()
+    except Exception:
+        pass
     logger.info("Aariya Brain shutting down.")
 
 app = FastAPI(title="Aariya AI Brain - FIXV4", lifespan=lifespan)
@@ -357,6 +364,12 @@ app.include_router(sync_router)            # Provides /api/memory/* + /api/embod
 from server.routers.collab_router import router as collab_router, ws_router as collab_ws_router
 app.include_router(collab_router)          # Provides /api/collab/*
 app.include_router(collab_ws_router)       # Provides /ws/collab/{name} rooms
+
+# WebRTC microphone capture for the paired phone: POST /offer + /interrupt.
+# Capture-only — audio is VAD-cut and handed to the utterance sink; there is no
+# ASR/LLM/TTS pipeline in this tree yet, so the reply track carries silence.
+from server.realtime.webrtc_server import router as webrtc_router
+app.include_router(webrtc_router)          # Provides /offer + /interrupt (paired mobile only)
 
 
 # --- SHARED COGNITIVE LOOP HANDLER ---

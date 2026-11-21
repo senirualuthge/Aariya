@@ -23,11 +23,11 @@ class DeviceIdentity {
   final String label;
 
   factory DeviceIdentity.fromJson(Map<String, dynamic> json) => DeviceIdentity(
-        deviceId: json['device_id'] as String? ?? '',
-        ownerId: json['owner_id'] as String? ?? '',
-        role: json['role'] as String? ?? '',
-        label: json['label'] as String? ?? '',
-      );
+    deviceId: json['device_id'] as String? ?? '',
+    ownerId: json['owner_id'] as String? ?? '',
+    role: json['role'] as String? ?? '',
+    label: json['label'] as String? ?? '',
+  );
 }
 
 /// A device-auth failure. [needsPairing] is true when the stored credential is
@@ -85,12 +85,13 @@ class DeviceAuthService {
     String label = 'this phone',
     String? platform,
   }) async {
-    final resolvedPlatform = platform ??
+    final resolvedPlatform =
+        platform ??
         (defaultTargetPlatform == TargetPlatform.iOS
             ? 'ios'
             : defaultTargetPlatform == TargetPlatform.android
-                ? 'android'
-                : 'desktop');
+            ? 'android'
+            : 'desktop');
     final response = await _post(
       '/api/auth/device/enroll',
       body: {
@@ -150,7 +151,9 @@ class DeviceAuthService {
       return null;
     }
     if (response.statusCode != 200) {
-      throw DeviceAuthException('Could not read device identity (${response.statusCode})');
+      throw DeviceAuthException(
+        'Could not read device identity (${response.statusCode})',
+      );
     }
     return DeviceIdentity.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
@@ -163,11 +166,7 @@ class DeviceAuthService {
   /// pairing information.
   Future<bool> deviceAuthEnabledOnServer() async {
     final response = await http
-        .get(
-          Uri.parse(
-            '${ServerConfig.instance.httpBase}/api/auth/mode',
-          ),
-        )
+        .get(Uri.parse('${ServerConfig.instance.httpBase}/api/auth/mode'))
         .timeout(_timeout);
 
     if (response.statusCode != 200) {
@@ -177,15 +176,12 @@ class DeviceAuthService {
       );
     }
 
-    final body =
-        jsonDecode(response.body) as Map<String, dynamic>;
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     final enabled = body['device_auth_enabled'];
 
     if (enabled is! bool) {
-      throw const DeviceAuthException(
-        'Invalid authentication-mode response.',
-      );
+      throw const DeviceAuthException('Invalid authentication-mode response.');
     }
 
     return enabled;
@@ -242,13 +238,41 @@ class DeviceAuthService {
 
   /// Open a WebSocket with a fresh ticket. Falls back to an unauthenticated
   /// connection only when this phone has not been paired yet.
-  Future<WebSocketChannel> openAuthenticatedChannel(Uri uri, String path) async {
+  Future<WebSocketChannel> openAuthenticatedChannel(
+    Uri uri,
+    String path,
+  ) async {
     final ticket = await createWebSocketTicket(path);
     if (ticket == null) return WebSocketChannel.connect(uri);
     return WebSocketChannel.connect(
       uri,
       protocols: ['aariya.v1', 'aariya-ticket.$ticket'],
     );
+  }
+
+  /// Returns headers for an authenticated REST request.
+  ///
+  /// WebRTC negotiation must not fall back to legacy unauthenticated access.
+  Future<Map<String, String>> authenticatedHeaders() async {
+    final credential = await _credential();
+
+    if (credential == null || credential.isEmpty) {
+      needsPairing.value = true;
+      throw const DeviceAuthException(
+        'Pair this device before starting a WebRTC session.',
+        needsPairing: true,
+      );
+    }
+
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $credential',
+    };
+  }
+
+  /// Call when an authenticated endpoint rejects the device credential.
+  Future<void> handleUnauthorizedResponse() async {
+    await _rejectCredential();
   }
 
   Future<void> _rejectCredential() async {
@@ -273,20 +297,21 @@ class DeviceAuthService {
         .timeout(_timeout);
   }
 
-  Future<http.Response> _get(
-    String path, {
-    required String credential,
-  }) async {
-    return http.get(
-      Uri.parse('${ServerConfig.instance.httpBase}$path'),
-      headers: {'Authorization': 'Bearer $credential'},
-    ).timeout(_timeout);
+  Future<http.Response> _get(String path, {required String credential}) async {
+    return http
+        .get(
+          Uri.parse('${ServerConfig.instance.httpBase}$path'),
+          headers: {'Authorization': 'Bearer $credential'},
+        )
+        .timeout(_timeout);
   }
 
   String? _detail(http.Response response) {
     try {
       final body = jsonDecode(response.body);
-      if (body is Map && body['detail'] is String) return body['detail'] as String;
+      if (body is Map && body['detail'] is String) {
+        return body['detail'] as String;
+      }
     } catch (_) {
       // Non-JSON error body.
     }
