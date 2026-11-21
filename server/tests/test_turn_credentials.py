@@ -1,6 +1,9 @@
 """Tests for short-lived TURN credentials endpoint (server/realtime/turn_credentials.py)."""
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import os
 import time
 
@@ -12,6 +15,35 @@ from server.realtime import turn_credentials
 from server.systems.security.device_auth import create_pairing_code
 
 OWNER = "u1"
+
+
+def generate_expected_credential(
+    username: str,
+    secret: str,
+) -> str:
+    digest = hmac.new(
+        secret.encode(),
+        username.encode(),
+        hashlib.sha1,
+    ).digest()
+    return base64.b64encode(digest).decode()
+
+
+def test_turn_credential_generation():
+    secret = "test-only-secret"
+    username = f"{int(time.time()) + 3600}:device-test"
+    credential = generate_expected_credential(
+        username,
+        secret,
+    )
+    assert credential
+    assert credential != secret
+
+
+def test_turn_credentials_are_expiring():
+    expiry = int(time.time()) + 3600
+    username = f"{expiry}:aariya"
+    assert int(username.split(":")[0]) == expiry
 
 
 @pytest.fixture

@@ -247,7 +247,20 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_brief_broadcaster())
 
+    # Start the real WebRTC speech pipeline.
+    from server.realtime.webrtc_server import set_utterance_sink
+    from server.realtime.audio_session import process_utterance
+    set_utterance_sink(process_utterance)
+    logger.info("WebRTC speech pipeline connected")
+
     yield
+
+    # Stop WebRTC speech pipeline before closing peer connections
+    try:
+        from server.realtime.webrtc_server import set_utterance_sink
+        set_utterance_sink(None)
+    except Exception:
+        pass
 
     # Stop idle-session eviction before tearing the rest down.
     session_sweeper.cancel()

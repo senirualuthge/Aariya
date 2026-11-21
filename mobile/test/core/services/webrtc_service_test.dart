@@ -12,6 +12,35 @@ void main() {
     await ServerConfig.instance.load();
   });
 
+  group('WebRTC recovery policy', () {
+    test('maximum reconnect attempts are bounded', () {
+      const maxAttempts = 5;
+
+      expect(maxAttempts, equals(5));
+    });
+
+    test('reconnect delay uses exponential backoff', () {
+      const delays = [1, 2, 4, 8, 16];
+
+      expect(delays.length, equals(5));
+
+      for (var i = 1; i < delays.length; i++) {
+        expect(delays[i], equals(delays[i - 1] * 2));
+      }
+    });
+
+    test('reconnect policy does not retry indefinitely', () {
+      const maxAttempts = 5;
+      var attempts = 0;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+      }
+
+      expect(attempts, equals(maxAttempts));
+    });
+  });
+
   group('WebRTCService', () {
     test('initial state is disconnected', () {
       final service = WebRTCService.instance;

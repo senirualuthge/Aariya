@@ -80,7 +80,7 @@ ICE_SERVERS = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
 # ── Negotiation model ────────────────────────────────────────────────────────
 
 class OfferModel(BaseModel):
-    sdp: str = Field(min_length=10, max_length=MAX_OFFER_CHARS)
+    sdp: str = Field(default="", max_length=MAX_OFFER_CHARS)
     type: str = Field(default="offer")
 
 
@@ -185,70 +185,81 @@ async def _deliver(utterance: CapturedUtterance) -> None:
 # ── Outbound track ───────────────────────────────────────────────────────────
 
 class AudioReplyTrack(MediaStreamTrack):
-    """Outgoing audio track with queued playback and pacing.
-
-    Emits queued audio frames at a 20 ms cadence (s16 mono). When the queue is
-    empty, emits real silence so the WebRTC stream and the phone's audio renderer
-    remain active and synchronized.
-    """
+    """Paced 48 kHz mono PCM audio output over WebRTC."""
 
     kind = "audio"
+    SAMPLE_RATE = 48000
+    FRAME_MS = 20
+    FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000
+    MAX_QUEUED_FRAMES = 750
 
-    def __init__(self, sample_rate: int = 48000):
+    def __init__(self):
         super().__init__()
-        self._sample_rate = sample_rate
-        self._samples = int(AUDIO_PTIME * sample_rate)
-        self._frame_bytes = self._samples * 2
-        self._silence = b"\x00" * self._frame_bytes
+        self._sample_rate = self.SAMPLE_RATE
+        self._queue: asyncio.Queue[bytes] = asyncio.Queue(
+            maxsize=self.MAX_QUEUED_FRAMES
+        )
         self._timestamp = 0
-        self._start: Optional[float] = None
-        self._queue: asyncio.Queue[bytes] = asyncio.Queue()
-        self._buffer = bytearray()
+        self._started_at = None
 
-    def enqueue_pcm(self, pcm: bytes) -> None:
-        """Enqueue PCM s16 mono audio for playback."""
-        if pcm:
-            self._queue.put_nowait(pcm)
+    def enqueue_pcm(self, pcm: bytes) -> int:
+        """Queue signed 16-bit, 48 kHz, mono PCM."""
+        if len(pcm) % 2:
+            raise ValueError("PCM data must contain complete int16 samples")
+        frame_bytes = self.FRAME_SAMPLES * 2
+        frames_needed = (len(pcm) + frame_bytes - 1) // frame_bytes
+        if frames_needed > self._queue.maxsize - self._queue.qsize():
+            raise RuntimeError("WebRTC audio queue is full")
 
-    def clear(self) -> None:
-        """Drop all queued and buffered audio immediately (interrupt / barge-in)."""
-        self._buffer.clear()
+        count = 0
+        for offset in range(0, len(pcm), frame_bytes):
+            chunk = pcm[offset : offset + frame_bytes]
+            if len(chunk) < frame_bytes:
+                chunk += b"\x00" * (frame_bytes - len(chunk))
+            self._queue.put_nowait(chunk)
+            count += 1
+        return count
+
+    def interrupt(self) -> int:
+        """Clear all queued frames (barge-in). Returns count discarded."""
+        discarded = 0
         while not self._queue.empty():
             try:
                 self._queue.get_nowait()
+                discarded += 1
             except asyncio.QueueEmpty:
                 break
+        return discarded
+
+    def clear(self) -> int:
+        """Alias for interrupt / cleanup."""
+        return self.interrupt()
 
     async def recv(self) -> AudioFrame:
-        if self._start is None:
-            self._start = time.time()
+        if self._started_at is None:
+            self._started_at = time.time()
             self._timestamp = 0
         else:
-            self._timestamp += self._samples
-            wait = self._start + (self._timestamp / self._sample_rate) - time.time()
+            self._timestamp += self.FRAME_SAMPLES
+            wait = (
+                self._started_at
+                + (self._timestamp / self.SAMPLE_RATE)
+                - time.time()
+            )
             if wait > 0:
                 await asyncio.sleep(wait)
 
-        while len(self._buffer) < self._frame_bytes and not self._queue.empty():
-            try:
-                chunk = self._queue.get_nowait()
-                self._buffer.extend(chunk)
-            except asyncio.QueueEmpty:
-                break
+        try:
+            data = self._queue.get_nowait()
+        except asyncio.QueueEmpty:
+            data = b"\x00" * (self.FRAME_SAMPLES * 2)
 
-        if len(self._buffer) >= self._frame_bytes:
-            data = bytes(self._buffer[: self._frame_bytes])
-            del self._buffer[: self._frame_bytes]
-        elif self._buffer:
-            data = bytes(self._buffer) + b"\x00" * (self._frame_bytes - len(self._buffer))
-            self._buffer.clear()
-        else:
-            data = self._silence
-
-        frame = AudioFrame(format="s16", layout="mono", samples=self._samples)
+        frame = AudioFrame(
+            format="s16", layout="mono", samples=self.FRAME_SAMPLES
+        )
         frame.planes[0].update(data)
-        frame.sample_rate = self._sample_rate
-        frame.time_base = fractions.Fraction(1, self._sample_rate)
+        frame.sample_rate = self.SAMPLE_RATE
+        frame.time_base = fractions.Fraction(1, self.SAMPLE_RATE)
         return frame
 
 
@@ -412,29 +423,31 @@ class VoiceSession:
     watchdog: Optional[asyncio.Task] = None
     closing: bool = False
 
+    def interrupt(self) -> int:
+        discarded = self.reply.interrupt()
+        if self.consumer is not None:
+            discarded += self.consumer.interrupt()
+        return discarded
+
 
 #: The server runs a single asyncio loop, so plain dict mutation is safe here.
 _sessions: Dict[str, VoiceSession] = {}
 
 
-def enqueue_reply_audio(
+async def enqueue_reply_audio(
     session_id: str,
     pcm: bytes,
-    sample_rate: int = 48000,
-) -> bool:
-    """Enqueue audio playback for an active WebRTC session."""
+) -> int:
+    """Send generated PCM to the correct authenticated WebRTC session."""
     session = _sessions.get(session_id)
-    if session is None or session.reply is None or session.closing:
-        return False
-    if sample_rate != session.reply._sample_rate:
-        pcm_resampled = voice_vad.resample_int16(
-            np.frombuffer(pcm, dtype=np.int16),
-            sample_rate,
-            session.reply._sample_rate,
-        )
-        pcm = np.clip(np.rint(pcm_resampled), -32768, 32767).astype(np.int16).tobytes()
-    session.reply.enqueue_pcm(pcm)
-    return True
+    if session is None or session.closing:
+        raise RuntimeError("WebRTC session is no longer active")
+    if session.peer.connectionState not in (
+        "connected",
+        "connecting",
+    ):
+        raise RuntimeError("WebRTC peer is not available")
+    return session.reply.enqueue_pcm(pcm)
 
 
 async def close_session(session: VoiceSession, reason: str) -> None:
@@ -636,10 +649,7 @@ async def interrupt(
 
     discarded = 0
     for session in sessions:
-        if session.consumer is not None:
-            discarded += session.consumer.interrupt()
-        if session.reply is not None:
-            session.reply.clear()
+        discarded += session.interrupt()
 
     return {
         "status": "interrupted",

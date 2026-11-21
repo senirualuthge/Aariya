@@ -8,7 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from aiortc.mediastreams import AudioFrame
+from fastapi.testclient import TestClient
 
+from server.main import app
 from server.realtime import webrtc_server
 from server.realtime.webrtc_server import (
     AudioReplyTrack,
@@ -18,8 +20,35 @@ from server.realtime.webrtc_server import (
 )
 
 
+@pytest.fixture
+def client():
+    return TestClient(app)
+
+
+def test_offer_rejects_missing_authentication(client):
+    response = client.post(
+        "/offer",
+        json={
+            "sdp": "invalid",
+            "type": "offer",
+        },
+    )
+    assert response.status_code in (401, 403)
+
+
+def test_offer_rejects_invalid_sdp_without_auth(client):
+    response = client.post(
+        "/offer",
+        json={
+            "sdp": "",
+            "type": "offer",
+        },
+    )
+    assert response.status_code in (401, 403)
+
+
 def test_audio_reply_track_silence_when_empty():
-    track = AudioReplyTrack(sample_rate=48000)
+    track = AudioReplyTrack()
 
     async def _run():
         frame = await track.recv()
@@ -32,11 +61,12 @@ def test_audio_reply_track_silence_when_empty():
 
 
 def test_audio_reply_track_plays_enqueued_audio():
-    track = AudioReplyTrack(sample_rate=48000)
+    track = AudioReplyTrack()
     pcm_frame1 = b"\x01\x00" * 960
     pcm_frame2 = b"\x02\x00" * 960
 
-    track.enqueue_pcm(pcm_frame1 + pcm_frame2)
+    count = track.enqueue_pcm(pcm_frame1 + pcm_frame2)
+    assert count == 2
 
     async def _run():
         frame1 = await track.recv()
@@ -53,10 +83,11 @@ def test_audio_reply_track_plays_enqueued_audio():
 
 
 def test_audio_reply_track_clear_drops_audio():
-    track = AudioReplyTrack(sample_rate=48000)
+    track = AudioReplyTrack()
     track.enqueue_pcm(b"\x03\x00" * 1920)
 
-    track.clear()
+    discarded = track.interrupt()
+    assert discarded == 2
 
     async def _run():
         frame = await track.recv()
@@ -65,11 +96,22 @@ def test_audio_reply_track_clear_drops_audio():
     asyncio.run(_run())
 
 
+def test_audio_reply_track_queue_full_raises():
+    track = AudioReplyTrack()
+    track._queue = asyncio.Queue(maxsize=2)
+    # Fill queue
+    track.enqueue_pcm(b"\x01\x00" * (960 * 2))  # 2 frames
+    # Next frame should raise RuntimeError
+    with pytest.raises(RuntimeError, match="WebRTC audio queue is full"):
+        track.enqueue_pcm(b"\x01\x00" * 960)
+
+
 def test_enqueue_reply_audio_helper():
     mock_peer = MagicMock()
     mock_peer.close = AsyncMock()
+    mock_peer.connectionState = "connected"
 
-    reply_track = AudioReplyTrack(sample_rate=48000)
+    reply_track = AudioReplyTrack()
     session = VoiceSession(
         session_id="rtc_enqueue_test",
         device_id="dev_1",
@@ -84,13 +126,14 @@ def test_enqueue_reply_audio_helper():
     async def _run():
         try:
             data = b"\x04\x00" * 960
-            enqueued = enqueue_reply_audio("rtc_enqueue_test", data, sample_rate=48000)
-            assert enqueued is True
+            enqueued = await enqueue_reply_audio("rtc_enqueue_test", data)
+            assert enqueued == 1
 
             frame = await reply_track.recv()
             assert bytes(frame.planes[0]) == data
 
-            assert enqueue_reply_audio("rtc_does_not_exist", data) is False
+            with pytest.raises(RuntimeError, match="WebRTC session is no longer active"):
+                await enqueue_reply_audio("rtc_does_not_exist", data)
         finally:
             await close_session(session, "test cleanup")
 

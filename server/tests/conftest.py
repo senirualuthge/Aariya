@@ -4,6 +4,7 @@ Makes the project root importable (tests use `from server...`), and provides
 isolation helpers so tests never touch real LLM endpoints or dev databases.
 """
 
+import asyncio
 import os
 import sys
 
@@ -15,6 +16,18 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 import server.db as server_db  # noqa: E402  (needs the path bootstrap above)
+
+
+def pytest_pyfunc_call(pyfuncitem):
+    """Run async test functions seamlessly using asyncio.run."""
+    if asyncio.iscoroutinefunction(pyfuncitem.obj):
+        testargs = {
+            arg: pyfuncitem.funcargs[arg]
+            for arg in pyfuncitem._fixtureinfo.argnames
+            if arg in pyfuncitem.funcargs
+        }
+        asyncio.run(pyfuncitem.obj(**testargs))
+        return True
 
 
 @pytest.fixture()
